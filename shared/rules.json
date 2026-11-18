@@ -3,7 +3,7 @@
   "capture": {
     "coverageThreshold": 0.8,
     "frenzyRivalCoverageThreshold": 0.4,
-    "pointsPerMetre": 0.1,
+    "pointsPerMetre": 1.0,
     "minimumPointsPerSegment": 1
   },
   "decay": {
@@ -21,7 +21,7 @@
     "perDay": 2
   },
   "blocks": {
-    "bonusBasePoints": 50,
+    "bonusBasePoints": 250,
     "bonusPointsPerHundredSquareMetres": 1,
     "reawardCooldownHours": 24
   },

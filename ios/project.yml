@@ -1,0 +1,45 @@
+name: Chomp
+options:
+  bundleIdPrefix: com.tobyb545
+  deploymentTarget:
+    iOS: "18.0"
+    watchOS: "11.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  ChompKit:
+    type: framework
+    platform: iOS
+    sources:
+      - path: ChompKit
+      - path: ../shared/rules.json
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tobyb545.chomp.kit
+        GENERATE_INFOPLIST_FILE: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
+  ChompKitTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: ChompKitTests
+      - path: ../data/areas/west-byfleet.json
+        buildPhase: resources
+    dependencies:
+      - target: ChompKit
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  ChompKit:
+    build:
+      targets:
+        ChompKit: all
+    test:
+      targets:
+        - ChompKitTests
