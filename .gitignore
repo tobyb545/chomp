@@ -1,0 +1,16 @@
+.DS_Store
+# Xcode
+ios/*.xcodeproj
+ios/build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+# Secrets (copy Secrets.example.xcconfig)
+ios/Config/Secrets.xcconfig
+# Ingest download cache
+tools/ingest/cache/
+__pycache__/
+# Supabase local
+backend/supabase/.temp/
+backend/supabase/.branches/
+node_modules/
