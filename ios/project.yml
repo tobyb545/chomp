@@ -1,15 +1,32 @@
 name: Chomp
+include:
+  # Embeds the watch app. Needs the watchOS runtime (Xcode > Settings > Components).
+  #   CHOMP_EMBED_WATCH=true xcodegen generate
+  - path: watch-embed.yml
+    enable: ${CHOMP_EMBED_WATCH}
 options:
   bundleIdPrefix: com.tobyb545
   deploymentTarget:
     iOS: "18.0"
     watchOS: "11.0"
   createIntermediateGroups: true
+  groupSortPosition: top
 settings:
   base:
     SWIFT_VERSION: "6.0"
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""
+packages:
+  MapLibre:
+    url: https://github.com/maplibre/maplibre-gl-native-distribution
+    exactVersion: 6.30.0
+  Supabase:
+    url: https://github.com/supabase/supabase-swift
+    exactVersion: 2.49.0
+  RevenueCat:
+    url: https://github.com/RevenueCat/purchases-ios-spm
+    exactVersion: 5.103.0
 targets:
   ChompKit:
     type: framework
@@ -23,6 +40,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.tobyb545.chomp.kit
         GENERATE_INFOPLIST_FILE: YES
         APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: YES
+
   ChompKitTests:
     type: bundle.unit-test
     platform: iOS
@@ -35,7 +54,123 @@ targets:
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
+
+  Chomp:
+    type: application
+    platform: iOS
+    configFiles:
+      Debug: Config/App.xcconfig
+      Release: Config/App.xcconfig
+    sources:
+      - path: Chomp
+      - path: Shared
+      - path: ../data/areas
+        type: folder
+        buildPhase: resources
+        name: Areas
+    dependencies:
+      - target: ChompKit
+      - target: ChompWidgets
+      - package: MapLibre
+      - package: Supabase
+      - package: RevenueCat
+    entitlements:
+      path: Chomp/Chomp.entitlements
+      properties:
+        com.apple.developer.healthkit: true
+        com.apple.developer.healthkit.access: []
+        com.apple.developer.applesignin: [Default]
+        com.apple.security.application-groups: [group.com.tobyb545.chomp]
+    info:
+      path: Chomp/Info.plist
+      properties:
+        CFBundleDisplayName: Chomp
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIBackgroundModes: [location]
+        NSSupportsLiveActivities: true
+        NSLocationRequireExplicitServiceSession: true
+        NSLocationWhenInUseUsageDescription: "Chomp uses your location during a run to work out which streets you've run, so it can eat the pellets on them and claim them in your colour. Your exact position is never shown to other players."
+        NSLocationAlwaysAndWhenInUseUsageDescription: "Chomp only needs \"While Using\". A run keeps recording in the background via its Live Activity. Your exact position is never shown to other players."
+        NSMotionUsageDescription: "Chomp checks you're running or walking (not cycling or driving) so street captures stay fair for everyone."
+        NSHealthShareUsageDescription: "Chomp reads heart rate during runs as a fair-play check, and can import your past runs to show which streets you've already explored."
+        NSHealthUpdateUsageDescription: "Chomp saves your runs to Health as running workouts with their routes."
+        ITSAppUsesNonExemptEncryption: false
+        CFBundleURLTypes:
+          - CFBundleURLName: com.tobyb545.chomp
+            CFBundleURLSchemes: [chomp]
+        SupabaseURL: $(SUPABASE_URL)
+        SupabaseAnonKey: $(SUPABASE_ANON_KEY)
+        RevenueCatAPIKey: $(REVENUECAT_API_KEY)
+        StravaClientID: $(STRAVA_CLIENT_ID)
+        MLNMapboxMetalRenderingEnabled: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tobyb545.chomp
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        TARGETED_DEVICE_FAMILY: "1"
+        ENABLE_PREVIEWS: YES
+
+  ChompWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ChompWidgets
+      - path: Shared
+    entitlements:
+      path: ChompWidgets/ChompWidgets.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.tobyb545.chomp]
+    info:
+      path: ChompWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: Chomp
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tobyb545.chomp.widgets
+        TARGETED_DEVICE_FAMILY: "1"
+        SKIP_INSTALL: YES
+
+  ChompWatch:
+    type: application
+    platform: watchOS
+    sources:
+      - path: ChompWatch
+      - path: Shared/SharedModels.swift
+    info:
+      path: ChompWatch/Info.plist
+      properties:
+        CFBundleDisplayName: Chomp
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        WKApplication: true
+        WKCompanionAppBundleIdentifier: com.tobyb545.chomp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tobyb545.chomp.watchkitapp
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SKIP_INSTALL: YES
+
 schemes:
+  Chomp:
+    build:
+      targets:
+        Chomp: all
+    test:
+      targets:
+        - ChompKitTests
+    run:
+      config: Debug
   ChompKit:
     build:
       targets:

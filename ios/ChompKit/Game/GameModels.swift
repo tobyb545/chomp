@@ -85,6 +85,8 @@ public struct GameState: Codable, Sendable {
     public var blockAwards: [BlockID: Date] = [:]
     public var ghosts: [GhostProfile] = []
     public var lastGhostTick: Date?
+    /// A bot tick already announced via a scheduled notification; it must happen at exactly this time.
+    public var scheduledGhostTick: Date?
     public var lastDecaySweep: Date?
     public var capturesByDay: [String: Int] = [:]
     public var badges: [String] = []
