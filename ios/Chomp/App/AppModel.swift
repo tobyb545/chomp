@@ -965,7 +965,13 @@ final class AppModel {
         let trace = parsed.points
         guard trace.count > 10, parsed.end.timeIntervalSince(parsed.start) > 60 else { return "That run is too short to add." }
         guard parsed.end <= Date().addingTimeInterval(600) else { return "That run's times are in the future, so it can't be added." }
-        if hasRun(near: parsed.start) { return "You already have this run in Chomp." }
+        if let i = runs.firstIndex(where: { abs($0.startedAt.timeIntervalSince(parsed.start)) < 120 }) {
+            // An earlier import held for review (older builds flagged every imported
+            // file) can be tried again; anything else is a duplicate.
+            guard runs[i].source != .live, runs[i].outcome.verdict == .underReview else { return "You already have this run in Chomp." }
+            runs.remove(at: i)
+            await LocalStore.shared.saveRuns(runs)
+        }
         let day = parsed.start.formatted(date: .abbreviated, time: .shortened)
         let counts = importCaptures(endedAt: parsed.end)
         guard let record = await resolve(id: UUID(), raw: trace, signals: RunSignals(), startedAt: parsed.start, endedAt: parsed.end,
