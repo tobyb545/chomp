@@ -10,5 +10,5 @@ STRAVA_CLIENT_ID =
 CHOMP_WEB_URL =
 // Prebuilt street tiles on Cloudflare R2 (tools/tiles), written https:/$()/host with no
 // trailing slash. Empty: tiles come from the server's cache and Overpass only.
-CHOMP_TILES_URL =
+CHOMP_TILES_URL = https:/$()/pub-a70db1c0eb1348d4860e4fb685fca851.r2.dev
 #include? "Secrets.xcconfig"
