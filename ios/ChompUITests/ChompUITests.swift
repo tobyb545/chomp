@@ -117,6 +117,22 @@ final class ChompUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Coins collected"].exists)
         shot("profile")
 
+        // Import a run: opens from the profile, stays open, and shows the file picker.
+        reveal(app.buttons["profileImportRun"]).tap()
+        XCTAssertTrue(app.navigationBars["Import a run"].waitForExistence(timeout: 5))
+        sleep(2)
+        XCTAssertTrue(app.navigationBars["Import a run"].exists, "import screen stays open")
+        app.buttons["Garmin Connect"].tap()
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'connect.garmin.com'")).firstMatch.waitForExistence(timeout: 3))
+        shot("import-run")
+        app.buttons["chooseRunFile"].tap()
+        let cancel = app.buttons["Cancel"]
+        XCTAssertTrue(cancel.waitForExistence(timeout: 10), "file picker opens")
+        shot("import-picker")
+        cancel.tap()
+        XCTAssertTrue(app.navigationBars["Import a run"].waitForExistence(timeout: 5), "back on the import screen after cancelling")
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+
         reveal(app.buttons.matching(NSPredicate(format: "label CONTAINS 'Invite a friend'")).firstMatch).tap()
         XCTAssertTrue(app.navigationBars["Invite friends"].waitForExistence(timeout: 5))
         shot("invite")
@@ -135,6 +151,11 @@ final class ChompUITests: XCTestCase {
         XCTAssertNotEqual((voice.value as? String) == "1", wasOn)
         shot("settings")
         if (voice.value as? String) == "1" { voice.switches.firstMatch.tap() }
+
+        reveal(app.buttons["importRunFile"]).tap()
+        XCTAssertTrue(app.navigationBars["Import a run"].waitForExistence(timeout: 5))
+        sleep(2)
+        XCTAssertTrue(app.navigationBars["Import a run"].exists, "import screen stays open from Settings too")
     }
 
     func test5_SimulatedRunToSummary() {

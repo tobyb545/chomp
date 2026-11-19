@@ -29,6 +29,10 @@ struct ProfileView: View {
                     Text("Badges · \(model.profile.badgesEarned.count) of \(model.badges.count)")
                 }
                 Section("Runs") {
+                    NavigationLink { RunFileImportView() } label: {
+                        Label("Import a run from Garmin, Apple Watch or Strava", systemImage: "square.and.arrow.down")
+                    }
+                    .accessibilityIdentifier("profileImportRun")
                     if model.runs.isEmpty { Text("No runs yet").foregroundStyle(Theme.textSecondary) }
                     ForEach(model.runs.prefix(50)) { r in
                         Button { model.presentedSummary = r } label: { RunRow(record: r) }.buttonStyle(.plain)
@@ -113,7 +117,6 @@ struct SettingsView: View {
     @Environment(\.webAuthenticationSession) private var webAuth
     @State private var importing = false
     @State private var importResult: String?
-    @State private var showFileImport = false
     @State private var confirmReset = false
     @State private var customColour = Color.white
     @State private var accountError: String?
@@ -217,7 +220,7 @@ struct SettingsView: View {
             }
 
             Section {
-                Button("Import a run file") { showFileImport = true }
+                NavigationLink("Import a run file") { RunFileImportView() }
                     .accessibilityIdentifier("importRunFile")
                 // Strava's API needs a paid developer subscription, so only builds with a client ID offer it.
                 if StravaImport.isAvailable {
@@ -233,7 +236,6 @@ struct SettingsView: View {
             } header: { Text("History") } footer: {
                 Text("Forgot to start Chomp? Add the run from Garmin Connect, your Apple Watch or Strava. Runs from the last \(Int(model.rules.imports.captureWindowHours / 24)) days collect coins like any other run. Older runs go into your history and can't collect or steal coins.")
             }
-            .sheet(isPresented: $showFileImport) { RunFileImportView() }
 
             Section {
                 if !model.backend.isConfigured {

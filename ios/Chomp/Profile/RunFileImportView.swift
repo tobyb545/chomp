@@ -3,9 +3,10 @@ import UniformTypeIdentifiers
 
 /// Add a run recorded by another app from a GPX, TCX or FIT file, with how-tos
 /// for getting that file out of Garmin Connect, an Apple Watch and Strava.
+/// Pushed onto the Profile or Settings navigation stack (not a sheet: a sheet
+/// opened from inside Settings' Form was dismissed straight away).
 struct RunFileImportView: View {
     @Environment(AppModel.self) private var model
-    @Environment(\.dismiss) private var dismiss
     @State private var picking = false
     @State private var busy = false
     @State private var result: String?
@@ -15,57 +16,54 @@ struct RunFileImportView: View {
         case garmin = "Garmin Connect", watch = "Apple Watch", strava = "Strava"
         var id: String { rawValue }
         var icon: String {
-            switch self { case .garmin: "applewatch.side.right"; case .watch: "applewatch"; case .strava: "figure.run" }
+            switch self { case .garmin: "map"; case .watch: "applewatch"; case .strava: "figure.run" }
         }
     }
 
     static let types: [UTType] = ["gpx", "tcx", "fit"].compactMap { UTType(filenameExtension: $0) } + [.xml]
 
     var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    Button {
-                        picking = true
-                    } label: {
-                        Label(busy ? "Adding your run…" : "Choose a run file", systemImage: "doc.badge.plus")
-                            .font(.headline)
-                    }
-                    .disabled(busy)
-                    .accessibilityIdentifier("chooseRunFile")
-                    if let result {
-                        Text(result).font(.subheadline).foregroundStyle(Theme.textSecondary)
-                    }
-                } footer: {
-                    Text("Chomp reads GPX, TCX and FIT files. Runs from the last \(days) days collect coins like any other run. Older runs go into your history only.")
+        List {
+            Section {
+                Button {
+                    picking = true
+                } label: {
+                    Label(busy ? "Adding your run…" : "Choose a run file", systemImage: "doc.badge.plus")
+                        .font(.headline)
                 }
-
-                Section {
-                    ForEach(Source.allCases) { s in
-                        DisclosureGroup(isExpanded: Binding(get: { open == s }, set: { open = $0 ? s : nil })) {
-                            steps(for: s)
-                        } label: {
-                            Label(s.rawValue, systemImage: s.icon)
-                        }
-                    }
-                } header: {
-                    Text("How to get your run file")
-                } footer: {
-                    Text("Shortcut: in most apps, Share a run file and pick Chomp. It opens here and is added straight away.")
+                .disabled(busy)
+                .accessibilityIdentifier("chooseRunFile")
+                if let result {
+                    Text(result).font(.subheadline).foregroundStyle(Theme.textSecondary)
                 }
+            } footer: {
+                Text("Chomp reads GPX, TCX and FIT files. Runs from the last \(days) days collect coins like any other run. Older runs go into your history only.")
             }
-            .navigationTitle("Import a run")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
-            .fileImporter(isPresented: $picking, allowedContentTypes: Self.types, allowsMultipleSelection: true) { r in
-                guard case .success(let urls) = r, !urls.isEmpty else { return }
-                busy = true
-                Task {
-                    var lines: [String] = []
-                    for url in urls { lines.append(await model.importRunFile(url)) }
-                    result = lines.joined(separator: "\n\n")
-                    busy = false
+
+            Section {
+                ForEach(Source.allCases) { s in
+                    DisclosureGroup(isExpanded: Binding(get: { open == s }, set: { open = $0 ? s : nil })) {
+                        steps(for: s)
+                    } label: {
+                        Label(s.rawValue, systemImage: s.icon)
+                    }
                 }
+            } header: {
+                Text("How to get your run file")
+            } footer: {
+                Text("Shortcut: in most apps, Share a run file and pick Chomp. It's added straight away.")
+            }
+        }
+        .navigationTitle("Import a run")
+        .navigationBarTitleDisplayMode(.inline)
+        .fileImporter(isPresented: $picking, allowedContentTypes: Self.types, allowsMultipleSelection: true) { r in
+            guard case .success(let urls) = r, !urls.isEmpty else { return }
+            busy = true
+            Task {
+                var lines: [String] = []
+                for url in urls { lines.append(await model.importRunFile(url)) }
+                result = lines.joined(separator: "\n\n")
+                busy = false
             }
         }
     }
