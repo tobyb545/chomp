@@ -186,10 +186,10 @@ struct GameMapView: UIViewRepresentable {
             return true
         }
 
-        private func coinIcon(_ hex: String, in style: MLNStyle) -> String {
-            let name = "coin-\(hex)"
+        private func coinIcon(_ hex: String, unclaimed: Bool = false, in style: MLNStyle) -> String {
+            let name = "coin-\(hex)\(unclaimed ? "-open" : "")"
             if !registeredIcons.contains(name) {
-                style.setImage(CoinIcon.render(colorHex: hex), forName: name)
+                style.setImage(CoinIcon.render(colorHex: hex, unclaimed: unclaimed), forName: name)
                 registeredIcons.insert(name)
             }
             return name
@@ -236,7 +236,7 @@ struct GameMapView: UIViewRepresentable {
                         runStart = c
                         runKey = key
                         runAttrs = [
-                            "icon": coinIcon(hex.uppercased(), in: style),
+                            "icon": coinIcon(hex.uppercased(), unclaimed: state == "neutral" && heat == 0 && !s.bonus.contains(seg.id), in: style),
                             "state": state,
                             "strength": strength,
                             // Lower draws first when coins compete for space: yours win, then rivals', then unclaimed.
@@ -356,40 +356,126 @@ enum GhostIcon {
 enum CoinIcon {
     static let points: CGFloat = 26
 
+    /// Unclaimed coins are small, quiet silver; claimed coins are full-size and
+    /// struck in the owner's colour, so territory stands out from the open map.
     @MainActor
-    static func render(colorHex: String) -> UIImage {
+    static func render(colorHex: String, unclaimed: Bool = false) -> UIImage {
+        let key = "\(colorHex)|\(unclaimed)"
+        if let hit = cache[key] { return hit }
         let size = CGSize(width: points, height: points)
         let fmt = UIGraphicsImageRendererFormat()
         fmt.scale = 3
-        return UIGraphicsImageRenderer(size: size, format: fmt).image { ctx in
-            let g = ctx.cgContext
-            let base = UIColor(Color(hex: colorHex))
-            var h: CGFloat = 0, sat: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-            base.getHue(&h, saturation: &sat, brightness: &b, alpha: &a)
-            let rim = UIColor(hue: h, saturation: min(1, sat * 1.05), brightness: b * 0.62, alpha: 1)
-            let light = UIColor(hue: h, saturation: sat * 0.45, brightness: min(1, b * 1.15 + 0.1), alpha: 1)
-
-            let outer = CGRect(origin: .zero, size: size).insetBy(dx: 2, dy: 2)
-            // Soft shadow so coins sit on any map brightness.
-            g.setFillColor(UIColor.black.withAlphaComponent(0.35).cgColor)
-            g.fillEllipse(in: outer.offsetBy(dx: 0, dy: 1.2))
-            // Rim, then face.
-            g.setFillColor(rim.cgColor)
-            g.fillEllipse(in: outer)
-            let face = outer.insetBy(dx: 2.4, dy: 2.4)
-            g.setFillColor(base.cgColor)
-            g.fillEllipse(in: face)
-            // Embossed inner ring.
-            g.setStrokeColor(rim.withAlphaComponent(0.55).cgColor)
-            g.setLineWidth(1.3)
-            g.strokeEllipse(in: face.insetBy(dx: 3.6, dy: 3.6))
-            g.setStrokeColor(light.withAlphaComponent(0.8).cgColor)
-            g.setLineWidth(0.9)
-            g.strokeEllipse(in: face.insetBy(dx: 3.6, dy: 3.6).offsetBy(dx: 0.5, dy: 0.6))
-            // Glint.
-            g.setFillColor(UIColor.white.withAlphaComponent(0.75).cgColor)
-            g.fillEllipse(in: CGRect(x: face.minX + face.width * 0.2, y: face.minY + face.height * 0.16,
-                                     width: face.width * 0.22, height: face.height * 0.14))
+        let img = UIGraphicsImageRenderer(size: size, format: fmt).image { ctx in
+            draw(in: ctx.cgContext, size: size, base: UIColor(Color(hex: colorHex)), unclaimed: unclaimed)
         }
+        cache[key] = img
+        return img
+    }
+
+    @MainActor private static var cache: [String: UIImage] = [:]
+
+    @MainActor
+    static func render(color: Color, unclaimed: Bool = false) -> UIImage {
+        let c = color.resolve(in: EnvironmentValues())
+        let hex = String(format: "%02X%02X%02X", Int((c.red * 255).rounded()), Int((c.green * 255).rounded()), Int((c.blue * 255).rounded()))
+        return render(colorHex: hex, unclaimed: unclaimed)
+    }
+
+    private static func shade(_ c: UIColor, brightness k: CGFloat, saturation s: CGFloat = 1, alpha: CGFloat = 1) -> UIColor {
+        var h: CGFloat = 0, sat: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        c.getHue(&h, saturation: &sat, brightness: &b, alpha: &a)
+        return UIColor(hue: h, saturation: min(1, sat * s), brightness: min(1, max(0, b * k)), alpha: alpha)
+    }
+
+    private static func draw(in g: CGContext, size: CGSize, base: UIColor, unclaimed: Bool) {
+        let space = CGColorSpaceCreateDeviceRGB()
+        let d: CGFloat = unclaimed ? 14 : 21
+        let outer = CGRect(x: (size.width - d) / 2, y: (size.height - d) / 2 - 0.5, width: d, height: d)
+
+        // Contact shadow, so coins sit on light and dark maps alike.
+        g.saveGState()
+        g.setShadow(offset: CGSize(width: 0, height: unclaimed ? 0.8 : 1.4), blur: unclaimed ? 1.5 : 2.5,
+                    color: UIColor.black.withAlphaComponent(unclaimed ? 0.35 : 0.5).cgColor)
+        g.setFillColor(shade(base, brightness: 0.5, saturation: 1.1).cgColor)
+        g.fillEllipse(in: outer)
+        g.restoreGState()
+
+        // Bevelled rim: lit from the top left.
+        g.saveGState()
+        g.addEllipse(in: outer)
+        g.clip()
+        let rim = CGGradient(colorsSpace: space, colors: [
+            shade(base, brightness: 1.15, saturation: 0.7).cgColor,
+            shade(base, brightness: 0.78, saturation: 1.05).cgColor,
+            shade(base, brightness: 0.48, saturation: 1.15).cgColor,
+        ] as CFArray, locations: [0, 0.5, 1])!
+        g.drawLinearGradient(rim, start: CGPoint(x: outer.minX, y: outer.minY), end: CGPoint(x: outer.maxX, y: outer.maxY), options: [])
+        g.restoreGState()
+
+        // Face: domed radial shading.
+        let face = outer.insetBy(dx: unclaimed ? 1.6 : 2.2, dy: unclaimed ? 1.6 : 2.2)
+        g.saveGState()
+        g.addEllipse(in: face)
+        g.clip()
+        let dome = CGGradient(colorsSpace: space, colors: [
+            shade(base, brightness: 1.25, saturation: 0.55).cgColor,
+            base.cgColor,
+            shade(base, brightness: 0.8, saturation: 1.1).cgColor,
+        ] as CFArray, locations: [0, 0.55, 1])!
+        let hi = CGPoint(x: face.minX + face.width * 0.34, y: face.minY + face.height * 0.3)
+        g.drawRadialGradient(dome, startCenter: hi, startRadius: 0, endCenter: CGPoint(x: face.midX, y: face.midY),
+                             endRadius: face.width * 0.62, options: [.drawsAfterEndLocation])
+        g.restoreGState()
+
+        if unclaimed {
+            // A single soft glint: present, but quiet.
+            g.setFillColor(UIColor.white.withAlphaComponent(0.85).cgColor)
+            g.fillEllipse(in: CGRect(x: face.minX + face.width * 0.24, y: face.minY + face.height * 0.18,
+                                     width: face.width * 0.3, height: face.height * 0.2))
+            return
+        }
+
+        // Struck edge just inside the rim.
+        g.setStrokeColor(shade(base, brightness: 0.62, saturation: 1.1, alpha: 0.7).cgColor)
+        g.setLineWidth(0.8)
+        g.strokeEllipse(in: face.insetBy(dx: 1.4, dy: 1.4))
+
+        // Emblem: an embossed four-point star (shadow, then highlight, then face).
+        func star(_ c: CGPoint, _ r: CGFloat) -> CGPath {
+            let p = CGMutablePath()
+            let inner = r * 0.36
+            for i in 0..<8 {
+                let a = CGFloat(i) * .pi / 4 - .pi / 2
+                let rr = i % 2 == 0 ? r : inner
+                let pt = CGPoint(x: c.x + cos(a) * rr, y: c.y + sin(a) * rr)
+                i == 0 ? p.move(to: pt) : p.addLine(to: pt)
+            }
+            p.closeSubpath()
+            return p
+        }
+        let c = CGPoint(x: face.midX, y: face.midY)
+        let r = face.width * 0.3
+        g.addPath(star(CGPoint(x: c.x + 0.5, y: c.y + 0.6), r))
+        g.setFillColor(shade(base, brightness: 0.55, saturation: 1.15, alpha: 0.85).cgColor)
+        g.fillPath()
+        g.addPath(star(CGPoint(x: c.x - 0.4, y: c.y - 0.45), r))
+        g.setFillColor(UIColor.white.withAlphaComponent(0.7).cgColor)
+        g.fillPath()
+        g.addPath(star(c, r))
+        g.setFillColor(shade(base, brightness: 1.08, saturation: 0.85).cgColor)
+        g.fillPath()
+
+        // Gloss crescent across the top.
+        g.saveGState()
+        g.addEllipse(in: face)
+        g.clip()
+        let gloss = CGGradient(colorsSpace: space, colors: [UIColor.white.withAlphaComponent(0.55).cgColor,
+                                                            UIColor.white.withAlphaComponent(0).cgColor] as CFArray,
+                               locations: [0, 1])!
+        g.addEllipse(in: CGRect(x: face.minX + face.width * 0.12, y: face.minY - face.height * 0.05,
+                                width: face.width * 0.76, height: face.height * 0.42))
+        g.clip()
+        g.drawLinearGradient(gloss, start: CGPoint(x: face.midX, y: face.minY), end: CGPoint(x: face.midX, y: face.minY + face.height * 0.4), options: [])
+        g.restoreGState()
     }
 }

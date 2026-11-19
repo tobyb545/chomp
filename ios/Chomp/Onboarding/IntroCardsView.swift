@@ -157,25 +157,22 @@ private struct IntroScene: View {
             if f < taken || f < from - 0.0001 {
                 if let takenColor { coin(&ctx, p, takenColor, opacity: takenOpacity) }
             } else {
-                coin(&ctx, p, color ?? .white)
+                coin(&ctx, p, color)
             }
         }
     }
 
     private let gold = Color(hex: "FFC83D")
 
-    /// The same coin as on the map: rim, face, inner ring and a glint.
-    private func coin(_ ctx: inout GraphicsContext, _ p: CGPoint, _ c: Color, r: CGFloat = 6.5, opacity: Double = 1) {
+    private let silver = Color(hex: MapStyle.neutralCoin(.dusk))
+
+    /// The same coin art as the map (CoinIcon). Unclaimed coins are drawn small and silver.
+    private func coin(_ ctx: inout GraphicsContext, _ p: CGPoint, _ c: Color?, r: CGFloat = 6.5, opacity: Double = 1) {
         var g = ctx
         g.opacity = opacity
-        g.fill(Path(ellipseIn: CGRect(x: p.x - r, y: p.y - r + 1.2, width: r * 2, height: r * 2)), with: .color(.black.opacity(0.35)))
-        g.fill(Path(ellipseIn: CGRect(x: p.x - r, y: p.y - r, width: r * 2, height: r * 2)), with: .color(c))
-        g.fill(Path(ellipseIn: CGRect(x: p.x - r, y: p.y - r, width: r * 2, height: r * 2)), with: .color(.black.opacity(0.32)))
-        let f = r - 1.8
-        g.fill(Path(ellipseIn: CGRect(x: p.x - f, y: p.y - f, width: f * 2, height: f * 2)), with: .color(c))
-        let i = f * 0.55
-        g.stroke(Path(ellipseIn: CGRect(x: p.x - i, y: p.y - i, width: i * 2, height: i * 2)), with: .color(.white.opacity(0.45)), lineWidth: 1)
-        g.fill(Path(ellipseIn: CGRect(x: p.x - f * 0.6, y: p.y - f * 0.68, width: f * 0.45, height: f * 0.3)), with: .color(.white.opacity(0.75)))
+        let img = c.map { CoinIcon.render(color: $0) } ?? CoinIcon.render(colorHex: MapStyle.neutralCoin(.dusk), unclaimed: true)
+        let side = r * 2 * CoinIcon.points / 21
+        g.draw(Image(uiImage: img), in: CGRect(x: p.x - side / 2, y: p.y - side / 2, width: side, height: side))
     }
 
     private func runner(_ ctx: inout GraphicsContext, _ p: CGPoint, _ c: Color) {

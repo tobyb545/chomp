@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import UIKit
 @testable import Chomp
 import ChompKit
 
@@ -70,9 +71,30 @@ struct Units {
 
 @Suite("Coin colours") @MainActor
 struct CoinColours {
-    @Test func unclaimedWhiteMineGold() {
-        #expect(MapStyle.neutralCoin(.dusk) == "FFFFFF")
+    @Test func unclaimedSilverMineGold() {
+        #expect(MapStyle.neutralCoin(.dusk) == "CDD3EA")
+        #expect(MapStyle.neutralCoin(.light) == "9AA2BE")
         #expect(MapStyle.mineCoin(.dusk) == "FFC83D")
+    }
+
+    @Test func unclaimedCoinsAreDrawnSmallerAndCached() {
+        let open = CoinIcon.render(colorHex: "CDD3EA", unclaimed: true)
+        let mine = CoinIcon.render(colorHex: "FFC83D")
+        #expect(open.size == mine.size, "same canvas, so map placement is unchanged")
+        #expect(CoinIcon.render(colorHex: "FFC83D") === mine)
+        // The unclaimed coin leaves the canvas corner area empty further in.
+        func alpha(_ img: UIImage, _ x: Int, _ y: Int) -> UInt8 {
+            let cg = img.cgImage!
+            var px = [UInt8](repeating: 0, count: 4)
+            let ctx = CGContext(data: &px, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+                                space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+            ctx.draw(cg, in: CGRect(x: -x, y: -(cg.height - 1 - y), width: cg.width, height: cg.height))
+            return px[3]
+        }
+        let edge = Int(CoinIcon.points * 3 * 0.2)  // 20% in from the left, mid-height
+        let mid = Int(CoinIcon.points * 3 / 2)
+        #expect(alpha(mine, edge, mid) > 200)
+        #expect(alpha(open, edge, mid) < 60)
     }
 
     @Test func rivalsNeverLookGold() {

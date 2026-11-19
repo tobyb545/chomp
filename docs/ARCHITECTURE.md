@@ -148,7 +148,7 @@ switch is turned on in both places.
 ## Coins, and capture areas (off)
 
 Every street is drawn as a row of coins, one per token (`rules.tokens.metresPerToken`, 10 m),
-evenly spaced: white when nobody holds the coin, gold when you do, and a rival's own
+evenly spaced: a small pearl-silver bead when nobody holds the coin; full-size struck coins (bevelled rim, domed face, embossed four-point star) in gold when you hold it and in a rival's own
 colour when they do (a rival whose colour reads as gold or orange is shown red, so gold
 always means yours), fading with strength. There are no street lines. Coin art is drawn in code
 (`CoinIcon` in `GameMapView.swift`) per colour and placed with a MapLibre symbol layer.

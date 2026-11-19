@@ -59,7 +59,8 @@ enum MapStyle {
         ["interpolate", ["exponential", 1.5], ["zoom"], 13, 2.2 * scale, 15, 3.7 * scale, 16, 5 * scale, 17, 6.8 * scale, 18, 9.9 * scale]
     }
     /// Unclaimed coins are white; yours are gold; rivals' are their colour.
-    static func neutralCoin(_ look: PlayerProfile.MapLook) -> String { "FFFFFF" }
+    /// Unclaimed coins are small silver ones: cool and quiet, so gold (yours) and rivals' colours stand out.
+    static func neutralCoin(_ look: PlayerProfile.MapLook) -> String { look == .light ? "9AA2BE" : "CDD3EA" }
     static func mineCoin(_ look: PlayerProfile.MapLook) -> String { look == .light ? "F0A400" : "FFC83D" }
     /// Gold means "yours", so a rival whose colour reads as gold or orange is shown in red.
     static func rivalCoin(_ hex: String) -> String {
