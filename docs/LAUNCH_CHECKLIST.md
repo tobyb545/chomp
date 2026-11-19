@@ -5,12 +5,10 @@ in [SETUP.md](SETUP.md).
 
 ## Website (built in `website/`)
 
-- [ ] **Turn on GitHub Pages**: repo Settings → Pages → Source: **GitHub Actions**. The
-  `Website` workflow publishes `website/` on every push to main (or run it from the Actions tab).
-- [ ] **Pick the address.** A project site lives at `https://tobyb545.github.io/<repo-name>/`,
-  so the current repo name (`pacman-run`) would appear in every invite link. Rename the repo
-  (e.g. `chomp`) or use a custom domain before sharing links.
-- [ ] **Set `CHOMP_WEB_URL`** in `ios/Config/App.xcconfig` (written `https:/$()/host/path`).
+- [x] **GitHub Pages** is on (Source: GitHub Actions). The `Website` workflow publishes
+  `website/` on every push to main. Live at https://tobyb545.github.io/chomp/ (repo renamed
+  from `pacman-run`). A custom domain later would also let invite links open the app directly.
+- [x] **Set `CHOMP_WEB_URL`** in `ios/Config/App.xcconfig` (written `https:/$()/host/path`).
   Invite and club links then point at the website, and the paywall and Settings show the
   Terms, Privacy and Contact links that Apple requires for subscriptions.
 - [ ] **Set `contactEmail`** (and `appStoreUrl` once live) in `website/assets/site.js`.

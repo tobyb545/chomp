@@ -7,7 +7,7 @@ STRAVA_CLIENT_ID =
 // The Chomp website (GitHub Pages), written https:/$()/host/path with no trailing slash.
 // When set, invite and club links point at its /invite/ and /club/ pages, which work in
 // any messaging app. Empty: links use the chomp:// scheme.
-CHOMP_WEB_URL = https:/$()/tobyb545.github.io/pacman-run
+CHOMP_WEB_URL = https:/$()/tobyb545.github.io/chomp
 // Prebuilt street tiles on Cloudflare R2 (tools/tiles), written https:/$()/host with no
 // trailing slash. Empty: tiles come from the server's cache and Overpass only.
 CHOMP_TILES_URL = https:/$()/pub-a70db1c0eb1348d4860e4fb685fca851.r2.dev
