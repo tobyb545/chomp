@@ -130,7 +130,7 @@ struct PowerPelletsWidget: Widget {
         StaticConfiguration(kind: "PowerPellets", provider: SnapshotProvider()) { e in
             PowerPelletsView(s: e.snapshot).containerBackground(ink, for: .widget)
         }
-        .configurationDisplayName("Today's power pellets")
+        .configurationDisplayName("Today's power-ups")
         .description("Where today's frenzy landmarks are.")
         .supportedFamilies([.systemSmall, .systemMedium])
     }
@@ -140,7 +140,7 @@ struct PowerPelletsView: View {
     let s: WidgetSnapshot
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Label("POWER PELLETS", systemImage: "bolt.circle.fill").font(.caption.weight(.black)).foregroundStyle(power)
+            Label("POWER-UPS", systemImage: "bolt.circle.fill").font(.caption.weight(.black)).foregroundStyle(power)
             ForEach(s.pellets, id: \.self) { p in
                 HStack(spacing: 6) {
                     Image(systemName: p.collected ? "checkmark.circle.fill" : "circle.fill").font(.caption2)
@@ -179,7 +179,7 @@ struct RunLiveActivity: Widget {
                 DynamicIslandExpandedRegion(.trailing) {
                     VStack(alignment: .trailing) {
                         Text("\(ctx.state.pelletsEaten)").font(.title.weight(.black)).foregroundStyle(pellet)
-                        Text("pellets").font(.caption2).foregroundStyle(muted)
+                        Text("coins").font(.caption2).foregroundStyle(muted)
                     }
                 }
                 DynamicIslandExpandedRegion(.center) {
@@ -220,7 +220,7 @@ struct LockScreenRunView: View {
             }
             HStack {
                 stat("\(state.streetsCaptured)", "streets", c)
-                stat("\(state.pelletsEaten)", "pellets", pellet)
+                stat("\(state.pelletsEaten)", "coins", pellet)
                 stat("\(state.streetsStolen)", "won back", .white)
                 stat(String(format: "%.2f", state.distanceMetres / 1000), "km", .white)
             }

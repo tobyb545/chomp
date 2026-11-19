@@ -64,7 +64,7 @@ struct MapScreen: View {
     private var mapAccessibilityLabel: String {
         let p = model.progress
         return "Map of \(model.placeName). You hold \(p.heldSegments) streets here, \(p.heldFraction.percentString) of the streets nearby. "
-            + "\(model.uncollectedPellets.count) power pellets on the map today."
+            + "\(model.uncollectedPellets.count) power-ups on the map today."
     }
 
     private var sideButtons: some View {
@@ -209,7 +209,7 @@ struct TownHeader: View {
                                 .background(Theme.power.opacity(0.22), in: Capsule())
                                 .foregroundStyle(Theme.hudText)
                         }
-                        .accessibilityLabel("Power pellet at \(p.landmark.name). Show on map.")
+                        .accessibilityLabel("Power-up at \(p.landmark.name). Show on map.")
                     }
                     ForEach(bonus) { b in
                         Button {

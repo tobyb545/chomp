@@ -26,7 +26,7 @@ struct IntroCardsView: View {
                       body: r.decay.isEnabled
                         ? "Rivals and bots can take your coins by running past them. Streets you don't rerun fade back to white after \(days) days."
                         : "Your coins stay yours until someone else runs past them. Rivals and bots can take them, so keep an eye on your patch."),
-            IntroCard(scene: .power, title: "Power pellets and bonus streets",
+            IntroCard(scene: .power, title: "Power-ups and bonus streets",
                       body: "Run past the glowing pink landmark for a \(frenzyMin)-minute frenzy: double points, and rivals' streets flip more easily. Some streets glow pink for bonus points at certain times."),
             IntroCard(scene: .health, title: "Forgot to press start?",
                       body: "Add the run from Apple Health afterwards. Runs from the last \(importDays) days still capture streets."),

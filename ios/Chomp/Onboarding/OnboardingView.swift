@@ -38,7 +38,7 @@ struct OnboardingView: View {
             Text("CHOMP").font(.system(size: 54, weight: .black, design: .rounded)).foregroundStyle(Color(hex: colorHex))
                 .shadow(color: Color(hex: colorHex).opacity(0.7), radius: 14)
                 .accessibilityAddTraits(.isHeader)
-            Text("Run a street to eat its pellets and paint it your colour.\nPick yours.")
+            Text("Run a street to collect its coins and paint it your colour.\nPick yours.")
                 .font(.title3.weight(.semibold)).multilineTextAlignment(.center).foregroundStyle(Theme.hudSecondary)
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14), count: 4), spacing: 14) {
                 ForEach(PlayerPalette.swatches) { s in
@@ -98,7 +98,7 @@ struct OnboardingView: View {
     private var readyStep: some View {
         VStack(spacing: 18) {
             Text("Ready, \(name.trimmingCharacters(in: .whitespaces))").font(Theme.display(.title)).foregroundStyle(.white)
-            Text("Every street near you is covered in dots. A few bots are already out there. Go eat some streets.")
+            Text("Every street near you is covered in coins. A few bots are already out there. Go eat some streets.")
                 .font(.title3.weight(.semibold)).multilineTextAlignment(.center).foregroundStyle(Theme.hudSecondary)
             next("Show me the map") { finish() }
         }

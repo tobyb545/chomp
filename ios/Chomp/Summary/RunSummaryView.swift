@@ -12,6 +12,7 @@ struct RunSummaryView: View {
     @State private var revealed = 0
     @State private var replaying = false
     @State private var shareImage: Image?
+    @State private var storyImage: Image?
     @State private var gifURL: URL?
     @State private var exporting = false
 
@@ -41,6 +42,7 @@ struct RunSummaryView: View {
             .task {
                 trace = await LocalStore.shared.loadTrace(run: record.id)
                 shareImage = renderPoster()
+                storyImage = renderStory()
                 await replay()
             }
         }
@@ -173,7 +175,7 @@ struct RunSummaryView: View {
         VStack(alignment: .leading, spacing: 8) {
             ForEach(outcome.pelletsCollected, id: \.self) { id in
                 let name = model.pellets.first { $0.id == id }?.landmark.name ?? "a landmark"
-                Label("Power pellet at \(name): 10 min frenzy", systemImage: "bolt.circle.fill").foregroundStyle(Theme.power)
+                Label("Power-up at \(name): 10 min frenzy", systemImage: "bolt.circle.fill").foregroundStyle(Theme.power)
             }
             if outcome.blockBonus > 0 {
                 Label("\(outcome.blocksCompleted.count) block\(outcome.blocksCompleted.count == 1 ? "" : "s") filled: +\(outcome.blockBonus)", systemImage: "square.grid.3x3.fill")
@@ -239,11 +241,17 @@ struct RunSummaryView: View {
 
     private var shareRow: some View {
         VStack(spacing: 10) {
+            if let img = storyImage {
+                ShareLink(item: img, preview: SharePreview("My Chomp run", image: img)) {
+                    Label("Share to your Story", systemImage: "rectangle.portrait.on.rectangle.portrait")
+                }
+                .buttonStyle(ChunkyButtonStyle(colorHex: model.profile.colorHex, height: 56))
+            }
             if let img = shareImage {
                 ShareLink(item: img, preview: SharePreview("My streets in \(model.placeName)", image: img)) {
                     Label("Share my territory", systemImage: "square.and.arrow.up")
                 }
-                .buttonStyle(ChunkyButtonStyle(colorHex: model.profile.colorHex, height: 56))
+                .buttonStyle(ChunkyButtonStyle(colorHex: "2A2A4A", height: 50))
             }
             if let gifURL {
                 ShareLink(item: gifURL) { Label("Share replay GIF", systemImage: "film") }
@@ -271,6 +279,29 @@ struct RunSummaryView: View {
                                      ownerColor: model.ownerColor)
         let r = ImageRenderer(content: poster.frame(width: 1080 / 3, height: 1350 / 3))
         r.scale = 3
+        return r.uiImage.map { Image(uiImage: $0) }
+    }
+
+    /// 9:16 card for Instagram/TikTok Stories: the coins headline, this run's streets and a "Get Chomp" footer.
+    @MainActor
+    private func renderStory() -> Image? {
+        let coins = record.tokens ?? model.tokens(of: outcome, in: model.area)
+        let card = StoryCard(
+            poster: TerritoryPoster(area: model.area, state: model.state, me: model.state.me, colorHex: model.profile.colorHex,
+                                    highlight: Set(ordered.map(\.segmentID)), title: model.placeName,
+                                    subtitle: "\(model.progress.heldSegments) streets held", ownerColor: model.ownerColor),
+            coins: coins, stolen: outcome.stolen.count,
+            stats: [(formatDistance(record.distance, miles: model.profile.useMiles), "Distance"),
+                    (RunMath.formatDuration(record.movingTime), "Time"),
+                    ("\(outcome.gained.count)", outcome.gained.count == 1 ? "Street" : "Streets")],
+            colorHex: model.profile.colorHex)
+        let r = ImageRenderer(content: card.frame(width: 360, height: 640))
+        r.scale = 3
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-dumpStory"), let png = r.uiImage?.pngData() {
+            try? png.write(to: FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("story.png"))
+        }
+        #endif
         return r.uiImage.map { Image(uiImage: $0) }
     }
 
@@ -340,6 +371,65 @@ struct TerritoryPoster: View {
                 Text(subtitle).font(.system(size: 12, weight: .semibold, design: .rounded)).foregroundStyle(Color(hex: "A3A3C2"))
             }
             .padding(16)
+        }
+    }
+}
+
+/// Instagram Story card (1080x1920 when rendered at 3x).
+struct StoryCard: View {
+    let poster: TerritoryPoster
+    let coins: Int
+    let stolen: Int
+    let stats: [(String, String)]
+    let colorHex: String
+
+    private let lime = Color(hex: "D4FF3A")
+
+    var body: some View {
+        ZStack {
+            LinearGradient(colors: [Color(hex: "4F7BFF"), Color(hex: "8640EC")], startPoint: .topLeading, endPoint: .bottomTrailing)
+            RadialGradient(colors: [.white.opacity(0.25), .clear], center: UnitPoint(x: 0.2, y: 0.08), startRadius: 0, endRadius: 330)
+            VStack(spacing: 14) {
+                Spacer(minLength: 46)
+                VStack(spacing: 0) {
+                    Text("I just grabbed").font(.system(size: 30, weight: .heavy, design: .rounded)).foregroundStyle(.white)
+                    HStack(spacing: 8) {
+                        Image(uiImage: CoinIcon.render(colorHex: "FFC83D")).resizable().frame(width: 34, height: 34)
+                        Text("\(coins) coin\(coins == 1 ? "" : "s")").font(.system(size: 44, weight: .black, design: .rounded)).foregroundStyle(lime)
+                    }
+                    if stolen > 0 {
+                        Text("and stole \(stolen) street\(stolen == 1 ? "" : "s") from rivals")
+                            .font(.system(size: 16, weight: .bold, design: .rounded)).foregroundStyle(.white.opacity(0.9)).padding(.top, 4)
+                    }
+                }
+                .shadow(color: Color(hex: "1A0F55").opacity(0.35), radius: 6, y: 3)
+                poster
+                    .frame(height: 330)
+                    .clipShape(RoundedRectangle(cornerRadius: 26))
+                    .overlay(RoundedRectangle(cornerRadius: 26).stroke(.white.opacity(0.15), lineWidth: 1))
+                    .shadow(color: Color(hex: "140A40").opacity(0.5), radius: 16, y: 10)
+                    .padding(.horizontal, 22)
+                HStack(spacing: 8) {
+                    ForEach(Array(stats.enumerated()), id: \.offset) { _, s in
+                        VStack(spacing: 2) {
+                            Text(s.0).font(.system(size: 18, weight: .black, design: .rounded)).foregroundStyle(.white)
+                            Text(s.1).font(.system(size: 11, weight: .semibold, design: .rounded)).foregroundStyle(.white.opacity(0.75))
+                        }
+                        .frame(maxWidth: .infinity).padding(.vertical, 10)
+                        .background(.white.opacity(0.14), in: RoundedRectangle(cornerRadius: 14))
+                    }
+                }
+                .padding(.horizontal, 22)
+                Spacer(minLength: 8)
+                VStack(spacing: 6) {
+                    Text("Every street is covered in coins.").font(.system(size: 14, weight: .semibold, design: .rounded)).foregroundStyle(.white.opacity(0.9))
+                    Text("Get Chomp on the App Store")
+                        .font(.system(size: 16, weight: .heavy, design: .rounded)).foregroundStyle(Color(hex: "16123A"))
+                        .padding(.horizontal, 22).padding(.vertical, 11)
+                        .background(lime, in: Capsule())
+                }
+                .padding(.bottom, 52)
+            }
         }
     }
 }

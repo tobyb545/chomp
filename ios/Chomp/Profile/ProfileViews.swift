@@ -84,7 +84,7 @@ struct StatsSection: View {
             if model.pro.isPro {
                 LabeledContent("Distance run", value: String(format: "%.1f km", totalKm))
                 LabeledContent("Streets stolen back", value: "\(model.runs.reduce(0) { $0 + $1.outcome.stolen.count })")
-                LabeledContent("Power pellets", value: "\(model.state.collectedPellets.count)")
+                LabeledContent("Power-ups", value: "\(model.state.collectedPellets.count)")
                 LabeledContent("Most-run street", value: mostRun ?? "–")
                 Toggle("Heatmap on the map", isOn: Bindable(model).heatmapOn)
             } else {

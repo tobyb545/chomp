@@ -99,7 +99,7 @@ struct WatchRunView: View {
                 }
                 HStack {
                     stat("\(model.streets)", model.running ? "streets" : "held", c)
-                    stat("\(model.pellets)", "pellets", Color(hex: "FFF1C1"))
+                    stat("\(model.pellets)", "coins", Color(hex: "FFF1C1"))
                 }
                 if let f = model.frenzyEndsAt, f > .now {
                     HStack { Image(systemName: "bolt.fill"); Text(timerInterval: Date.now...f, countsDown: true).monospacedDigit() }

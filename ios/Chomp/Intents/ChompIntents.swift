@@ -3,7 +3,7 @@ import Foundation
 
 struct StartRunIntent: AppIntent {
     static let title: LocalizedStringResource = "Start a Chomp run"
-    static let description = IntentDescription("Starts recording a run so you can eat pellets and claim streets.")
+    static let description = IntentDescription("Starts recording a run so you can collect coins and claim streets.")
     static let openAppWhenRun = true
 
     @MainActor
