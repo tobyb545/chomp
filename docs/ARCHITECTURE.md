@@ -135,8 +135,9 @@ All five share the TypeScript port in `functions/_shared/chomp`, and its pure co
 ## Coins, and capture areas (off)
 
 Every street is drawn as a row of coins, one per token (`rules.tokens.metresPerToken`, 10 m),
-evenly spaced: gold when nobody holds the street, the owner's colour when someone does,
-fading with strength. There are no street lines. Coin art is drawn in code
+evenly spaced: white when nobody holds the street, gold when you do, and a rival's own
+colour when they do (a rival whose colour reads as gold or orange is shown red, so gold
+always means yours), fading with strength. There are no street lines. Coin art is drawn in code
 (`CoinIcon` in `GameMapView.swift`) per colour and placed with a MapLibre symbol layer.
 Overlapping coins are dropped when zoomed out, so the coins never merge into a line.
 

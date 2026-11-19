@@ -20,11 +20,11 @@ struct IntroCardsView: View {
         let importDays = Int(r.imports.captureWindowHours / 24)
         return [
             IntroCard(scene: .tokens, title: "Every street is full of tokens",
-                      body: "Wherever you are, the streets on the map are lined with gold coins. Run along a street to collect them."),
+                      body: "Wherever you are, the streets on the map are lined with white coins. Run along a street to collect them."),
             IntroCard(scene: .capture, title: "Run it to make it yours",
-                      body: "Cover \(pct)% of a street in one run and its coins turn your colour. Running the pavement counts for the road."),
+                      body: "Cover \(pct)% of a street in one run and its coins turn gold: they're yours. Running the pavement counts for the road."),
             IntroCard(scene: .rivals, title: "Defend your streets",
-                      body: "Rivals and bots can take your coins back by running your streets. Streets you don't rerun fade back to gold after \(days) days."),
+                      body: "Rivals and bots can take your coins back by running your streets. Streets you don't rerun fade back to white after \(days) days."),
             IntroCard(scene: .power, title: "Power pellets and bonus streets",
                       body: "Run past the glowing pink landmark for a \(frenzyMin)-minute frenzy: double points, and rivals' streets flip more easily. Some streets glow pink for bonus points at certain times."),
             IntroCard(scene: .health, title: "Forgot to press start?",
@@ -156,7 +156,7 @@ private struct IntroScene: View {
             if f < taken || f < from - 0.0001 {
                 if let takenColor { coin(&ctx, p, takenColor, opacity: takenOpacity) }
             } else {
-                coin(&ctx, p, color ?? gold)
+                coin(&ctx, p, color ?? .white)
             }
         }
     }
@@ -200,7 +200,7 @@ private struct IntroScene: View {
             dots(&ctx, CGPoint(x: w * 0.5, y: 24), CGPoint(x: w * 0.5, y: h - 24), n: 8)
             let f = min(1, phase(t, 3.2) * 1.2)
             let a = CGPoint(x: 24, y: rows[1]), b = CGPoint(x: w - 24, y: rows[1])
-            dots(&ctx, a, b, n: 12, taken: f, takenColor: me, takenOpacity: 0.45)
+            dots(&ctx, a, b, n: 12, taken: f, takenColor: gold, takenOpacity: 0.45)
             runner(&ctx, lerp(a, b, f), me)
 
         case .capture:
@@ -209,28 +209,28 @@ private struct IntroScene: View {
             let f = min(1, phase(t, 3.6) * 1.35)
             let done = f >= 0.8
             if done {
-                dots(&ctx, a, b, n: 14, taken: 2, takenColor: me)
+                dots(&ctx, a, b, n: 14, taken: 2, takenColor: gold)
             } else {
-                dots(&ctx, a, b, n: 14, taken: f, takenColor: me, takenOpacity: 0.45)
+                dots(&ctx, a, b, n: 14, taken: f, takenColor: gold, takenOpacity: 0.45)
                 runner(&ctx, lerp(a, b, f), me)
             }
             let label = done ? "YOURS" : "\(Int(f * 100))%"
-            ctx.draw(Text(label).font(.system(size: 26, weight: .black, design: .rounded)).foregroundStyle(done ? me : .white),
+            ctx.draw(Text(label).font(.system(size: 26, weight: .black, design: .rounded)).foregroundStyle(done ? gold : .white),
                      at: CGPoint(x: w / 2, y: h * 0.25))
 
         case .rivals:
             let y1 = h * 0.32, y2 = h * 0.68
             let fade = 0.35 + 0.65 * (0.5 + 0.5 * cos(t * 1.4))
             line(&ctx, CGPoint(x: 30, y: y1), CGPoint(x: w - 30, y: y1), street, 10)
-            dots(&ctx, CGPoint(x: 30, y: y1), CGPoint(x: w - 30, y: y1), n: 12, taken: 2, takenColor: me, takenOpacity: fade)
+            dots(&ctx, CGPoint(x: 30, y: y1), CGPoint(x: w - 30, y: y1), n: 12, taken: 2, takenColor: gold, takenOpacity: fade)
             let a = CGPoint(x: 30, y: y2), b = CGPoint(x: w - 30, y: y2)
             let f = phase(t, 3.0)
             line(&ctx, a, b, street, 10)
-            dots(&ctx, a, b, n: 12, color: me, taken: f, takenColor: bot)
+            dots(&ctx, a, b, n: 12, color: gold, taken: f, takenColor: bot)
             runner(&ctx, lerp(a, b, f), bot)
             ctx.draw(Text("Bot Dusk").font(.system(size: 13, weight: .heavy, design: .rounded)).foregroundStyle(bot),
                      at: CGPoint(x: lerp(a, b, f).x, y: y2 + 28))
-            ctx.draw(Text("fading…").font(.system(size: 13, weight: .heavy, design: .rounded)).foregroundStyle(me.opacity(fade)),
+            ctx.draw(Text("fading…").font(.system(size: 13, weight: .heavy, design: .rounded)).foregroundStyle(gold.opacity(fade)),
                      at: CGPoint(x: w / 2, y: y1 - 22))
 
         case .power:

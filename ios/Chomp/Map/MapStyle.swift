@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 /// Chomp's own map style: a base map from OpenFreeMap vector tiles (OpenMapTiles
 /// schema, free, no key) with our game layers on top. Built in code so the
@@ -53,12 +54,22 @@ enum MapStyle {
 
     /// Coin artwork is drawn at `CoinIcon.points`; this scales it with zoom.
     /// Slightly bigger than the old dots, and roughly one coin per 10 m when zoomed in.
-    static var coinSize: [Any] { ["interpolate", ["exponential", 1.5], ["zoom"], 13, 0.2, 15, 0.34, 16, 0.46, 17, 0.62, 18, 0.9, 19, 1.15] }
+    static var coinSize: [Any] { ["interpolate", ["exponential", 1.5], ["zoom"], 13, 0.26, 15, 0.44, 16, 0.54, 17, 0.68, 18, 0.92, 19, 1.15] }
     static func coinRadius(_ scale: Double) -> [Any] {
         ["interpolate", ["exponential", 1.5], ["zoom"], 13, 2.2 * scale, 15, 3.7 * scale, 16, 5 * scale, 17, 6.8 * scale, 18, 9.9 * scale]
     }
-    /// Unowned coins: gold.
-    static func neutralCoin(_ look: PlayerProfile.MapLook) -> String { look == .light ? "F0A400" : "FFC83D" }
+    /// Unclaimed coins are white; yours are gold; rivals' are their colour.
+    static func neutralCoin(_ look: PlayerProfile.MapLook) -> String { "FFFFFF" }
+    static func mineCoin(_ look: PlayerProfile.MapLook) -> String { look == .light ? "F0A400" : "FFC83D" }
+    /// Gold means "yours", so a rival whose colour reads as gold or orange is shown in red.
+    static func rivalCoin(_ hex: String) -> String {
+        let c = Color(hex: hex).resolve(in: EnvironmentValues())
+        let r = Double(c.red), g = Double(c.green), b = Double(c.blue)
+        let mx = max(r, g, b), mn = min(r, g, b)
+        guard mx - mn > 0.25, mx == r, g >= b else { return hex }
+        let hue = 60 * (g - b) / (mx - mn)  // 0 = red, 60 = yellow
+        return (25...68).contains(hue) ? "FF3355" : hex
+    }
     static let bonusCoin = "FF2BD6"
 
     static func json(palette p: Palette) -> String {
@@ -101,7 +112,7 @@ enum MapStyle {
             // zoomed out, overlapping coins are dropped so they never merge into a line.
             ["id": "coins", "type": "symbol", "source": "coins", "minzoom": 13,
              "layout": ["icon-image": ["get", "icon"], "icon-size": coinSize,
-                        "icon-allow-overlap": false, "icon-ignore-placement": true, "icon-padding": 0,
+                        "icon-allow-overlap": false, "icon-ignore-placement": false, "icon-padding": 2,
                         "symbol-sort-key": ["get", "rank"]],
              "paint": ["icon-opacity": ["case", ["==", ["get", "state"], "neutral"], 1,
                                         ["+", 0.4, ["*", 0.6, ["get", "strength"]]]]]],

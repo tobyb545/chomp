@@ -67,3 +67,19 @@ struct Units {
         #expect(formatDistance(1609.344, miles: true).contains("1.0"))
     }
 }
+
+@Suite("Coin colours") @MainActor
+struct CoinColours {
+    @Test func unclaimedWhiteMineGold() {
+        #expect(MapStyle.neutralCoin(.dusk) == "FFFFFF")
+        #expect(MapStyle.mineCoin(.dusk) == "FFC83D")
+    }
+
+    @Test func rivalsNeverLookGold() {
+        #expect(MapStyle.rivalCoin("FFD600") == "FF3355")  // Sun
+        #expect(MapStyle.rivalCoin("FF8A00") == "FF3355")  // Ember
+        for keep in ["C6FF00", "00E5FF", "FF2BD6", "FF3355", "8B5CFF", "2BFFA8"] {
+            #expect(MapStyle.rivalCoin(keep) == keep, "\(keep) keeps its colour")
+        }
+    }
+}

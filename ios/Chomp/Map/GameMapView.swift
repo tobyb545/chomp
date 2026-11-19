@@ -44,6 +44,7 @@ struct GameMapView: UIViewRepresentable {
         map.showsUserLocation = showsUserLocation && LocationPermission.isAuthorized
         let start = focus ?? (area.tiles.isEmpty ? LocationPermission.shared.lastKnown : nil) ?? area.center
         context.coordinator.lastFocus = focus
+        context.coordinator.centredOnStreets = focus != nil || !area.tiles.isEmpty
         map.setCenter(CLLocationCoordinate2D(latitude: start.latitude, longitude: start.longitude), zoomLevel: area.tiles.isEmpty && focus == nil ? 12 : 14.4, animated: false)
         map.isAccessibilityElement = false
         let pan = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.didPan(_:)))
@@ -68,6 +69,15 @@ struct GameMapView: UIViewRepresentable {
             return
         }
         c.apply(snapshot)
+        // The map can appear before any streets have loaded (it then starts on a
+        // generic view). Once they arrive, go to them, unless the player has
+        // already moved the map.
+        if !c.centredOnStreets, !area.tiles.isEmpty {
+            c.centredOnStreets = true
+            if !c.userMoved, camera == .free, focus == nil {
+                map.setCenter(CLLocationCoordinate2D(latitude: area.center.latitude, longitude: area.center.longitude), zoomLevel: 14.4, animated: false)
+            }
+        }
         if focus != c.lastFocus, let f = focus {
             c.lastFocus = f
             map.setCenter(CLLocationCoordinate2D(latitude: f.latitude, longitude: f.longitude), zoomLevel: max(map.zoomLevel, 15.5), animated: true)
@@ -97,6 +107,8 @@ struct GameMapView: UIViewRepresentable {
         var look: PlayerProfile.MapLook
         var lastVersion = -1
         var lastFocus: Coordinate?
+        var centredOnStreets = false
+        var userMoved = false
         var lastFit: [Coordinate]?
         private var coinFeatures: [MLNPointCollectionFeature] = []
         private var coinPoints: [[CLLocationCoordinate2D]] = []
@@ -111,7 +123,7 @@ struct GameMapView: UIViewRepresentable {
         }
 
         static func styleURL(look: PlayerProfile.MapLook, conquered: Bool) -> URL {
-            let name = "chomp-style-\(look.rawValue)\(conquered ? "-conquered" : "")-v4.json"
+            let name = "chomp-style-\(look.rawValue)\(conquered ? "-conquered" : "")-v6.json"
             let url = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent(name)
             let json = MapStyle.json(palette: MapStyle.palette(look, conquered: conquered))
             try? json.write(to: url, atomically: true, encoding: .utf8)
@@ -119,7 +131,7 @@ struct GameMapView: UIViewRepresentable {
         }
 
         @objc func didPan(_ g: UIPanGestureRecognizer) {
-            if g.state == .began { parent.onUserPan?() }
+            if g.state == .began { userMoved = true; parent.onUserPan?() }
         }
 
         func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
@@ -204,7 +216,8 @@ struct GameMapView: UIViewRepresentable {
                 var hex: String
                 if let heat = s.heat?[seg.id], heat > 0 { hex = Self.heatHex(heat) }
                 else if state == "neutral" { hex = s.bonus.contains(seg.id) ? MapStyle.bonusCoin : neutral }
-                else { hex = look?.colorHex ?? neutral }
+                else if state == "mine" { hex = MapStyle.mineCoin(s.look) }
+                else { hex = MapStyle.rivalCoin(look?.colorHex ?? "FF3355") }
                 hex = hex.uppercased()
                 coinFeatures[i].attributes = [
                     "icon": coinIcon(hex, in: style),

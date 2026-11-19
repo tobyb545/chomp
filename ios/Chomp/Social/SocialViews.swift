@@ -216,7 +216,9 @@ struct StreetListView: View {
                         dismiss()
                     } label: {
                         HStack {
-                            Circle().fill(r.owner.map { Color(hex: model.ownerColor($0)) } ?? Color(hex: "E0A100")).frame(width: 12, height: 12)
+                            Circle().fill(r.owner.map { $0 == model.state.me ? Color(hex: "F0A400") : Color(hex: MapStyle.rivalCoin(model.ownerColor($0))) } ?? .white)
+                                .overlay(Circle().stroke(.black.opacity(0.25), lineWidth: 1))
+                                .frame(width: 12, height: 12)
                             VStack(alignment: .leading) {
                                 Text(r.name).font(.body.weight(.semibold))
                                 Text("\(formatDistance(r.away, miles: model.profile.useMiles)) away · \(formatDistance(r.metres, miles: model.profile.useMiles))"
