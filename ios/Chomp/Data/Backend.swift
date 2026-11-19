@@ -152,6 +152,18 @@ final class SupabaseBackend: @unchecked Sendable {
         }
     }
 
+    /// Asks the server to build street tiles into the shared cache. Fire and forget:
+    /// the app downloads its own copy meanwhile.
+    func warmTiles(_ keys: [TileKey]) {
+        guard let client else { return }
+        struct Body: Encodable { let tiles: [String] }
+        for group in stride(from: 0, to: keys.count, by: 9).map({ Array(keys[$0..<min($0 + 9, keys.count)]) }) {
+            Task.detached(priority: .utility) {
+                try? await client.functions.invoke("warm-tiles", options: FunctionInvokeOptions(body: Body(tiles: group.map(\.description))))
+            }
+        }
+    }
+
     func restoreSession() async {
         guard let client else { return }
         userID = try? await client.auth.session.user.id.uuidString.lowercased()

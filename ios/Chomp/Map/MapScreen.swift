@@ -269,7 +269,9 @@ struct WorldStatusBanner: View {
         case .loading where AppModel.marketing && !model.area.segments.isEmpty:
             EmptyView()
         case .loading(let n):
-            banner(symbol: nil, text: model.area.segments.isEmpty ? "Loading the streets around you…" : "Loading more streets… (\(n))")
+            banner(symbol: nil, text: model.area.segments.isEmpty
+                   ? "Loading the streets around you… The first time in a new area can take a minute."
+                   : "Loading more streets… (\(n))")
         case .needsLocation:
             banner(symbol: "location.slash", text: "Allow location, or pan the map to any town, to load its streets.") {
                 Task {

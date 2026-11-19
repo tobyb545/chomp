@@ -158,16 +158,28 @@ final class AppModel {
         guard !stale.isEmpty else { worldStatus = .idle; worldTask = nil; return }
         var failure: String?
         worldStatus = .loading(stale.count)
-        do {
-            let got = try await WorldStore.shared.tiles(stale)
-            if Task.isCancelled { return }
-            for (k, t) in got { loadedTiles[k] = t }
-            await install()
-            if stale.contains(where: { loadedTiles[$0] == nil }) { failure = WorldStore.WorldError.offline.localizedDescription }
-        } catch {
-            if Task.isCancelled { return }
-            failure = error.localizedDescription
+        // The nearest tile on its own first, so there's something to run on as
+        // soon as possible; the rest come in one request alongside it.
+        let batches = stale.count > 1 ? [[stale[0]], Array(stale.dropFirst())] : [stale]
+        await withTaskGroup(of: Result<[TileKey: TileFile], Error>.self) { g in
+            for b in batches {
+                g.addTask { do { return .success(try await WorldStore.shared.tiles(b)) } catch { return .failure(error) } }
+            }
+            for await r in g {
+                if Task.isCancelled { continue }
+                switch r {
+                case .success(let got):
+                    for (k, t) in got { loadedTiles[k] = t }
+                    await install()
+                    let left = stale.filter { loadedTiles[$0] == nil }.count
+                    if left > 0 { worldStatus = .loading(left) }
+                case .failure(let e):
+                    failure = e.localizedDescription
+                }
+            }
         }
+        if Task.isCancelled { return }
+        if failure == nil, stale.contains(where: { loadedTiles[$0] == nil }) { failure = WorldStore.WorldError.offline.localizedDescription }
         worldStatus = failure.map { .failed($0) } ?? .idle
         worldTask = nil
     }

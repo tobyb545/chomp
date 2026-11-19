@@ -109,7 +109,12 @@ struct OnboardingView: View {
                 bullet("house.fill", "Add privacy zones to hide where your runs start and end.")
             }
             next("Allow while using") {
-                Task { _ = await LocationPermission.shared.requestWhenInUse(); step = 3 }
+                Task {
+                    _ = await LocationPermission.shared.requestWhenInUse()
+                    step = 3
+                    // Start on the streets now: a new area can take a minute to download.
+                    await model.locateAndLoad()
+                }
             }
             Button("Not now") { step = 3 }.foregroundStyle(Theme.hudSecondary)
         }

@@ -22,16 +22,22 @@ actor WorldStore {
     /// policies are fine for a phone fetching a few tiles at a time.
     private let endpoints = [
         URL(string: "https://overpass-api.de/api/interpreter")!,
-        URL(string: "https://overpass.private.coffee/api/interpreter")!,
+        URL(string: "https://overpass.kumi.systems/api/interpreter")!,
         URL(string: "https://maps.mail.ru/osm/tools/overpass/api/interpreter")!,
     ]
     /// OSM changes slowly; refresh a tile after a month (keeping the old copy if offline).
     private let maxAge: TimeInterval = 30 * 86_400
 
     private var memory: [TileKey: TileFile] = [:]
+    /// Downloads under way, shared by every caller that wants the same tiles. A
+    /// caller that moves on (the map was panned) doesn't cancel them, so the
+    /// tiles still arrive and are saved.
+    private var inFlight: [TileKey: Task<[TileKey: TileFile], Error>] = [:]
     private let session: URLSession = {
         let c = URLSessionConfiguration.default
-        c.timeoutIntervalForRequest = 35  // public mirrors stall sometimes; move on to the next
+        // Overpass sends nothing until the whole answer is ready, which often takes
+        // 40-60 s, so a shorter idle timeout gives up on requests that would have worked.
+        c.timeoutIntervalForRequest = 100
         c.httpAdditionalHeaders = ["User-Agent": "Chomp/\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1") (iOS street game)"]
         return URLSession(configuration: c)
     }()
@@ -69,8 +75,8 @@ actor WorldStore {
         return t
     }
 
-    /// Returns the tiles, downloading all the missing ones in a single Overpass
-    /// request (much faster than one each). Falls back to stale copies offline.
+    /// Returns the tiles, downloading the missing ones (one Overpass request per
+    /// 3x3 group, much faster than one each). Falls back to stale copies offline.
     func tiles(_ keys: [TileKey]) async throws -> [TileKey: TileFile] {
         var out: [TileKey: TileFile] = [:]
         var missing: [TileKey] = []
@@ -78,23 +84,38 @@ actor WorldStore {
             if isFresh(k), let t = cached([k]).first { out[k] = t } else { missing.append(k) }
         }
         // Our own tile cache first (filled by the server), then Overpass.
-        if !missing.isEmpty, let shared = await fromSharedCache(missing) {
+        let toCheck = missing.filter { inFlight[$0] == nil }
+        if !toCheck.isEmpty, let shared = await fromSharedCache(toCheck) {
             for (k, t) in shared { remember(t, k); out[k] = t }
             missing.removeAll { shared[$0] != nil }
         }
-        // Overpass gets slow with huge boxes; 3x3 tiles (~5 km) per request is plenty.
-        for group in stride(from: 0, to: missing.count, by: 9).map({ Array(missing[$0..<min($0 + 9, missing.count)]) }) {
-            do {
+        let start = missing.filter { inFlight[$0] == nil }
+        // Ask the server to build these too, so the next player here gets them from the cache.
+        if !start.isEmpty { SupabaseBackend.shared.warmTiles(start) }
+        for group in stride(from: 0, to: start.count, by: 9).map({ Array(start[$0..<min($0 + 9, start.count)]) }) {
+            let task = Task { () throws -> [TileKey: TileFile] in
+                defer { for k in group where inFlight[k] != nil { inFlight[k] = nil } }
                 let built = try await download(group)
-                for (k, t) in built { remember(t, k); out[k] = t }
-            } catch is CancellationError {
-                throw CancellationError()
+                for (k, t) in built { remember(t, k) }
+                return built
+            }
+            for k in group { inFlight[k] = task }
+        }
+        var lastError: Error?
+        for task in Set(missing.compactMap { inFlight[$0] }) {
+            do {
+                let built = try await task.value
+                for k in missing { if let t = built[k] { out[k] = t } }
             } catch {
-                let stale = cached(group)
-                for t in stale { if let k = TileKey(string: t.key) { out[k] = t } }
-                if stale.count < group.count, out.isEmpty { throw error }
+                lastError = error
             }
         }
+        try Task.checkCancellation()
+        // Anything still missing: an old copy beats nothing.
+        for k in missing where out[k] == nil {
+            if let t = cached([k]).first { out[k] = t }
+        }
+        if let lastError, out.isEmpty { throw lastError }
         return out
     }
 

@@ -42,7 +42,7 @@ supabase secrets set CRON_SECRET=$(openssl rand -hex 24) \
   REVENUECAT_WEBHOOK_SECRET=$(openssl rand -hex 24) \
   STRAVA_CLIENT_ID=... STRAVA_CLIENT_SECRET=...
 supabase functions deploy resolve-run strava-import
-supabase functions deploy ghost-tick revenuecat-webhook --no-verify-jwt
+supabase functions deploy ghost-tick revenuecat-webhook warm-tiles --no-verify-jwt
 ```
 
 **Cron.** pg_cron calls the functions using two Vault secrets. Run this once in the SQL editor:

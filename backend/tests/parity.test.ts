@@ -148,3 +148,14 @@ test("polyline codec round-trips", () => {
   const c = [{ lat: 51.338, lon: -0.505 }, { lat: 51.33812, lon: -0.50488 }];
   assert.deepEqual(decodePolyline(encodePolyline(c)), c);
 });
+
+test("warm-tiles accepts up to a 3x3 block of tiles", async () => {
+  const { parseWarm } = await import("../supabase/functions/_shared/warm.ts");
+  assert.equal(parseWarm({ tiles: ["14/8180/5448", "14/8181/5449", "14/8182/5450"] })?.length, 3);
+  assert.equal(parseWarm({ tiles: ["14/8180/5448", "14/8180/5448"] })?.length, 1);
+  assert.equal(parseWarm({ tiles: ["14/8180/5448", "14/8183/5448"] }), null);  // too far apart
+  assert.equal(parseWarm({ tiles: Array(10).fill("14/8180/5448") }), null);
+  assert.equal(parseWarm({ tiles: ["12/1/1"] }), null);
+  assert.equal(parseWarm({ tiles: [] }), null);
+  assert.equal(parseWarm({}), null);
+});

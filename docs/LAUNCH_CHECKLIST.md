@@ -30,9 +30,11 @@ in [SETUP.md](SETUP.md).
      remove stored run traces
 
   The earlier migrations, up to `20261123000000_coins.sql`, are already live.
-- [ ] **Redeploy the Edge Functions** that changed:
+- [ ] **Redeploy the Edge Functions** that changed, plus the new `warm-tiles` (it fills the
+  shared street cache, so after the first player in an area everyone else loads it in about a
+  second instead of waiting up to a minute for the free map servers):
   `supabase functions deploy resolve-run strava-import` and
-  `supabase functions deploy ghost-tick revenuecat-webhook --no-verify-jwt`
+  `supabase functions deploy ghost-tick revenuecat-webhook warm-tiles --no-verify-jwt`
 - [ ] **Make sure the cron Vault secrets exist** (`chomp_functions_url`, `chomp_cron_secret`).
   Without them, bots never move online. See SETUP.md §3, "Cron".
 - [ ] **Sign in with Apple provider**: Authentication → Providers → Apple, enabled, with client ID

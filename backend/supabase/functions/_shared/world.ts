@@ -9,7 +9,7 @@ import {
 
 const OVERPASS = [
   "https://overpass-api.de/api/interpreter",
-  "https://overpass.private.coffee/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter",
   "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
 ];
 const MAX_AGE_S = 30 * 86_400;
@@ -23,7 +23,7 @@ async function fetchOverpass(keys: TileKey[]): Promise<OverpassResponse> {
   for (const url of OVERPASS) {
     try {
       const r = await fetch(url, { method: "POST", body, headers: { "User-Agent": "chomp-server/1 (street game tile builder)" },
-        signal: AbortSignal.timeout(60_000) });
+        signal: AbortSignal.timeout(100_000) });  // a 3x3 query often takes 40-60 s
       if (r.ok) return await r.json();
       last = new Error(`Overpass ${r.status}`);
     } catch (e) { last = e; }
