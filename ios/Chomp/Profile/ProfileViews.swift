@@ -113,6 +113,7 @@ struct SettingsView: View {
     @Environment(\.webAuthenticationSession) private var webAuth
     @State private var importing = false
     @State private var importResult: String?
+    @State private var showFileImport = false
     @State private var confirmReset = false
     @State private var customColour = Color.white
     @State private var accountError: String?
@@ -216,17 +217,23 @@ struct SettingsView: View {
             }
 
             Section {
-                Button(importing ? "Importing…" : "Import runs from Strava") {
-                    Task {
-                        importing = true
-                        importResult = await StravaImport.run(model: model, webAuth: webAuth)
-                        importing = false
-                    }
-                }.disabled(importing)
+                Button("Import a run file") { showFileImport = true }
+                    .accessibilityIdentifier("importRunFile")
+                // Strava's API needs a paid developer subscription, so only builds with a client ID offer it.
+                if StravaImport.isAvailable {
+                    Button(importing ? "Importing…" : "Import runs from Strava") {
+                        Task {
+                            importing = true
+                            importResult = await StravaImport.run(model: model, webAuth: webAuth)
+                            importing = false
+                        }
+                    }.disabled(importing)
+                }
                 if let importResult { Text(importResult).font(.footnote).foregroundStyle(Theme.textSecondary) }
             } header: { Text("History") } footer: {
-                Text("Forgot to start Chomp? Strava runs from the last \(Int(model.rules.imports.captureWindowHours / 24)) days collect coins like any other run. Older runs go into your history and can't collect or steal coins.")
+                Text("Forgot to start Chomp? Add the run from Garmin Connect, your Apple Watch or Strava. Runs from the last \(Int(model.rules.imports.captureWindowHours / 24)) days collect coins like any other run. Older runs go into your history and can't collect or steal coins.")
             }
+            .sheet(isPresented: $showFileImport) { RunFileImportView() }
 
             Section {
                 if !model.backend.isConfigured {
@@ -351,6 +358,8 @@ enum StravaImport {
     /// Strava OAuth in the app; the code goes to the strava-import Edge Function,
     /// which holds the client secret. Older runs are added there as history;
     /// recent ones come back and are added here like any run, so they collect coins.
+    static var isAvailable: Bool { !((Bundle.main.infoDictionary?["StravaClientID"] as? String) ?? "").isEmpty }
+
     @MainActor
     static func run(model: AppModel, webAuth: WebAuthenticationSession) async -> String {
         let backend = model.backend

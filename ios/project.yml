@@ -131,6 +131,31 @@ targets:
         CFBundleURLTypes:
           - CFBundleURLName: com.tobyb545.chomp
             CFBundleURLSchemes: [chomp]
+        # Run files from Garmin Connect, Strava, Health exports etc. Chomp shows up
+        # in the Share sheet and in Files' "Open in" for these.
+        LSSupportsOpeningDocumentsInPlace: false
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Run file
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [com.topografix.gpx, com.garmin.tcx, com.garmin.fit]
+        UTImportedTypeDeclarations:
+          - UTTypeIdentifier: com.topografix.gpx
+            UTTypeDescription: GPX route
+            UTTypeConformsTo: [public.xml, public.data]
+            UTTypeTagSpecification:
+              public.filename-extension: [gpx]
+              public.mime-type: [application/gpx+xml]
+          - UTTypeIdentifier: com.garmin.tcx
+            UTTypeDescription: Garmin TCX activity
+            UTTypeConformsTo: [public.xml, public.data]
+            UTTypeTagSpecification:
+              public.filename-extension: [tcx]
+          - UTTypeIdentifier: com.garmin.fit
+            UTTypeDescription: Garmin FIT activity
+            UTTypeConformsTo: [public.data]
+            UTTypeTagSpecification:
+              public.filename-extension: [fit]
         SupabaseURL: $(SUPABASE_URL)
         SupabaseAnonKey: $(SUPABASE_ANON_KEY)
         RevenueCatAPIKey: $(REVENUECAT_API_KEY)

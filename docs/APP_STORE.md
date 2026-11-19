@@ -26,7 +26,7 @@ Your coins stay yours until someone else runs past them, and rivals will try. St
 • FAIR PLAY: driving, cycling and GPS tricks don't count. Every run is checked.
 • PRIVATE BY DESIGN: privacy zones hide where your runs start and end. No one ever sees your live location or your routes. Private mode keeps you off the shared map entirely.
 • LIVE ACTIVITY AND WIDGETS: coins and power-ups on your Lock Screen as you run.
-• STRAVA IMPORT: forgot to press start? Import the run from Strava and it still collects coins. Runs are saved to Apple Health as workouts.
+• IMPORT YOUR RUNS: forgot to press start? Add the GPX, TCX or FIT file from Garmin Connect, Apple Watch or Strava and it still collects coins. Runs are saved to Apple Health as workouts.
 
 Chomp Pro (optional) adds trail styles and colours, run replays and GIF export, detailed stats and starting a club. Pro never helps you collect or steal coins: everyone plays by the same rules.
 

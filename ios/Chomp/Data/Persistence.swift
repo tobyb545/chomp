@@ -104,7 +104,8 @@ struct RunRecord: Codable, Identifiable, Hashable {
     /// Tokens earned (nil for runs saved before tokens existed).
     var tokens: Int? = nil
 
-    enum Source: String, Codable { case live, healthImport, stravaImport }
+    /// fileImport: a GPX/TCX/FIT file. healthImport is no longer created (kept so old runs load).
+    enum Source: String, Codable { case live, healthImport, stravaImport, fileImport }
 
     struct SplitRecord: Codable, Hashable { var distance: Double; var duration: TimeInterval }
 }

@@ -28,6 +28,11 @@ struct ChompApp: App {
                     }
                 }
                 .onOpenURL { url in
+                    // A run file shared to Chomp, or opened from Files.
+                    if url.isFileURL {
+                        Task { model.toast = await model.importRunFile(url) }
+                        return
+                    }
                     // chomp://run/start (from widgets / shortcuts)
                     if url.host == "run", url.path == "/start" { IntentRouter.shared.requestStart() }
                     // Invite and club links: chomp://invite/<code>, chomp://club/<code>,

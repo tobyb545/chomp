@@ -580,7 +580,8 @@ final class AppModel {
 
     private func upload(id: UUID, trace: [TracePoint], signals: RunSignals, startedAt: Date, endedAt: Date, source: RunRecord.Source) async {
         let upload = RunUpload(runId: id, startedAt: startedAt, endedAt: endedAt,
-                               source: source == .live ? "live" : source == .healthImport ? "health_import" : "strava_import",
+                               // The server's "health_import" means "imported from another app": file imports use it too.
+                               source: source == .live ? "live" : source == .stravaImport ? "strava_import" : "health_import",
                                polyline: PolylineCodec.encode(trace.map(\.coordinate)),
                                timestamps: trace.map { $0.timestamp.timeIntervalSince1970 },
                                accuracies: trace.map(\.horizontalAccuracy), speeds: trace.map(\.speed), signals: signals,
@@ -936,10 +937,47 @@ final class AppModel {
     /// A recent Strava run, added as if Chomp had recorded it, so it collects
     /// coins. Returns the coins collected, or nil if it was skipped.
     func importStravaRun(start: Date, end: Date, trace raw: [TracePoint]) async -> Int? {
-        guard raw.count > 10, !runs.contains(where: { abs($0.startedAt.timeIntervalSince(start)) < 120 }) else { return nil }
+        guard raw.count > 10, !hasRun(near: start) else { return nil }
         guard let record = await resolve(id: UUID(), raw: raw, signals: RunSignals(), startedAt: start, endedAt: end,
                                          source: .stravaImport, isImport: !importCaptures(endedAt: end), simulated: false) else { return nil }
         return record.tokens ?? record.outcome.coins
+    }
+
+    /// Already have a run that started within 2 minutes of this one (recorded live or imported).
+    func hasRun(near start: Date) -> Bool { runs.contains { abs($0.startedAt.timeIntervalSince(start)) < 120 } }
+
+    /// A run file (GPX, TCX or FIT) from Garmin Connect, Strava, a Health export...
+    /// Returns a sentence for the player.
+    func importRunFile(_ url: URL) async -> String {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        let parsed: RunFile.Parsed
+        do {
+            let data = try Data(contentsOf: url)
+            guard data.count < 60_000_000 else { return "That file is too big to be a single run." }
+            parsed = try RunFile.parse(data, fileName: url.lastPathComponent)
+        } catch let e as RunFile.ParseError {
+            return e.localizedDescription
+        } catch {
+            return "Couldn't open that file: \(error.localizedDescription)"
+        }
+        let trace = parsed.points
+        guard trace.count > 10, parsed.end.timeIntervalSince(parsed.start) > 60 else { return "That run is too short to add." }
+        guard parsed.end <= Date().addingTimeInterval(600) else { return "That run's times are in the future, so it can't be added." }
+        if hasRun(near: parsed.start) { return "You already have this run in Chomp." }
+        let day = parsed.start.formatted(date: .abbreviated, time: .shortened)
+        let counts = importCaptures(endedAt: parsed.end)
+        guard let record = await resolve(id: UUID(), raw: trace, signals: RunSignals(), startedAt: parsed.start, endedAt: parsed.end,
+                                         source: .fileImport, isImport: !counts, simulated: false) else {
+            return "Your run on \(day) didn't pass any roads or paths with coins."
+        }
+        let km = formatDistance(record.distance, miles: profile.useMiles)
+        guard counts else {
+            return "Added your \(km) run from \(day) to your history. Runs older than \(Int(rules.imports.captureWindowHours / 24)) days don't collect coins."
+        }
+        let coins = record.tokens ?? record.outcome.coins
+        return coins > 0 ? "Added your \(km) run from \(day). You collected \(coinCount(coins))."
+                         : "Added your \(km) run from \(day). It didn't collect any new coins."
     }
 
     func leaderboard(scope: LeaderboardScope) async throws -> [LeaderboardEntry] {

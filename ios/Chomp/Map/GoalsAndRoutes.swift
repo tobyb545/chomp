@@ -67,7 +67,7 @@ struct GoalsSheet: View {
                     }
                     .padding(.vertical, 6)
                 } header: { Text("Run streak") } footer: {
-                    Text("Any run counts, recorded in Chomp or imported from Strava. If your streak would end tonight, Chomp reminds you at 7pm.")
+                    Text("Any run counts, recorded in Chomp or imported from a run file. If your streak would end tonight, Chomp reminds you at 7pm.")
                 }
 
                 Section {

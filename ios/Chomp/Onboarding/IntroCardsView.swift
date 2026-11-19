@@ -29,7 +29,7 @@ struct IntroCardsView: View {
             IntroCard(scene: .power, title: "Power-ups and bonus coins",
                       body: "Run past the glowing pink landmark for a \(frenzyMin)-minute frenzy: double points, and rivals' coins are easier to steal. Some coins glow pink for bonus points at certain times."),
             IntroCard(scene: .health, title: "Forgot to press start?",
-                      body: "Import it from Strava afterwards (Settings → History). Runs from the last \(importDays) days still collect coins."),
+                      body: "Add it afterwards from Garmin Connect, Apple Watch or Strava (Settings → History → Import a run file). Runs from the last \(importDays) days still collect coins."),
             IntroCard(scene: .leaderboard, title: "Climb the leaderboard",
                       body: "Rankings count the coins you've collected: nearby, worldwide, with friends and in your club. Invite a friend and you both get a month of Pro."),
         ]

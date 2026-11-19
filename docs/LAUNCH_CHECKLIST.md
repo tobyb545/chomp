@@ -49,9 +49,11 @@ in [SETUP.md](SETUP.md).
   testing but not for launch.
 - [ ] **Add yourself as an admin**: `insert into admins values ('<your auth user id>');`
 
-## Strava import
+## Importing runs
 
-- [ ] **Strava API app** (free import; the only way to add runs recorded elsewhere, since Garmin and Strava save runs to Apple Health without GPS): create a Strava API app with the callback domain `strava`. Set
+- **Run file import** (GPX/TCX/FIT, Settings → History → Import a run file, or Share → Chomp) is the
+  default way to add runs recorded elsewhere. It needs no setup.
+- [ ] *(Optional)* **Strava API app**: since June 2026 the developer needs a paid Strava subscription, and new apps are limited to 10 athletes until Strava reviews them. The button only appears when `STRAVA_CLIENT_ID` is set: create a Strava API app with the callback domain `strava`. Set
   `STRAVA_CLIENT_ID` in the xcconfig and the function secrets, and `STRAVA_CLIENT_SECRET` in
   the function secrets only.
 
