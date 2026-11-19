@@ -58,7 +58,7 @@ Capture them with the `-demo` launch argument, which seeds a week of runs (debug
 Not collected: contacts, browsing history, advertising data. No third-party advertising or analytics SDKs.
 
 ## Review notes
-- Location is requested only when you start your first run, never at launch.
+- Location is requested only when the player taps Allow in onboarding (with an explanation first) or starts their first run. It is never requested at launch: the map uses a passive location manager until permission is granted.
 - Background location is used only during an active run, to keep recording with the screen off.
   The blue indicator and the Live Activity are always shown.
 - Bots are always named "Bot …" and badged as bots.
