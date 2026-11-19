@@ -1,12 +1,19 @@
 // Hourly (pg_cron → this function): moves the bots a few streets. Bots live per
-// district (4x4 map tiles, about 6 km) wherever players hold streets, so busy
-// places stay lively and empty ones cost nothing. Always named and shown as bots.
+// district (4x4 map tiles, about 6 km) wherever players hold streets. They're there
+// so a lone runner has rivals: once RETIRE_AT_PLAYERS real runners have been active
+// in a district recently, its bots stop running and let go of their coins over about
+// a week. If the district goes quiet again, new bots appear.
 import { admin, hasSecret, json } from "../_shared/http.ts";
 import { districtTiles, loadTiles } from "../_shared/world.ts";
-import { Area, coinSegment, type Ghost, makeGhosts, type Ownership, rules, SeededRandom, walkGhost } from "../_shared/chomp/mod.ts";
+import { Area, coinSegment, type Ghost, GHOST_DISPLAY_NAMES, makeGhosts, type Ownership, rules, SeededRandom, walkGhost } from "../_shared/chomp/mod.ts";
 
 const TICK_S = 3600;
 const MAX_DISTRICTS_PER_TICK = 40;
+/** Real runners active in a district (last ACTIVE_DAYS) before its bots retire. */
+const RETIRE_AT_PLAYERS = 2;
+const ACTIVE_DAYS = 14;
+/** A retiring bot releases this share of its coins per hourly tick (about a week). */
+const RELEASE_PER_TICK = 1 / 168;
 
 Deno.serve(async (req) => {
   if (!hasSecret(req, "CRON_SECRET")) return json({ error: "forbidden" }, 403);
@@ -17,6 +24,19 @@ Deno.serve(async (req) => {
   const summary: Record<string, number> = {};
 
   for (const { district } of districts ?? []) {
+    const { data: active } = await db.rpc("district_active_players", { p_district: district, p_days: ACTIVE_DAYS });
+    if ((active ?? 0) >= RETIRE_AT_PLAYERS) {
+      // Busy enough: bots step back quietly.
+      const { data: retiring } = await db.from("ai_ghosts").select("id").eq("district", district);
+      for (const { id } of retiring ?? []) {
+        const { count } = await db.from("segment_ownership").select("segment_id", { count: "exact", head: true })
+          .eq("owner_kind", "ghost").eq("owner_id", id);
+        const { error } = await db.rpc("release_ghost_coins", { p_ghost: id, p_limit: Math.max(5, Math.ceil((count ?? 0) * RELEASE_PER_TICK)) });
+        if (error) console.error("release_ghost_coins", district, id, error.message);
+      }
+      summary[district] = 0;
+      continue;
+    }
     const keys = districtTiles(district);
     // Bots only walk tiles that already exist; they never trigger Overpass downloads.
     const tiles = await loadTiles(db, keys, 0);
@@ -25,7 +45,15 @@ Deno.serve(async (req) => {
     const tileKeys = tiles.map((t) => t.key);
     let { data: ghosts } = await db.from("ai_ghosts").select("*").eq("district", district);
     if (!ghosts?.length) {
-      const fresh = makeGhosts(area, rules, district).map((g) => ({
+      // Skip names players (or other bots) already use.
+      const lower = GHOST_DISPLAY_NAMES.map((n) => n.toLowerCase());
+      const [{ data: people }, { data: bots }] = await Promise.all([
+        db.from("profiles").select("display_name").in("display_name", GHOST_DISPLAY_NAMES),
+        db.from("ai_ghosts").select("name").in("name", GHOST_DISPLAY_NAMES),
+      ]);
+      const taken = new Set<string>([...(people ?? []).map((p) => p.display_name.toLowerCase()), ...(bots ?? []).map((b) => b.name.toLowerCase())]
+        .filter((n) => lower.includes(n)));
+      const fresh = makeGhosts(area, rules, district, taken).map((g) => ({
         id: g.id, district, name: g.name, color_hex: g.colorHex, cursor_node: g.cursorNode,
         personality: { aggression: g.aggression, segmentsPerDay: g.segmentsPerDay }, next_tick_at: new Date(now * 1000).toISOString(),
       }));
@@ -58,7 +86,7 @@ Deno.serve(async (req) => {
       const raids = [...byUser].map(([user, segs]) => {
         const names = segs.map((s) => area.segment(s)?.name).filter((x): x is string => !!x);
         const top = names.sort((a, b) => names.filter((x) => x === b).length - names.filter((x) => x === a).length)[0];
-        return { user, message: `${g.name} ate ${segs.length} of your street${segs.length === 1 ? "" : "s"}${top ? ` on ${top}` : ""}` };
+        return { user, message: `${g.name} took ${segs.length} of your street${segs.length === 1 ? "" : "s"}${top ? ` on ${top}` : ""}` };
       });
 
       const tileOf = (id: string) => { const s = area.segment(coinSegment(id)); return s ? area.segmentTile[s.index] : null; };

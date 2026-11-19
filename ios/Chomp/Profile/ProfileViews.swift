@@ -122,6 +122,7 @@ struct SettingsView: View {
     @State private var customColour = Color.white
     @State private var nonce = ""
     @State private var accountError: String?
+    @State private var nameError: String?
     @State private var notificationsDenied = false
 
     var body: some View {
@@ -129,6 +130,11 @@ struct SettingsView: View {
         Form {
             Section("You") {
                 TextField("Runner name", text: $model.profile.name)
+                    .autocorrectionDisabled()
+                    .submitLabel(.done)
+                    .onChange(of: model.profile.name) { _, v in if v.count > 20 { model.profile.name = String(v.prefix(20)) } }
+                    .onSubmit { Task { nameError = await model.syncProfileToServer() } }
+                if let nameError { Text(nameError).font(.footnote).foregroundStyle(Theme.danger) }
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 10) {
                         ForEach(PlayerPalette.swatches) { s in
@@ -141,6 +147,7 @@ struct SettingsView: View {
                         }
                     }.padding(.vertical, 4)
                 }
+                .onChange(of: model.profile.colorHex) { _, _ in Task { await model.syncProfileToServer() } }
                 if model.pro.isPro {
                     ColorPicker("Custom colour", selection: $customColour, supportsOpacity: false)
                         .onChange(of: customColour) { _, c in
@@ -161,11 +168,14 @@ struct SettingsView: View {
             Section {
                 Toggle("Play privately", isOn: $model.profile.privateMode)
                     .onChange(of: model.profile.privateMode) { _, isPrivate in
-                        Task { if isPrivate { await PushService.shared.unregister() } else { await PushService.shared.sync() } }
+                        Task {
+                            if isPrivate { await PushService.shared.unregister() } else { await PushService.shared.sync() }
+                            await model.syncProfileToServer()
+                        }
                     }
                 NavigationLink("Privacy zones (\(model.profile.privacyZones.count))") { PrivacyZonesView() }
             } header: { Text("Privacy") } footer: {
-                Text("Private mode keeps every run on this phone: solo play with bots only, nothing uploaded. Privacy zones hide where your runs start and end, even from you on shared images.")
+                Text("Private mode keeps every run on this phone: nothing is uploaded and no one else sees your streets. Privacy zones hide where your runs start and end, even from you on shared images.")
             }
 
             Section {
@@ -194,14 +204,12 @@ struct SettingsView: View {
                     }
                 }
                 Toggle("A rival takes your coins", isOn: $model.profile.pushLost)
-                Toggle("Bots raid your streets", isOn: $model.profile.pushRaids)
             } header: { Text("Notifications") } footer: {
                 Text(model.backend.isSignedIn
                      ? "Sent to this phone. Several at once are rolled into one."
-                     : "Sign in to get these when you're not in the app. Bot raids on this phone are still announced.")
+                     : "Sign in to get these when you're not in the app.")
             }
             .onChange(of: model.profile.pushLost) { _, _ in Task { await PushService.shared.sync() } }
-            .onChange(of: model.profile.pushRaids) { _, _ in Task { await PushService.shared.sync() } }
             .task {
                 notificationsDenied = await PushService.authorizationStatus() == .denied
             }

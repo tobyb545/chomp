@@ -24,8 +24,8 @@ struct IntroCardsView: View {
                       body: "Every coin you run past turns gold: it's yours. You don't need to finish the street, and running the pavement counts for the road."),
             IntroCard(scene: .rivals, title: "Defend your streets",
                       body: r.decay.isEnabled
-                        ? "Rivals and bots can take your coins by running past them. Streets you don't rerun fade back to white after \(days) days."
-                        : "Your coins stay yours until someone else runs past them. Rivals and bots can take them, so keep an eye on your patch."),
+                        ? "Rivals can take your coins by running past them. Streets you don't rerun fade back to white after \(days) days."
+                        : "Your coins stay yours until someone else runs past them. Rivals can take them, so keep an eye on your patch."),
             IntroCard(scene: .power, title: "Power-ups and bonus streets",
                       body: "Run past the glowing pink landmark for a \(frenzyMin)-minute frenzy: double points, and rivals' streets flip more easily. Some streets glow pink for bonus points at certain times."),
             IntroCard(scene: .health, title: "Forgot to press start?",
@@ -226,7 +226,7 @@ private struct IntroScene: View {
             line(&ctx, a, b, street, 10)
             dots(&ctx, a, b, n: 12, color: gold, taken: f, takenColor: bot)
             runner(&ctx, lerp(a, b, f), bot)
-            ctx.draw(Text("Bot Dusk").font(.system(size: 13, weight: .heavy, design: .rounded)).foregroundStyle(bot),
+            ctx.draw(Text("Jess M").font(.system(size: 13, weight: .heavy, design: .rounded)).foregroundStyle(bot),
                      at: CGPoint(x: lerp(a, b, f).x, y: y2 + 28))
             ctx.draw(Text(RulesConfig.bundled.decay.isEnabled ? "fading…" : "yours until someone runs it").font(.system(size: 13, weight: .heavy, design: .rounded)).foregroundStyle(gold.opacity(fade)),
                      at: CGPoint(x: w / 2, y: y1 - 22))
@@ -286,7 +286,7 @@ private struct IntroScene: View {
             }
 
         case .leaderboard:
-            let entries: [(String, Double, Color)] = [("You", 1.0, me), ("Bot Rook", 0.72, bot), ("Sam", 0.5, Color(hex: "5CE1E6"))]
+            let entries: [(String, Double, Color)] = [("You", 1.0, me), ("Callum R", 0.72, bot), ("Sam", 0.5, Color(hex: "5CE1E6"))]
             let grow = min(1, phase(t, 4) * 2)
             for (i, e) in entries.enumerated() {
                 let y = h * 0.24 + CGFloat(i) * h * 0.26

@@ -1,5 +1,6 @@
 // Server-side bots for online towns (port of ChompKit/Game/Ghosts.swift's walk).
-// Bots are always labelled as bots; they keep quiet towns lively.
+// Bots keep quiet towns lively until real runners are active there. They have
+// ordinary runner names and aren't labelled; ghost-tick retires them in busy districts.
 import type { Area } from "./area.ts";
 import { type Ownership, type OwnerRef, sameOwner, strength } from "./engine.ts";
 import { type Rules, decaySeconds } from "./rules.ts";
@@ -8,17 +9,36 @@ import { coinCount, coinSegment, coinsOf } from "./coins.ts";
 
 export interface Ghost { id: string; name: string; colorHex: string; aggression: number; segmentsPerDay: number; cursorNode: number }
 
+/** Internal id parts only (never shown). */
 export const GHOST_NAMES = ["Dusk", "Rook", "Moth", "Fennel", "Pike", "Wren"];
+/** Display names: the kind of names runners actually pick. */
+export const GHOST_DISPLAY_NAMES = [
+  "Jess M", "Callum R", "Sophie T", "Dan Hughes", "Ellie B", "Tom W", "Hannah K", "Josh P",
+  "Amira S", "Liam O", "Grace H", "Ryan C", "Megan D", "Sam L", "Chloe F", "Isla A",
+  "Zara N", "Matt G", "Katie J", "Owen E", "runner_dan", "miles_with_meg", "Lou runs", "ellie.runs",
+  "tomtom_5k", "jo_on_the_go", "Kieran", "Ffion", "Rachel", "Ash", "Becky R", "Will T",
+  "Niamh", "Harvey", "Ruby P", "Jay", "Arjun", "Leo", "Maisie", "Ollie K",
+];
+
+/** `count` distinct display names for `seed`, skipping any in `taken` (lower-case). */
+export function pickGhostNames(seed: string, count: number, taken: Set<string> = new Set()): string[] {
+  const rng = new SeededRandom(`names|${seed}`);
+  const pool = GHOST_DISPLAY_NAMES.filter((n) => !taken.has(n.toLowerCase()));
+  const out: string[] = [];
+  while (out.length < count && pool.length) out.push(pool.splice(rng.int(pool.length), 1)[0]);
+  return out;
+}
 export const GHOST_COLOURS = ["7C8CFF", "FF6FA1", "5CE1E6", "FFB15C", "B58CFF", "9CFF7A"];
 
 /** Bots for one district (`key`, e.g. "12/2042/1365"). */
-export function makeGhosts(area: Area, rules: Rules, key: string = area.slug): Ghost[] {
+export function makeGhosts(area: Area, rules: Rules, key: string = area.slug, taken: Set<string> = new Set()): Ghost[] {
   const rng = new SeededRandom(`ghosts|${key}|server`);
   const nodes = [...area.graph.adjacency.keys()].sort((a, b) => a - b);
   const g = rules.ghosts;
+  const display = pickGhostNames(key, GHOST_NAMES.length, taken);
   return GHOST_NAMES.slice(0, g.perArea).map((n, i) => ({
     id: `bot-${key.replaceAll("/", "-")}-${n.toLowerCase()}`,
-    name: `Bot ${n}`,
+    name: display[i % display.length],
     colorHex: GHOST_COLOURS[i % GHOST_COLOURS.length],
     aggression: 0.3 + rng.unit() * 0.5,
     segmentsPerDay: g.segmentsPerDayMin + rng.int(Math.max(1, g.segmentsPerDayMax - g.segmentsPerDayMin + 1)),

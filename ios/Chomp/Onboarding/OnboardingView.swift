@@ -7,6 +7,8 @@ struct OnboardingView: View {
     @State private var step = 0
     @State private var colorHex = PlayerPalette.swatches[0].hex
     @State private var name = ""
+    @State private var nameTaken = false
+    @State private var checkingName = false
     @FocusState private var nameFocused: Bool
 
     var body: some View {
@@ -68,14 +70,32 @@ struct OnboardingView: View {
                 .focused($nameFocused)
                 .padding(18)
                 .background(Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 18))
-                .onSubmit { if valid { step = 2 } }
-                .onChange(of: name) { _, v in if v.count > 20 { name = String(v.prefix(20)) } }
-            Text("Shown on leaderboards. You can play fully private later.").font(.footnote).foregroundStyle(Theme.hudSecondary)
-            next("Next") { step = 2 }.disabled(!valid).grayscale(valid ? 0 : 1).brightness(valid ? 0 : -0.3)
+                .onSubmit { if valid { confirmName() } }
+                .onChange(of: name) { _, v in
+                    if v.count > 20 { name = String(v.prefix(20)) }
+                    nameTaken = false
+                }
+            if nameTaken {
+                Text("Someone already uses that name. Try another.").font(.footnote.weight(.semibold)).foregroundStyle(Theme.danger)
+            } else {
+                Text("Shown on leaderboards. You can play fully private later.").font(.footnote).foregroundStyle(Theme.hudSecondary)
+            }
+            next(checkingName ? "Checking…" : "Next") { confirmName() }
+                .disabled(!valid || checkingName).grayscale(valid ? 0 : 1).brightness(valid ? 0 : -0.3)
         }
     }
 
-    private var valid: Bool { name.trimmingCharacters(in: .whitespaces).count >= 2 }
+    private var valid: Bool { name.trimmingCharacters(in: .whitespaces).count >= 2 && !nameTaken }
+
+    /// Names are unique online. If the check can't run (offline), carry on: sign-in checks again.
+    private func confirmName() {
+        checkingName = true
+        Task {
+            let ok = await model.backend.nameAvailable(name.trimmingCharacters(in: .whitespaces))
+            checkingName = false
+            if ok == false { nameTaken = true } else { step = 2 }
+        }
+    }
 
     private var locationStep: some View {
         VStack(spacing: 18) {
@@ -98,7 +118,7 @@ struct OnboardingView: View {
     private var readyStep: some View {
         VStack(spacing: 18) {
             Text("Ready, \(name.trimmingCharacters(in: .whitespaces))").font(Theme.display(.title)).foregroundStyle(.white)
-            Text("Every street near you is covered in coins. A few bots are already out there. Go eat some streets.")
+            Text("Every street is covered in coins, and rivals are already out there. Go and grab some streets.")
                 .font(.title3.weight(.semibold)).multilineTextAlignment(.center).foregroundStyle(Theme.hudSecondary)
             next("Try a practice run") { model.wantsPractice = true; finish() }
             Button("Skip, show me the map") { finish() }

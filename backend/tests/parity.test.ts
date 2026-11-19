@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
   Area, bonusStreets, buildTile, subset, TileKey, type TileFile, type OverpassResponse, evaluate, GameEngine, MapMatcher, powerPellets, rules, SeededRandom, coverageOf,
-  type TracePoint, makeGhosts, walkGhost, type Ownership, decodePolyline, encodePolyline, coinsOf, coinID, coinSegment,
+  type TracePoint, makeGhosts, GHOST_DISPLAY_NAMES, walkGhost, type Ownership, decodePolyline, encodePolyline, coinsOf, coinID, coinSegment,
 } from "../supabase/functions/_shared/chomp/mod.ts";
 
 const root = new URL("../../", import.meta.url);
@@ -128,6 +128,10 @@ test("daily capture limit holds across runs", () => {
 test("bots walk the graph, respect the cap and raid players", () => {
   const ghosts = makeGhosts(area, rules);
   assert.equal(ghosts.length, rules.ghosts.perArea);
+  assert.ok(ghosts.every((g) => GHOST_DISPLAY_NAMES.includes(g.name) && !/bot/i.test(g.name)));
+  const taken = new Set(ghosts.slice(0, 3).map((g) => g.name.toLowerCase()));
+  assert.ok(makeGhosts(area, rules, area.slug, taken).every((g) => !taken.has(g.name.toLowerCase())));
+  assert.ok(GHOST_DISPLAY_NAMES.every((n) => n.length >= 2 && n.length <= 20));
   const ownership = new Map<string, Ownership>();
   const now = 1_790_000_000;
   for (const s of area.segments.slice(0, 400)) for (const id of coinsOf(rules, s)) ownership.set(id, { owner: { kind: "player", id: "p1" }, capturedAt: now - 60, lastVisitedAt: now - 60 });

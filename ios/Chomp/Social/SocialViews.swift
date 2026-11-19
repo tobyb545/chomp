@@ -62,14 +62,13 @@ struct LeaderboardView: View {
                         Text("Top chomper nearby").font(.caption.weight(.heavy)).textCase(.uppercase).foregroundStyle(Theme.textSecondary)
                         Text(boss.name).font(Theme.display(.title3))
                     }
-                    if boss.isBot { Chip(text: "Bot", colorHex: "8888AA") }
                 }
                 .accessibilityElement(children: .combine)
             }
         }
         Section(scope == .nearby ? model.placeName : scope.label) {
             ForEach(Array(sorted.enumerated()), id: \.element.id) { i, e in
-                Button { if !e.isMe && !e.isBot { selected = e } } label: { row(rank: i + 1, e) }
+                Button { if !e.isMe { selected = e } } label: { row(rank: i + 1, e) }
                     .buttonStyle(.plain)
             }
         }
@@ -109,7 +108,6 @@ struct LeaderboardView: View {
             Text("\(rank)").font(Theme.number(.headline)).frame(minWidth: 28).foregroundStyle(Theme.textSecondary)
             Circle().fill(Color(hex: e.colorHex)).frame(width: 14, height: 14).accessibilityHidden(true)
             Text(e.name).font(.body.weight(e.isMe ? .heavy : .semibold))
-            if e.isBot { Chip(text: "Bot", colorHex: "8888AA") }
             if e.isMe { Chip(text: "You", colorHex: e.colorHex) }
             Spacer()
             HStack(spacing: 5) {
@@ -118,7 +116,7 @@ struct LeaderboardView: View {
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Rank \(rank), \(e.name)\(e.isMe ? ", you" : "")\(e.isBot ? ", bot" : ""), \(e.tokens) coins")
+        .accessibilityLabel("Rank \(rank), \(e.name)\(e.isMe ? ", you" : ""), \(e.tokens) coins")
     }
 
     /// Made-up rivals for App Store screenshots only (`-marketing`, debug builds).
@@ -145,7 +143,7 @@ struct LeaderboardView: View {
             do { entries = try await model.leaderboard(scope: scope) } catch {
                 entries = []
                 self.error = scope == .nearby ? error.localizedDescription
-                    : "\(scope.label) leaderboards need online play. Nearby rankings (you vs the bots) work offline."
+                    : "\(scope.label) leaderboards need online play. Nearby rankings work offline."
             }
         case .clubs:
             do { clubs = try await model.clubLeaderboard(scope: clubScope) } catch {
@@ -382,7 +380,8 @@ struct PlayerSheet: View {
 
     private func send() async {
         do {
-            try await model.backend.report(player: playerID, reason: reason, notes: notes)
+            // Computer rivals have nothing to review on the server.
+            if !playerID.hasPrefix("bot-") { try await model.backend.report(player: playerID, reason: reason, notes: notes) }
             status = "Thanks. A human will look at this. Reports are private."
             reporting = false
         } catch { status = error.localizedDescription }
@@ -390,12 +389,15 @@ struct PlayerSheet: View {
 
     private func toggleMute() {
         if let i = model.profile.mutedPlayers.firstIndex(of: playerID) { model.profile.mutedPlayers.remove(at: i) }
-        else { model.profile.mutedPlayers.append(playerID); Task { try? await model.backend.block(player: playerID, mute: true) } }
+        else {
+            model.profile.mutedPlayers.append(playerID)
+            if !playerID.hasPrefix("bot-") { Task { try? await model.backend.block(player: playerID, mute: true) } }
+        }
     }
 
     private func block() {
         if !model.profile.blockedPlayers.contains(playerID) { model.profile.blockedPlayers.append(playerID) }
-        Task { try? await model.backend.block(player: playerID, mute: false) }
+        if !playerID.hasPrefix("bot-") { Task { try? await model.backend.block(player: playerID, mute: false) } }
         model.bumpMap()
         dismiss()
     }

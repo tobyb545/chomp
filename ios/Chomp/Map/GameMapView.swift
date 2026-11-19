@@ -282,7 +282,7 @@ struct GameMapView: UIViewRepresentable {
                 }
                 let f = MLNPointFeature()
                 f.coordinate = CLLocationCoordinate2D(latitude: g.coordinate.latitude, longitude: g.coordinate.longitude)
-                f.attributes = ["icon": icon, "color": "#" + g.colorHex, "label": g.isBot ? "\(g.name.uppercased()) · BOT" : g.name]
+                f.attributes = ["icon": icon, "color": "#" + g.colorHex, "label": g.name]
                 return f
             }
             set(style, "ghosts", MLNShapeCollectionFeature(shapes: ghosts))

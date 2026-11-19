@@ -35,8 +35,8 @@ final class PushService {
     /// Which pushes this device wants, from the player's settings.
     static func kinds(for profile: PlayerProfile) -> [String] {
         var k: [String] = ["invite"]
-        if profile.pushLost { k.append("lost") }
-        if profile.pushRaids { k.append("raid") }
+        // One setting covers every way a rival can take your coins.
+        if profile.pushLost { k += ["lost", "raid"] }
         return k
     }
 

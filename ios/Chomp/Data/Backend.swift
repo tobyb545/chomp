@@ -160,9 +160,26 @@ final class SupabaseBackend: @unchecked Sendable {
     func signInWithApple(idToken: String, nonce: String, displayName: String, colorHex: String) async throws {
         guard let client else { throw BackendError.notConfigured }
         let session = try await client.auth.signInWithIdToken(credentials: .init(provider: .apple, idToken: idToken, nonce: nonce))
-        userID = session.user.id.uuidString.lowercased()
         struct Upsert: Encodable { let id: String; let display_name: String; let color_hex: String }
-        try await client.from("profiles").upsert(Upsert(id: session.user.id.uuidString, display_name: displayName, color_hex: colorHex)).execute()
+        do {
+            try await client.from("profiles").upsert(Upsert(id: session.user.id.uuidString, display_name: displayName, color_hex: colorHex)).execute()
+        } catch {
+            // No profile means no online play: don't leave a half-signed-in session behind.
+            try? await client.auth.signOut()
+            throw Self.isNameTaken(error) ? BackendError.nameTaken : error
+        }
+        userID = session.user.id.uuidString.lowercased()
+    }
+
+    /// Runner names are unique (ignoring case). nil when it can't be checked (offline, not set up).
+    func nameAvailable(_ name: String) async -> Bool? {
+        guard let client else { return nil }
+        struct Params: Encodable { let p_name: String }
+        return try? await client.rpc("name_available", params: Params(p_name: name)).execute().value
+    }
+
+    static func isNameTaken(_ error: Error) -> Bool {
+        (error as? PostgrestError)?.code == "23505"
     }
 
     func signOut() async {
@@ -186,7 +203,9 @@ final class SupabaseBackend: @unchecked Sendable {
     func updateProfile(name: String, colorHex: String, isPrivate: Bool) async throws {
         guard let client, let userID else { return }
         struct Patch: Encodable { let display_name: String; let color_hex: String; let is_private: Bool }
-        try await client.from("profiles").update(Patch(display_name: name, color_hex: colorHex, is_private: isPrivate)).eq("id", value: userID).execute()
+        do {
+            try await client.from("profiles").update(Patch(display_name: name, color_hex: colorHex, is_private: isPrivate)).eq("id", value: userID).execute()
+        } catch { throw Self.isNameTaken(error) ? BackendError.nameTaken : error }
     }
 
     struct ResolveResponse: Decodable {
@@ -208,7 +227,15 @@ final class SupabaseBackend: @unchecked Sendable {
 
     func ownership(tiles: [String]) async throws -> [ServerOwnershipRow] {
         guard let client else { throw BackendError.notConfigured }
-        return try await client.from("segment_ownership_public").select().in("tile", values: tiles).execute().value
+        // The API returns at most 1,000 rows per request; busy areas hold more coins than that.
+        let page = 1000
+        var all: [ServerOwnershipRow] = []
+        while true {
+            let rows: [ServerOwnershipRow] = try await client.from("segment_ownership_public").select().in("tile", values: tiles)
+                .order("segment_id").range(from: all.count, to: all.count + page - 1).execute().value
+            all += rows
+            if rows.count < page || all.count >= 50_000 { return all }
+        }
     }
 
     /// Live ownership changes for the tiles on screen (Supabase Realtime).
@@ -247,7 +274,7 @@ final class SupabaseBackend: @unchecked Sendable {
         struct Params: Encodable { let p_scope: String; let p_tile: String }
         let rows: [LeaderRow] = try await client.rpc("leaderboard", params: Params(p_scope: scope.rawValue, p_tile: tile)).execute().value
         return rows.enumerated().map { i, r in
-            LeaderboardEntry(id: r.user_id, rank: i + 1, name: r.display_name, colorHex: r.color_hex, isBot: false,
+            LeaderboardEntry(id: r.user_id, rank: i + 1, name: r.display_name, colorHex: r.color_hex, isBot: r.user_id.hasPrefix("bot-"),
                              isMe: r.user_id == userID, tokens: r.tokens)
         }
     }
@@ -367,10 +394,11 @@ final class SupabaseBackend: @unchecked Sendable {
 }
 
 enum BackendError: LocalizedError {
-    case notConfigured, notSignedIn
+    case notConfigured, notSignedIn, nameTaken
     var errorDescription: String? {
         switch self {
-        case .notConfigured: "Online play isn't set up in this build yet. Solo play and bots work fully offline."
+        case .nameTaken: "Someone already uses that runner name. Pick another one."
+        case .notConfigured: "Online play isn't set up in this build yet. Solo play works fully offline."
         case .notSignedIn: "Sign in with Apple to play online."
         }
     }

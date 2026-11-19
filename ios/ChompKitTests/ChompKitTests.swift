@@ -364,13 +364,35 @@ struct GameTests {
 
 @Suite("Bots")
 struct GhostTests {
+    @Test func oldBotNamesAreReplaced() {
+        let engine = GameEngine(area: Fixtures.area, rules: Fixtures.rules)
+        var state = GameState(areaSlug: "west-byfleet", playerID: "me")
+        GhostSimulator(engine: engine).ensureGhosts(state: &state, playerColorHex: "C6FF00", now: Fixtures.t0)
+        let ids = state.ghosts.map(\.id)
+        for i in state.ghosts.indices { state.ghosts[i].name = "Bot \(i)" }
+        GhostSimulator(engine: engine).ensureGhosts(state: &state, playerColorHex: "C6FF00", now: Fixtures.t0)
+        #expect(state.ghosts.map(\.id) == ids, "same bots, same coins")
+        #expect(state.ghosts.allSatisfy { !$0.name.hasPrefix("Bot ") })
+    }
+
+    @Test func pickNamesSkipsTakenNames() {
+        let all = GhostSimulator.pickNames(seed: "x", count: 6)
+        let taken = Set(all.prefix(3).map { $0.lowercased() })
+        let again = GhostSimulator.pickNames(seed: "x", count: 6, taken: taken)
+        #expect(again.count == 6)
+        #expect(again.allSatisfy { !taken.contains($0.lowercased()) })
+        #expect(GhostSimulator.displayNames.allSatisfy { (2...20).contains($0.count) })
+    }
+
     @Test func botsStartWithTerritoryAndRaidOverTime() {
         let engine = GameEngine(area: Fixtures.area, rules: Fixtures.rules)
         let sim = GhostSimulator(engine: engine)
         var state = GameState(areaSlug: "west-byfleet", playerID: "me")
         sim.ensureGhosts(state: &state, playerColorHex: "C6FF00", now: Fixtures.t0)
         #expect(state.ghosts.count == Fixtures.rules.ghosts.perArea)
-        #expect(state.ghosts.allSatisfy { $0.name.hasPrefix("Bot ") })
+        // Ordinary runner names, all different, nothing saying "bot".
+        #expect(state.ghosts.allSatisfy { GhostSimulator.displayNames.contains($0.name) && !$0.name.lowercased().contains("bot") })
+        #expect(Set(state.ghosts.map(\.name)).count == state.ghosts.count)
         let botHeld = state.ownership.values.filter { $0.owner.kind == .ghost }.count
         #expect(botHeld > 0)
         // Give the player some streets, then let a few days pass.

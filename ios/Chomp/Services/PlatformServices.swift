@@ -40,7 +40,7 @@ enum NotificationService {
         (try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])) ?? false
     }
 
-    /// Schedules the bots' next raid message for exactly when it will happen.
+    /// Schedules the next local raid message for exactly when it will happen.
     static func scheduleRaid(message: String, at date: Date) {
         let c = UNMutableNotificationContent()
         c.title = "Your streets are under attack"

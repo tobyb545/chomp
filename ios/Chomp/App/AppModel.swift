@@ -351,6 +351,20 @@ final class AppModel {
     func tickWorld(now: Date = .now) {
         guard run.phase == .idle, !area.segments.isEmpty else { return }
         let ghosts = GhostSimulator(engine: engine)
+        if backend.isSignedIn, !profile.privateMode {
+            // Online, the server decides whether a place needs computer rivals.
+            // Drop this phone's own ones and their coins.
+            if !state.ghosts.isEmpty {
+                let local = Set(state.ghosts.map { OwnerRef.ghost($0.id) })
+                state.ownership = state.ownership.filter { !local.contains($0.value.owner) }
+                state.ghosts = []
+                state.scheduledGhostTick = nil
+            }
+            engine.sweepDecay(state: &state, now: now)
+            persist()
+            bumpMap()
+            return
+        }
         if !profile.privateMode || state.ghosts.isEmpty {
             ghosts.ensureGhosts(state: &state, playerColorHex: profile.colorHex, now: now)
         }
@@ -366,7 +380,7 @@ final class AppModel {
     }
 
     private func scheduleRaidNotification() {
-        guard run.phase == .idle, profile.pushRaids else { return }
+        guard run.phase == .idle, profile.pushLost else { return }
         let at = Date().addingTimeInterval(6 * 3600)
         var copy = state
         let ghosts = GhostSimulator(engine: engine)
@@ -404,6 +418,25 @@ final class AppModel {
 
     var displayName: String { profile.name.isEmpty ? "You" : profile.name }
 
+    /// The name, colour and privacy the server last accepted, so a taken name can be undone.
+    private var syncedName: String?
+
+    /// Sends name, colour and privacy to the server. Returns an error message to show, if any.
+    @discardableResult
+    func syncProfileToServer() async -> String? {
+        guard backend.isSignedIn else { return nil }
+        let name = profile.name.trimmingCharacters(in: .whitespaces)
+        guard name.count >= 2 else { return "Runner names need at least 2 letters." }
+        do {
+            try await backend.updateProfile(name: name, colorHex: profile.colorHex, isPrivate: profile.privateMode)
+            syncedName = name
+            return nil
+        } catch BackendError.nameTaken {
+            if let syncedName { profile.name = syncedName; persist() }
+            return BackendError.nameTaken.localizedDescription
+        } catch { return nil }
+    }
+
     /// The map square in the middle of the screen is fully held.
     var isConquered: Bool {
         rules.blocks.isEnabled && (focusTile.map { state.badges.contains("conquered:\($0)") } ?? false)
@@ -414,7 +447,7 @@ final class AppModel {
 
     func ownerName(_ o: OwnerRef) -> String {
         if o == state.me { return displayName }
-        if o.kind == .ghost { return state.ghosts.first { $0.id == o.id }?.name ?? "Bot" }
+        if o.kind == .ghost { return state.ghosts.first { $0.id == o.id }?.name ?? "A rival" }
         return rivals[o.id]?.name ?? "Rival"
     }
 
@@ -691,10 +724,22 @@ final class AppModel {
 
     func syncOnline() async {
         await refreshInvitePro()
+        await syncProfileToServer()
         await PushService.shared.sync()
         guard backend.isSignedIn, !profile.privateMode, !area.tiles.isEmpty else { return }
         do {
             let rows = try await backend.ownership(tiles: area.tiles.map(\.description))
+            // The server is the truth for everyone else's coins here: drop ones it no
+            // longer lists (e.g. a rival who has moved on). Keep your own unsynced ones.
+            var listed = Set<String>()
+            for r in rows {
+                if Coins.isCoin(r.segment_id) { listed.insert(r.segment_id) }
+                else if let seg = area.segment(r.segment_id) { listed.formUnion(rules.coinIDs(seg)) }
+            }
+            let me = state.me
+            state.ownership = state.ownership.filter { id, o in
+                o.owner == me || listed.contains(id) || area.segment(Coins.segment(of: id)) == nil
+            }
             apply(rows: rows)
         } catch { return }
         await subscribeRealtime()
@@ -946,7 +991,7 @@ final class AppModel {
         let recentRaids = state.events.filter { $0.kind == .ghostRaid && $0.date > .now.addingTimeInterval(-48 * 3600) }
         let attacks = recentRaids.prefix(3).map { e in
             WidgetSnapshot.Attack(street: e.segmentIDs.compactMap { area.segment($0)?.name }.first { !$0.isEmpty } ?? "your streets",
-                                  by: e.actor.map(ownerName) ?? "Bot")
+                                  by: e.actor.map(ownerName) ?? "A rival")
         }
         let fading = Set(state.ownership.filter {
             $0.value.owner == state.me && $0.value.strength(at: .now, decay: rules.decayInterval) < 0.2

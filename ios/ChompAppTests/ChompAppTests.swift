@@ -111,9 +111,8 @@ struct PushTests {
     @Test func kindsFollowSettings() {
         var p = PlayerProfile()
         #expect(Set(PushService.kinds(for: p)) == ["invite", "lost", "raid"])
+        // One switch covers every way a rival takes your coins.
         p.pushLost = false
-        #expect(Set(PushService.kinds(for: p)) == ["invite", "raid"])
-        p.pushRaids = false
         #expect(PushService.kinds(for: p) == ["invite"])
     }
 

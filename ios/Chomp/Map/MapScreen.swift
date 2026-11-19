@@ -349,7 +349,7 @@ struct PracticeCoach: View {
         case ..<7: ("figure.run", "Practice run: we'll run this one for you at 8× speed. Nothing counts.")
         case ..<16: ("circle.grid.cross.fill", "The silver dots are coins. Run past them and they're yours.")
         case ..<25: ("paintbrush.fill", "Streets you collect turn your colour. That's your territory.")
-        case ..<35: ("arrow.uturn.backward.circle.fill", "Rivals and bots can steal them back. Run their streets to steal theirs.")
+        case ..<35: ("arrow.uturn.backward.circle.fill", "Rivals can steal them back. Run their streets to steal theirs.")
         default: ("flag.checkered", "That's it! Hold to finish, or let it end on its own.")
         }
     }

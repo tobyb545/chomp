@@ -30,9 +30,20 @@
 - **Power pellets**: one landmark per tile a day. Running within 30 m starts a 10-minute *frenzy*:
   2× points, and a rival's street flips at 40% coverage.
 - **Bonus streets**: one named street per tile a day, with a 2–3× time window.
-- **Bots**: simulated rivals ("Bot Dusk" etc.), always labelled as bots. They walk the
-  graph and raid near your territory. Locally they keep solo play lively; on the server
-  they live per district (4×4 tiles) wherever players hold streets.
+- **Bots**: computer rivals so a lone runner always has someone to beat. They have ordinary
+  runner names (`GhostSimulator.displayNames` / `GHOST_DISPLAY_NAMES`) and are never labelled
+  in the UI; internally their ids start with `bot-`. They walk the graph and raid near your
+  territory.
+  - Offline, signed out or in private mode: the phone runs its own bots.
+  - Signed in: the phone drops its own bots; the server's bots (per district, 4×4 tiles) show
+    up like any rival, including on the *nearby* leaderboard (by coins held). Never on
+    global, friends or club boards.
+  - `ghost-tick` retires a district's bots once `RETIRE_AT_PLAYERS` (2) real runners have
+    captured there in the last 14 days: they stop running and release their coins over
+    about a week (`release_ghost_coins`). If the district goes quiet, new bots appear.
+  - Bot names are reserved (players can't pick one) and new bots skip names players use.
+- **Runner names** are unique, ignoring case (`profiles_name_uniq`). Onboarding checks with
+  `name_available` when online; sign-in and Settings report "name taken" and keep the old one.
 
 Every number lives in `shared/rules.json`. The app bundles it, and the Edge Functions get a
 copy (`tools/sync-rules.sh`; a test fails if the copies drift).
@@ -232,7 +243,7 @@ These run on the phone only and need no server:
 - **Push delivery** is built but needs setup: run migration `20261124000000_push.sql`, set the
   Edge Function secrets APNS_KEY (.p8 contents), APNS_KEY_ID, APNS_TEAM_ID and APNS_TOPIC,
   then deploy `send-push` (a cron job runs it every minute). The app registers its token via
-  `register_push_token`; settings choose "coins lost" and "bot raid" pushes.
+  `register_push_token`; one setting ("A rival takes your coins") covers lost and raid pushes.
 - **A web admin UI** for `review_queue` and reports. For now, use the Supabase table editor.
 - **The watch app** is built but isn't embedded by default. Set `CHOMP_EMBED_WATCH=true`
   once the watchOS runtime is installed.

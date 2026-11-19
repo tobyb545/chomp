@@ -1,18 +1,43 @@
 import Foundation
 
-/// Simulated rivals for solo play. They "run" a few streets a day near the
-/// player's territory, so there's always something to win back. Always shown
-/// as bots in the UI.
+/// Simulated rivals for when nobody else plays nearby. They "run" a few streets a
+/// day near the player's territory, so there's always something to win back.
+/// They have ordinary runner names and aren't labelled in the UI. Online, the
+/// server's bots take over and step back once real runners are active nearby.
 public struct GhostSimulator: Sendable {
     public let engine: GameEngine
     public init(engine: GameEngine) { self.engine = engine }
 
+    /// Internal ids only (never shown).
     static let names = ["Dusk", "Rook", "Moth", "Fennel", "Pike", "Wren"]
+    /// Display names: the kind of names runners actually pick.
+    public static let displayNames = [
+        "Jess M", "Callum R", "Sophie T", "Dan Hughes", "Ellie B", "Tom W", "Hannah K", "Josh P",
+        "Amira S", "Liam O", "Grace H", "Ryan C", "Megan D", "Sam L", "Chloe F", "Isla A",
+        "Zara N", "Matt G", "Katie J", "Owen E", "runner_dan", "miles_with_meg", "Lou runs", "ellie.runs",
+        "tomtom_5k", "jo_on_the_go", "Kieran", "Ffion", "Rachel", "Ash", "Becky R", "Will T",
+        "Niamh", "Harvey", "Ruby P", "Jay", "Arjun", "Leo", "Maisie", "Ollie K"
+    ]
+
+    /// `count` distinct display names for `seed`, skipping any in `taken` (case-insensitive).
+    public static func pickNames(seed: String, count: Int, taken: Set<String> = []) -> [String] {
+        var rng = SeededRandom(string: "names|\(seed)")
+        var pool = displayNames.filter { !taken.contains($0.lowercased()) }
+        var out: [String] = []
+        while out.count < count, !pool.isEmpty { out.append(pool.remove(at: rng.int(pool.count))) }
+        return out
+    }
     static let colours = ["7C8CFF", "FF6FA1", "5CE1E6", "FFB15C", "B58CFF", "9CFF7A"]
 
     /// Creates bots the first time an area is played. Bot colours avoid the player's.
     public func ensureGhosts(state: inout GameState, playerColorHex: String, now: Date) {
+        // Older saves named bots "Bot …": give them ordinary names.
+        if state.ghosts.contains(where: { $0.name.hasPrefix("Bot ") }) {
+            let fresh = Self.pickNames(seed: "\(engine.area.slug)|\(state.playerID)", count: state.ghosts.count)
+            for i in state.ghosts.indices where i < fresh.count { state.ghosts[i].name = fresh[i] }
+        }
         guard state.ghosts.isEmpty, !engine.area.segments.isEmpty else { return }
+        let display = Self.pickNames(seed: "\(engine.area.slug)|\(state.playerID)", count: Self.names.count)
         var rng = SeededRandom(string: "ghosts|\(engine.area.slug)|\(state.playerID)")
         let colours = Self.colours.filter { $0.caseInsensitiveCompare(playerColorHex) != .orderedSame }
         let rules = engine.rules.ghosts
@@ -21,7 +46,7 @@ public struct GhostSimulator: Sendable {
             let span = max(1, rules.segmentsPerDayMax - rules.segmentsPerDayMin + 1)
             state.ghosts.append(GhostProfile(
                 id: "bot-\(Self.names[i].lowercased())",
-                name: "Bot \(Self.names[i])",
+                name: display[i % display.count],
                 colorHex: colours[i % colours.count],
                 aggression: 0.3 + rng.unit() * 0.5,
                 segmentsPerDay: rules.segmentsPerDayMin + rng.int(span),
@@ -55,7 +80,7 @@ public struct GhostSimulator: Sendable {
                 let ghost = state.ghosts[g]
                 let names = stolen.compactMap { engine.area.segment($0)?.name }.filter { !$0.isEmpty }
                 let street = Dictionary(grouping: names, by: { $0 }).max { $0.value.count < $1.value.count }?.key
-                let msg = "\(ghost.name) ate \(stolen.count) of your street\(stolen.count == 1 ? "" : "s")" + (street.map { " on \($0)" } ?? "")
+                let msg = "\(ghost.name) took \(stolen.count) of your street\(stolen.count == 1 ? "" : "s")" + (street.map { " on \($0)" } ?? "")
                 let e = GameEvent(date: now, kind: .ghostRaid, actor: .ghost(ghost.id), segmentIDs: stolen, message: msg)
                 state.log(e)
                 events.append(e)

@@ -28,11 +28,11 @@ test("accepts a key pasted with literal \\n sequences", async () => {
 
 test("groups a user's pile of lost coins into one push per kind", () => {
   const row = (id: number, user: string, kind: string, body: string, t: string): OutboxRow =>
-    ({ id, user_id: user, kind, title: kind === "lost" ? "Coins lost" : "Bot raid", body, created_at: t });
+    ({ id, user_id: user, kind, title: kind === "lost" ? "Coins lost" : "Coins lost", body, created_at: t });
   const msgs = groupOutbox([
     row(1, "u1", "lost", "Ana just took your coins on High Street", "2026-11-19T10:00:00Z"),
     row(2, "u1", "lost", "Ana just took your coins on Mill Lane", "2026-11-19T10:01:00Z"),
-    row(3, "u1", "raid", "Bot Rook ate 2 of your streets", "2026-11-19T10:02:00Z"),
+    row(3, "u1", "raid", "Jess M took 2 of your streets", "2026-11-19T10:02:00Z"),
     row(4, "u2", "lost", "Ben just took your coins on Oak Road", "2026-11-19T10:03:00Z"),
     row(5, "u1", "lost", "Ana just took your coins on Station Road", "2026-11-19T10:04:00Z"),
   ]);
@@ -40,7 +40,7 @@ test("groups a user's pile of lost coins into one push per kind", () => {
   const u1 = msgs.find((m) => m.userID === "u1" && m.kind === "lost")!;
   assert.equal(u1.body, "Ana just took your coins on Station Road (and 2 more streets)");
   assert.deepEqual(u1.ids, [1, 2, 5]);
-  assert.equal(msgs.find((m) => m.kind === "raid")!.body, "Bot Rook ate 2 of your streets");
+  assert.equal(msgs.find((m) => m.kind === "raid")!.body, "Jess M took 2 of your streets");
   assert.equal(msgs.find((m) => m.userID === "u2")!.body, "Ben just took your coins on Oak Road");
 });
 
