@@ -218,6 +218,15 @@ These run on the phone only and need no server:
 - **Story share card** (run summary): 9:16 image of the run's streets up close, coins and stats.
   Streets inside privacy zones are never highlighted on it.
 
+- **Badges** (`ChompKit/Game/Badges.swift`): 20 badges across bronze, silver, gold and special
+  tiers (coins, runs, streaks, steals, distance, map share, power-ups, clubs, early/late runs),
+  judged from run history like the weekly goals. Earned ones are stored in
+  `PlayerProfile.badgesEarned`; the first check after updating awards existing achievements quietly.
+  New ones show an unlock sheet (with a 9:16 share card) after the run summary closes.
+- **Location checks**: runs record with "While Using" (CLBackgroundActivitySession), so that's
+  fine. Before a run, Chomp warns if location is off or Precise Location is off (approximate
+  fixes can't collect coins), and shows a map banner while Precise Location is off.
+
 ## Not built yet
 
 - **Push delivery** is built but needs setup: run migration `20261124000000_push.sql`, set the

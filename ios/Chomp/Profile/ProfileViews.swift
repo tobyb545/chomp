@@ -22,7 +22,11 @@ struct ProfileView: View {
                     }
                 }
                 Section("Stats") { StatsSection() }
-                Section("Badges") { BadgesSection() }
+                Section {
+                    BadgeGrid()
+                } header: {
+                    Text("Badges · \(model.profile.badgesEarned.count) of \(model.badges.count)")
+                }
                 Section("Runs") {
                     NavigationLink { HealthImportView() } label: {
                         Label("Add a run from Apple Health", systemImage: "heart.text.square.fill")
@@ -101,30 +105,6 @@ struct StatsSection: View {
             .filter { !$0.key.isEmpty }
             .mapValues { $0.reduce(0) { $0 + $1.value.timesRun } }
         return byName.max { $0.value < $1.value }.map { "\($0.key) (\($0.value)×)" }
-    }
-}
-
-struct BadgesSection: View {
-    @Environment(AppModel.self) private var model
-    var body: some View {
-        let p = model.progress
-        let badges: [(String, String, Bool)] = [
-            ("First bite", "circle.grid.cross.fill", p.heldSegments > 0 || !model.state.coverage.isEmpty),
-            ("10% of the map around you", "10.circle.fill", p.heldFraction >= 0.1),
-            ("Frenzy", "bolt.circle.fill", !model.state.collectedPellets.isEmpty),
-            ("1,000 tokens", "circle.circle.fill", model.state.tokens(of: model.state.me) >= 1000),
-        ] + (model.rules.blocks.isEnabled ? [
-            ("Block party", "square.grid.3x3.fill", !model.state.blockAwards.isEmpty),
-            ("Conquered a map square", "crown.fill", model.state.badges.contains { $0.hasPrefix("conquered:") }),
-        ] : [])
-        ForEach(badges, id: \.0) { b in
-            Label(b.0, systemImage: b.1)
-                .foregroundStyle(b.2 ? Color(hex: model.profile.colorHex) : Theme.textSecondary.opacity(0.5))
-                .accessibilityLabel("\(b.0), \(b.2 ? "earned" : "not yet earned")")
-        }
-        if model.isConquered {
-            Text("Conquered map style unlocked.").font(.footnote).foregroundStyle(Theme.textSecondary)
-        }
     }
 }
 

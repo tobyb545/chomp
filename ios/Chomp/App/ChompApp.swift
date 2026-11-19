@@ -105,6 +105,11 @@ struct RootView: View {
             PaywallView()
         }
         .sheet(item: $model.practiceResult) { r in PracticeResultView(result: r) }
+        // Badge unlocks wait until the run summary (and any other prompt) is closed.
+        .sheet(item: Binding(get: { model.presentedSummary == nil && model.healthPrompt == nil && model.practiceResult == nil ? model.pendingBadges.first : nil },
+                             set: { if $0 == nil, !model.pendingBadges.isEmpty { model.pendingBadges.removeFirst() } })) { b in
+            BadgeDetailView(badge: b, earnedAt: model.profile.badgesEarned[b.id], celebrate: true)
+        }
         .sheet(isPresented: $model.showClubs) {
             NavigationStack {
                 ClubsView().toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { model.showClubs = false } } }

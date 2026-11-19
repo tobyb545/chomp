@@ -801,3 +801,25 @@ struct CoinTests {
         }
     }
 }
+
+@Suite("Badges")
+struct BadgeTests {
+    @Test func freshPlayerHasNothing() {
+        #expect(Badges.all(BadgeStats()).allSatisfy { !$0.earned })
+        #expect(Set(Badges.all(BadgeStats()).map(\.id)).count == Badges.all(BadgeStats()).count, "ids are unique")
+    }
+
+    @Test func thresholdsAndProgress() {
+        var s = BadgeStats()
+        s.tokens = 1_000; s.runs = 9; s.distance = 12_000; s.stolen = 1; s.nightOwl = true
+        let earned = Set(Badges.all(s).filter(\.earned).map(\.id))
+        #expect(earned == ["coins-1", "coins-1k", "runs-1", "dist-10", "steal-1", "night"])
+        let regular = Badges.all(s).first { $0.id == "runs-10" }!
+        #expect(abs(regular.progress - 0.9) < 1e-9 && regular.counted)
+    }
+
+    @Test func newlyEarnedSkipsKnown() {
+        var s = BadgeStats(); s.tokens = 5; s.runs = 1
+        #expect(Badges.newlyEarned(s, already: ["coins-1"]).map(\.id) == ["runs-1"])
+    }
+}

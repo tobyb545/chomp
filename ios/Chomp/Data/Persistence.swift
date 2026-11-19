@@ -31,6 +31,12 @@ struct PlayerProfile: Codable, Hashable {
     var healthOffered: [UUID] = []
     /// Losses before this have been shown in the "under attack" banner.
     var attacksSeenAt: Date?
+    /// Badge id → when it was earned.
+    var badgesEarned: [String: Date] = [:]
+    /// Set once existing achievements have been awarded quietly (so updating doesn't flood unlocks).
+    var badgesSeeded = false
+    /// Sticky: has been in a club (for the Team player badge).
+    var joinedClub = false
     /// Invite code typed in (or opened from a link) before signing in.
     var pendingInviteCode: String?
 
@@ -62,6 +68,7 @@ struct PlayerProfile: Codable, Hashable {
         get(.mapLook, &mapLook); get(.voiceOn, &voiceOn); get(.voiceSplits, &voiceSplits)
         get(.pushLost, &pushLost); get(.pushRaids, &pushRaids); get(.healthOffered, &healthOffered)
         attacksSeenAt = try? c.decodeIfPresent(Date.self, forKey: .attacksSeenAt)
+        get(.badgesEarned, &badgesEarned); get(.badgesSeeded, &badgesSeeded); get(.joinedClub, &joinedClub)
         pendingInviteCode = try? c.decodeIfPresent(String.self, forKey: .pendingInviteCode)
         get(.seenIntro, &seenIntro)  // existing players see the cards once too
     }

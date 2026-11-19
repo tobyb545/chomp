@@ -259,6 +259,7 @@ final class AppModel {
         #endif
         if profile.onboarded { await locateAndLoad() }
         tickWorld()
+        awardBadges()
         await syncOnline()
     }
 
@@ -312,6 +313,8 @@ final class AppModel {
             await completeRun(id: UUID(), trace: trace, signals: RunSignals(), startedAt: t, endedAt: trace.last!.timestamp, simulated: true)
         }
         presentedSummary = nil
+        pendingBadges = []
+        if args.contains("-badge") { pendingBadges = Array(badges.filter(\.earned).suffix(1)) }
         if args.contains("-summary") { presentedSummary = runs.first }
         if args.contains("-autorun") { run.start(simulated: true) }
     }
@@ -518,6 +521,7 @@ final class AppModel {
         bumpMap()
         announceGoals(before: goalsBefore)
         scheduleStreakReminder()
+        awardBadges()
         if upload, !simulated, backend.isSignedIn, !profile.privateMode {
             await self.upload(id: id, trace: trace, signals: signals, startedAt: startedAt, endedAt: endedAt, source: source)
         }
@@ -746,6 +750,43 @@ final class AppModel {
         }
     }
     var attackReport: AttackReport?
+
+    // MARK: Badges
+
+    /// Badges earned on the last run, shown one at a time once the run summary is closed.
+    var pendingBadges: [Badge] = []
+
+    var badgeStats: BadgeStats {
+        let facts = runFacts
+        var s = BadgeStats()
+        s.tokens = state.tokens(of: state.me)
+        s.runs = facts.count
+        s.bestStreak = streak.best
+        s.stolen = facts.reduce(0) { $0 + $1.stolen }
+        s.distance = facts.reduce(0) { $0 + $1.distance }
+        s.heldFraction = progress.heldFraction
+        s.powerUps = facts.reduce(0) { $0 + $1.pellets } + state.collectedPellets.count
+        s.inClub = profile.joinedClub
+        let hours = facts.map { Calendar.current.component(.hour, from: $0.date) }
+        s.earlyBird = hours.contains { (4..<7).contains($0) }
+        s.nightOwl = hours.contains { $0 >= 21 }
+        return s
+    }
+
+    var badges: [Badge] { Badges.all(badgeStats) }
+
+    /// Records newly earned badges. The first time (existing players) it's quiet.
+    func awardBadges() {
+        let fresh = Badges.newlyEarned(badgeStats, already: Set(profile.badgesEarned.keys))
+        guard !fresh.isEmpty || !profile.badgesSeeded else { return }
+        let announce = profile.badgesSeeded
+        for b in fresh { profile.badgesEarned[b.id] = .now }
+        profile.badgesSeeded = true
+        if announce, !fresh.isEmpty {
+            pendingBadges.append(contentsOf: fresh)
+            Feedback.shared.play(.block)
+        }
+    }
     /// Precise Location switched off for Chomp (checked on launch and foreground).
     var locationApproximate = false
 

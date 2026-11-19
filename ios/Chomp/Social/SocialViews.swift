@@ -560,6 +560,7 @@ struct ClubsView: View {
     private func reload() async {
         guard model.backend.isSignedIn else { loaded = true; return }
         club = try? await model.backend.myClub()
+        if club != nil, !model.profile.joinedClub { model.profile.joinedClub = true; model.awardBadges() }
         friends = (try? await model.backend.friends()) ?? []
         loaded = true
     }

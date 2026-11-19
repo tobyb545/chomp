@@ -118,4 +118,15 @@ final class ScreenshotTests: XCTestCase {
         sleep(5)
         mark("end")
     }
+
+    func testBadgeGrid() {
+        app.launch()
+        XCTAssertTrue(app.buttons["START RUN"].waitForExistence(timeout: 90))
+        app.buttons["Profile and settings"].tap()
+        XCTAssertTrue(app.navigationBars["Profile"].waitForExistence(timeout: 5))
+        let header = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'BADGES' OR label BEGINSWITH 'Badges'")).firstMatch
+        for _ in 0..<6 where !(header.exists && header.frame.minY > 120 && header.frame.minY < 400) { app.swipeUp(velocity: 400) }
+        sleep(1)
+        save("badges")
+    }
 }
