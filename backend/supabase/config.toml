@@ -1,0 +1,28 @@
+# Supabase CLI config for Chomp. `supabase start` for local dev, `supabase db push`
+# and `supabase functions deploy` for a hosted project (see docs/SETUP.md).
+project_id = "chomp"
+
+[api]
+schemas = ["public", "storage"]
+
+[db]
+major_version = 15
+
+[realtime]
+enabled = true
+
+[auth.external.apple]
+enabled = true
+# Native Sign in with Apple only needs the bundle id as the client id.
+client_id = "com.tobyb545.chomp"
+secret = ""
+
+# Called by pg_cron / RevenueCat with a shared secret, not a user JWT.
+[functions.ghost-tick]
+verify_jwt = false
+
+[functions.spawn-daily]
+verify_jwt = false
+
+[functions.revenuecat-webhook]
+verify_jwt = false

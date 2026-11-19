@@ -296,3 +296,84 @@ struct SplitTests {
         #expect(abs(splits.reduce(0) { $0 + $1.distance } - total) < 60)
     }
 }
+
+/// Writes shared/fixtures/parity.json: what ChompKit decides for fixed inputs.
+/// backend/supabase/tests/parity.test.ts checks the server's TypeScript port
+/// reaches the same answers, so client-side provisional results match the server.
+@Suite("Server parity fixture")
+struct ParityFixture {
+    @Test func writeFixture() throws {
+        let area = Fixtures.area, rules = Fixtures.rules
+        var out: [String: Any] = [:]
+
+        var rng = SeededRandom(string: "chomp")
+        out["rng"] = (0..<5).map { _ in String(rng.next()) }
+
+        let dates: [Double] = [Fixtures.t0.timeIntervalSince1970, 1_774_778_400 /* 2026-03-29 10:00Z, spring forward */,
+                               1_792_918_800 /* 2026-10-25 09:00Z, clocks back */, 1_798_761_000 /* 2026-12-31 23:50Z, New Year's Eve */]
+        out["spawns"] = dates.map { t -> [String: Any] in
+            let d = Date(timeIntervalSince1970: t)
+            return [
+                "t": t,
+                "pellets": DailySpawns.powerPellets(area: area, date: d, rules: rules).map {
+                    ["id": $0.id, "from": $0.activeFrom.timeIntervalSince1970, "until": $0.activeUntil.timeIntervalSince1970]
+                },
+                "bonus": DailySpawns.bonusStreets(area: area, date: d, rules: rules).map {
+                    ["street": $0.streetName, "mult": $0.multiplier, "starts": $0.startsAt.timeIntervalSince1970,
+                     "ends": $0.endsAt.timeIntervalSince1970, "segments": $0.segmentIDs.count] as [String: Any]
+                },
+            ]
+        }
+
+        func encode(_ trace: [TracePoint]) -> [[Double]] {
+            trace.map { [$0.coordinate.latitude, $0.coordinate.longitude, $0.timestamp.timeIntervalSince1970, $0.horizontalAccuracy, $0.speed] }
+        }
+        let matcher = MapMatcher(area: area, rules: rules.matching)
+        var runs: [[String: Any]] = []
+        for (seed, speed) in [(1, 3.0), (2, 3.2), (3, 2.8), (4, 7.5)] as [(UInt64, Double)] {
+            let trace = Fixtures.run(seed: seed, distance: 3000, speed: speed).trace
+            let match = matcher.match(trace)
+            let report = AntiCheat.evaluate(trace: trace, signals: RunSignals(), rules: rules.antiCheat, matching: rules.matching)
+            var state = GameState(areaSlug: area.slug, playerID: "p1")
+            let engine = GameEngine(area: area, rules: rules)
+            let outcome = engine.resolve(run: RunContext(runID: UUID(), startedAt: trace.first!.timestamp, endedAt: trace.last!.timestamp),
+                                         trace: trace, match: match, report: report, state: &state)
+            var coverage: [String: Double] = [:]
+            for (seg, set) in match.coverage() { coverage[area.segments[seg].id] = set.coveredLength }
+            runs.append([
+                "seed": seed, "trace": encode(trace),
+                "chunks": match.chunks, "used": match.usedPoints, "unmatched": match.unmatchedPoints, "coverage": coverage,
+                "verdict": report.verdict.rawValue, "flags": report.flags.map(\.rule), "excluded": report.excluded.count,
+                "captures": Dictionary(uniqueKeysWithValues: outcome.captures.map { ($0.segmentID, $0.kind.rawValue) }),
+                "points": outcome.points, "blockBonus": outcome.blockBonus, "pellets": outcome.pelletsCollected,
+            ])
+        }
+        out["runs"] = runs
+
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("shared/fixtures/parity.json")
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try JSONSerialization.data(withJSONObject: out, options: [.sortedKeys]).write(to: url)
+    }
+}
+
+/// The app must be able to decode resolve-run's response. The JSON is written by
+/// backend/tests/resolve.test.ts from the server's real code path.
+@Suite("Server response")
+struct ServerResponseDecoding {
+    @Test func decodesResolveRunOutcome() throws {
+        struct Response: Decodable { let status: String; let outcome: RunOutcome? }
+        let url = try #require(Bundle(for: TestBundle.self).url(forResource: "server-response", withExtension: "json"))
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let res = try decoder.decode(Response.self, from: Data(contentsOf: url))
+        let o = try #require(res.outcome)
+        #expect(res.status == "resolved")
+        #expect(o.verdict == .accepted)
+        #expect(!o.gained.isEmpty)
+        #expect(o.frenzyWindows.first?.duration == 600)
+        #expect(o.stolen.first?.previousOwner == .ghost("bot-dusk"))
+        #expect(o.rejected.first?.reason == "Too fast to be running")
+        #expect(o.flags.contains { $0.severity == .medium })
+    }
+}

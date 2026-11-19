@@ -107,13 +107,13 @@ final class SupabaseBackend: @unchecked Sendable {
 
     func restoreSession() async {
         guard let client else { return }
-        userID = try? await client.auth.session.user.id.uuidString
+        userID = try? await client.auth.session.user.id.uuidString.lowercased()
     }
 
     func signInWithApple(idToken: String, nonce: String, displayName: String, colorHex: String) async throws {
         guard let client else { throw BackendError.notConfigured }
         let session = try await client.auth.signInWithIdToken(credentials: .init(provider: .apple, idToken: idToken, nonce: nonce))
-        userID = session.user.id.uuidString
+        userID = session.user.id.uuidString.lowercased()
         struct Upsert: Encodable { let id: String; let display_name: String; let color_hex: String }
         try await client.from("profiles").upsert(Upsert(id: session.user.id.uuidString, display_name: displayName, color_hex: colorHex)).execute()
     }
@@ -157,7 +157,7 @@ final class SupabaseBackend: @unchecked Sendable {
             guard let client else { continuation.finish(); return }
             let task = Task {
                 let channel = client.channel("ownership:\(area)")
-                let changes = channel.postgresChange(AnyAction.self, schema: "public", table: "segment_ownership", filter: "area_slug=eq.\(area)")
+                let changes = channel.postgresChange(AnyAction.self, schema: "public", table: "segment_ownership_feed", filter: "area_slug=eq.\(area)")
                 await channel.subscribe()
                 let decoder = JSONDecoder()
                 decoder.dateDecodingStrategy = .iso8601
@@ -235,6 +235,22 @@ final class SupabaseBackend: @unchecked Sendable {
         guard let client, let userID else { throw BackendError.notSignedIn }
         struct Row: Encodable { let user_id: String; let target_id: String; let kind: String }
         try await client.from("user_relations").upsert(Row(user_id: userID, target_id: player, kind: mute ? "mute" : "block")).execute()
+    }
+
+    struct StravaImportResult: Decodable { let imported: Int; let streets: Int; let more: Bool }
+
+    func importStrava(code: String?, area: String) async throws -> StravaImportResult {
+        guard let client else { throw BackendError.notConfigured }
+        struct Body: Encodable { let code: String?; let areaSlug: String }
+        return try await client.functions.invoke("strava-import", options: FunctionInvokeOptions(body: Body(code: code, areaSlug: area)))
+    }
+
+    struct CoverageRow: Decodable { let segment_id: String; let first_at: Date; let last_at: Date; let times_run: Int; let source: String }
+
+    /// Streets this player has explored according to the server (live runs + imports).
+    func personalCoverage() async throws -> [CoverageRow] {
+        guard let client else { throw BackendError.notConfigured }
+        return try await client.from("personal_coverage").select("segment_id, first_at, last_at, times_run, source").execute().value
     }
 
     func deleteAccount() async throws {

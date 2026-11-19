@@ -130,6 +130,7 @@ struct BadgesSection: View {
 
 struct SettingsView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.webAuthenticationSession) private var webAuth
     @State private var importing = false
     @State private var importResult: String?
     @State private var confirmReset = false
@@ -193,9 +194,14 @@ struct SettingsView: View {
                         importing = false
                     }
                 }.disabled(importing)
-                Button("Import from Strava (Pro)") {
-                    if !model.pro.isPro { model.showPaywall = true } else { importResult = StravaImport.statusMessage(signedIn: model.backend.isSignedIn) }
-                }
+                Button(importing ? "Importing…" : "Import from Strava (Pro)") {
+                    guard model.pro.isPro else { model.showPaywall = true; return }
+                    Task {
+                        importing = true
+                        importResult = await StravaImport.run(model: model, webAuth: webAuth)
+                        importing = false
+                    }
+                }.disabled(importing)
                 if let importResult { Text(importResult).font(.footnote).foregroundStyle(Theme.textSecondary) }
             } header: { Text("History") } footer: {
                 Text("Imported runs count towards streets you've explored, never towards ownership, so they can't steal anyone's streets.")
@@ -315,10 +321,37 @@ extension AppModel {
 }
 
 enum StravaImport {
-    static func statusMessage(signedIn: Bool) -> String {
-        signedIn
-            ? "Strava import runs on the server (the Strava client secret can't live in the app). Connect it from the web dashboard once the strava-import function is deployed."
-            : "Strava import needs online play: sign in first."
+    /// Strava OAuth in the app; the code goes to the strava-import Edge Function,
+    /// which holds the client secret, imports runs and returns a summary.
+    @MainActor
+    static func run(model: AppModel, webAuth: WebAuthenticationSession) async -> String {
+        let backend = model.backend
+        guard backend.isConfigured else { return BackendError.notConfigured.localizedDescription }
+        guard backend.isSignedIn else { return BackendError.notSignedIn.localizedDescription }
+        let clientID = (Bundle.main.infoDictionary?["StravaClientID"] as? String) ?? ""
+        guard !clientID.isEmpty else { return "Strava isn't set up in this build (STRAVA_CLIENT_ID is empty)." }
+        do {
+            var code: String?
+            if !UserDefaults.standard.bool(forKey: "stravaConnected") {
+                var c = URLComponents(string: "https://www.strava.com/oauth/mobile/authorize")!
+                c.queryItems = [.init(name: "client_id", value: clientID), .init(name: "redirect_uri", value: "chomp://strava"),
+                                .init(name: "response_type", value: "code"), .init(name: "approval_prompt", value: "auto"),
+                                .init(name: "scope", value: "activity:read_all")]
+                let callback = try await webAuth.authenticate(using: c.url!, callbackURLScheme: "chomp", preferredBrowserSession: .shared)
+                code = URLComponents(url: callback, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "code" }?.value
+                guard code != nil else { return "Strava didn't grant access." }
+            }
+            let r = try await backend.importStrava(code: code, area: model.area.slug)
+            UserDefaults.standard.set(true, forKey: "stravaConnected")
+            await model.mergeServerCoverage()
+            if r.imported == 0 { return "No new Strava runs in \(model.area.name)." }
+            return "Imported \(r.imported) Strava run\(r.imported == 1 ? "" : "s"), \(r.streets) streets explored." + (r.more ? " Tap again for more." : "")
+        } catch let e as ASWebAuthenticationSessionError where e.code == .canceledLogin {
+            return "Strava import cancelled."
+        } catch {
+            UserDefaults.standard.set(false, forKey: "stravaConnected")
+            return "Strava import failed: \(error.localizedDescription)"
+        }
     }
 }
 

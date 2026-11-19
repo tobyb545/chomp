@@ -37,6 +37,10 @@ public struct PersonalCoverage: Codable, Hashable, Sendable {
     public var timesRun: Int
     /// Imported history (HealthKit/Strava) only counts here, never for ownership.
     public var importedOnly: Bool
+
+    public init(firstRunAt: Date, lastRunAt: Date, timesRun: Int, importedOnly: Bool) {
+        self.firstRunAt = firstRunAt; self.lastRunAt = lastRunAt; self.timesRun = timesRun; self.importedOnly = importedOnly
+    }
 }
 
 public enum GameEventKind: String, Codable, Sendable {

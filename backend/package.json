@@ -1,0 +1,9 @@
+{
+  "name": "chomp-backend",
+  "private": true,
+  "type": "module",
+  "description": "Tests for Chomp's Supabase Edge Function game logic (no dependencies; Node 22.6+).",
+  "scripts": {
+    "test": "node --experimental-strip-types --no-warnings --test tests/parity.test.ts tests/resolve.test.ts"
+  }
+}

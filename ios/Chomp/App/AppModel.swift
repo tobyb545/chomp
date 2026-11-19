@@ -355,6 +355,21 @@ final class AppModel {
         bumpMap()
     }
 
+    /// Folds server-side exploration (e.g. Strava imports) into local coverage.
+    func mergeServerCoverage() async {
+        guard let rows = try? await backend.personalCoverage() else { return }
+        for r in rows where area.segment(r.segment_id) != nil {
+            var c = state.coverage[r.segment_id] ?? PersonalCoverage(firstRunAt: r.first_at, lastRunAt: r.last_at, timesRun: 0, importedOnly: r.source == "import")
+            c.firstRunAt = min(c.firstRunAt, r.first_at)
+            c.lastRunAt = max(c.lastRunAt, r.last_at)
+            c.timesRun = max(c.timesRun, r.times_run)
+            c.importedOnly = c.importedOnly && r.source == "import"
+            state.coverage[r.segment_id] = c
+        }
+        persist()
+        bumpMap()
+    }
+
     /// Imports past HealthKit runs as personal exploration only.
     func importHealthHistory() async -> Int {
         guard await HealthService.shared.requestAuthorization() else { return 0 }

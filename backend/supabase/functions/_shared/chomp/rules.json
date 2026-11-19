@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "capture": {
+    "coverageThreshold": 0.8,
+    "frenzyRivalCoverageThreshold": 0.4,
+    "pointsPerMetre": 1.0,
+    "minimumPointsPerSegment": 1
+  },
+  "decay": {
+    "days": 21
+  },
+  "frenzy": {
+    "durationSeconds": 600,
+    "multiplier": 2.0,
+    "collectRadiusMetres": 30
+  },
+  "powerPellets": {
+    "perDay": 3
+  },
+  "bonusStreets": {
+    "perDay": 2
+  },
+  "blocks": {
+    "bonusBasePoints": 250,
+    "bonusPointsPerHundredSquareMetres": 1,
+    "reawardCooldownHours": 24
+  },
+  "matching": {
+    "candidateRadiusMetres": 30,
+    "gpsSigmaMetres": 8,
+    "transitionBeta": 6,
+    "maxCandidatesPerPoint": 6,
+    "minPointSpacingMetres": 4,
+    "maxGapSeconds": 60,
+    "maxGapMetres": 200,
+    "maxAccuracyMetres": 40
+  },
+  "antiCheat": {
+    "maxSustainedSpeedKmh": 25,
+    "sustainedWindowSeconds": 20,
+    "teleportSpeedKmh": 60,
+    "maxAccelerationMps2": 6,
+    "straightLineWindowSeconds": 60,
+    "maxAutomotiveFraction": 0.15,
+    "maxCyclingFraction": 0.25,
+    "minRunningCadenceSpm": 110,
+    "runningSpeedForCadenceCheckMps": 2.8,
+    "lowHeartRateBpm": 85,
+    "maxCapturesPerRun": 400,
+    "maxCapturesPerDay": 800
+  },
+  "ghosts": {
+    "perArea": 3,
+    "segmentsPerDayMin": 4,
+    "segmentsPerDayMax": 14,
+    "maxTickHours": 72
+  },
+  "privacy": {
+    "defaultZoneRadiusMetres": 250,
+    "zoneJitterMetres": 60
+  }
+}

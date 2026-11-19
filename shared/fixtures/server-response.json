@@ -1,0 +1,314 @@
+{
+ "status": "resolved",
+ "outcome": {
+  "runID": "6F9619FF-8B86-4D11-B42D-00C04FC964FF",
+  "captures": [
+   {
+    "segmentID": "s93d651a56a5",
+    "streetName": "Acacia Close",
+    "kind": "captured",
+    "coverage": 0.980127110004075,
+    "points": 66,
+    "multiplier": 1,
+    "at": "2026-09-21T14:13:42Z"
+   },
+   {
+    "segmentID": "s01f4c8d5c58",
+    "streetName": "Acacia Drive",
+    "kind": "captured",
+    "coverage": 0.9583697972183524,
+    "points": 25,
+    "multiplier": 1,
+    "at": "2026-09-21T14:13:52Z"
+   },
+   {
+    "segmentID": "s4a7299427a7",
+    "streetName": "Acacia Drive",
+    "kind": "captured",
+    "coverage": 1,
+    "points": 70,
+    "multiplier": 1,
+    "at": "2026-09-21T14:14:21Z"
+   },
+   {
+    "segmentID": "s7b812e47baa",
+    "streetName": "Acacia Drive",
+    "kind": "captured",
+    "coverage": 1,
+    "points": 57,
+    "multiplier": 1,
+    "at": "2026-09-21T14:14:44Z"
+   },
+   {
+    "segmentID": "s3d4a2b60779",
+    "streetName": "Acacia Drive",
+    "kind": "captured",
+    "coverage": 1,
+    "points": 116,
+    "multiplier": 1,
+    "at": "2026-09-21T14:15:30Z"
+   },
+   {
+    "segmentID": "sb89b976f48e",
+    "streetName": "Woodham Park Way",
+    "kind": "partial",
+    "coverage": 0.000493921781608656,
+    "points": 0,
+    "multiplier": 1,
+    "at": "2026-09-21T14:15:36Z"
+   },
+   {
+    "segmentID": "s09f48561bd7",
+    "streetName": "Woodham Park Way",
+    "kind": "captured",
+    "coverage": 1,
+    "points": 99,
+    "multiplier": 1,
+    "at": "2026-09-21T14:15:58Z"
+   },
+   {
+    "segmentID": "sebc20f77d3f",
+    "streetName": "Woodham Park Way",
+    "kind": "captured",
+    "coverage": 1,
+    "points": 25,
+    "multiplier": 1,
+    "at": "2026-09-21T14:16:10Z"
+   },
+   {
+    "segmentID": "s68ab2bd2084",
+    "streetName": "Amberley Drive",
+    "kind": "captured",
+    "coverage": 1,
+    "points": 44,
+    "multiplier": 1,
+    "at": "2026-09-21T14:16:23Z"
+   },
+   {
+    "segmentID": "s6b30b7a194e",
+    "streetName": "Footpath",
+    "kind": "captured",
+    "coverage": 1,
+    "points": 57,
+    "multiplier": 1,
+    "at": "2026-09-21T14:16:42Z"
+   },
+   {
+    "segmentID": "sa6f12f53d94",
+    "streetName": "Woodham Park Road",
+    "kind": "captured",
+    "coverage": 1,
+    "points": 35,
+    "multiplier": 1,
+    "at": "2026-09-21T14:16:56Z"
+   },
+   {
+    "segmentID": "sda33ea6abd9",
+    "streetName": "Woodham Park Way",
+    "kind": "captured",
+    "coverage": 1,
+    "points": 34,
+    "multiplier": 1,
+    "at": "2026-09-21T14:17:05Z"
+   },
+   {
+    "segmentID": "sbe919a7fbe6",
+    "streetName": "Amberley Drive",
+    "kind": "captured",
+    "coverage": 1,
+    "points": 78,
+    "multiplier": 1,
+    "at": "2026-09-21T14:17:36Z"
+   },
+   {
+    "segmentID": "s81abfd4e131",
+    "streetName": "Amberley Drive",
+    "kind": "captured",
+    "coverage": 0.9996923579421488,
+    "points": 19,
+    "multiplier": 1,
+    "at": "2026-09-21T14:17:45Z"
+   },
+   {
+    "segmentID": "s66338589c3d",
+    "streetName": "Amberley Drive",
+    "kind": "captured",
+    "coverage": 1,
+    "points": 40,
+    "multiplier": 1,
+    "at": "2026-09-21T14:18:02Z"
+   },
+   {
+    "segmentID": "s0ae5f88db31",
+    "streetName": "Amberley Drive",
+    "kind": "captured",
+    "coverage": 1,
+    "points": 41,
+    "multiplier": 1,
+    "at": "2026-09-21T14:18:16Z"
+   },
+   {
+    "segmentID": "sbab3dba9595",
+    "streetName": "Amberley Drive",
+    "kind": "captured",
+    "coverage": 1,
+    "points": 48,
+    "multiplier": 1,
+    "at": "2026-09-21T14:18:29Z"
+   },
+   {
+    "segmentID": "s3e473dcc28c",
+    "streetName": "Amberley Drive",
+    "kind": "captured",
+    "coverage": 1,
+    "points": 113,
+    "multiplier": 1,
+    "at": "2026-09-21T14:19:15Z"
+   },
+   {
+    "segmentID": "sd3cfa99d34e",
+    "streetName": "Woodham Park Road",
+    "kind": "partial",
+    "coverage": 0.00010873700417364994,
+    "points": 0,
+    "multiplier": 1,
+    "at": "2026-09-21T14:19:20Z"
+   },
+   {
+    "segmentID": "s4f119528358",
+    "streetName": "Woodham Park Road",
+    "kind": "captured",
+    "coverage": 1,
+    "points": 201,
+    "multiplier": 1,
+    "at": "2026-09-21T14:20:11Z"
+   },
+   {
+    "segmentID": "s098864b78ba",
+    "streetName": "Nursery Close",
+    "kind": "captured",
+    "coverage": 1,
+    "points": 63,
+    "multiplier": 1,
+    "at": "2026-09-21T14:20:40Z"
+   },
+   {
+    "segmentID": "s3f77163be33",
+    "streetName": "Footpath",
+    "kind": "captured",
+    "coverage": 1,
+    "points": 63,
+    "multiplier": 1,
+    "at": "2026-09-21T14:21:01Z"
+   },
+   {
+    "segmentID": "scd1cfe8ff2b",
+    "streetName": "Queen Mary's Drive",
+    "kind": "captured",
+    "coverage": 1,
+    "points": 37,
+    "multiplier": 1,
+    "at": "2026-09-21T14:21:16Z"
+   },
+   {
+    "segmentID": "s1632662a797",
+    "streetName": "Queen Mary's Drive",
+    "kind": "captured",
+    "coverage": 1,
+    "points": 52,
+    "multiplier": 1,
+    "at": "2026-09-21T14:21:28Z"
+   },
+   {
+    "segmentID": "s3fe39ab09f5",
+    "streetName": "Woodham Park Road",
+    "kind": "captured",
+    "coverage": 1,
+    "points": 139,
+    "multiplier": 1,
+    "at": "2026-09-21T14:22:05Z"
+   },
+   {
+    "segmentID": "scbe4fefdf50",
+    "streetName": "Woodham Park Road",
+    "kind": "captured",
+    "coverage": 1,
+    "points": 13,
+    "multiplier": 1,
+    "at": "2026-09-21T14:22:17Z"
+   },
+   {
+    "segmentID": "sa1c3333d483",
+    "streetName": "Woodham Park Road",
+    "kind": "captured",
+    "coverage": 1,
+    "points": 94,
+    "multiplier": 1,
+    "at": "2026-09-21T14:22:40Z"
+   },
+   {
+    "segmentID": "s37a265941a3",
+    "streetName": "Woodham Park Road",
+    "kind": "captured",
+    "coverage": 1,
+    "points": 200,
+    "multiplier": 1,
+    "at": "2026-09-21T14:23:35Z"
+   },
+   {
+    "segmentID": "s46679dcf031",
+    "streetName": "Service road",
+    "kind": "captured",
+    "coverage": 0.9808698034206729,
+    "points": 103,
+    "multiplier": 1,
+    "at": "2026-09-21T14:25:31Z"
+   },
+   {
+    "segmentID": "steal",
+    "streetName": "Acacia Close",
+    "kind": "stolen",
+    "coverage": 0.980127110004075,
+    "points": 66,
+    "multiplier": 2,
+    "previousOwner": {
+     "kind": "ghost",
+     "id": "bot-dusk"
+    },
+    "at": "2026-09-21T14:13:42Z"
+   },
+   {
+    "segmentID": "reject",
+    "streetName": "Acacia Close",
+    "kind": "rejected",
+    "coverage": 0.980127110004075,
+    "points": 0,
+    "multiplier": 1,
+    "at": "2026-09-21T14:13:42Z",
+    "reason": "Too fast to be running"
+   }
+  ],
+  "points": 1932,
+  "blockBonus": 689,
+  "blocksCompleted": [
+   "b4c82c2abd9c",
+   "bf69941a31d7"
+  ],
+  "pelletsCollected": [],
+  "frenzyWindows": [
+   {
+    "start": "2026-09-21T14:13:42Z",
+    "duration": 600
+   }
+  ],
+  "verdict": "accepted",
+  "flags": [
+   {
+    "rule": "speed",
+    "severity": 1,
+    "detail": "30s above 25 km/h"
+   }
+  ],
+  "conqueredTown": false
+ }
+}

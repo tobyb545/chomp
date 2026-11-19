@@ -49,6 +49,8 @@ targets:
       - path: ChompKitTests
       - path: ../data/areas/west-byfleet.json
         buildPhase: resources
+      - path: ../shared/fixtures/server-response.json
+        buildPhase: resources
     dependencies:
       - target: ChompKit
     settings:
