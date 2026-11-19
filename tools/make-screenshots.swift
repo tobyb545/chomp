@@ -12,7 +12,7 @@ let outDir = args.count > 2 ? args[2] : "docs/screenshots"
 let shots: [(String, String, String, String, String)] = [
     ("01-map",         "1-make-running-fun", "Make running",  "fun again",       "Every street is covered in coins."),
     ("02-run",         "2-run-it-own-it",    "Run it.",       "Own it.",         "Grab every coin you pass. Steal your rivals' too."),
-    ("05-leaderboard", "3-compete",          "Compete with",  "the world",       "Nearby, worldwide, friends and clubs."),
+    ("05-leaderboard", "3-compete",          "Compete with",  "the world",       "Climb the global leaderboard."),
     ("03-route",       "4-take-the-block",   "Plan a loop,",  "take the block",  "Routes that grab the most territory."),
     ("04-summary",     "5-every-run-counts", "Every run",     "counts",          "Coins, new streets and a replay of your run."),
     ("06-goals",       "6-streaks",          "Keep your",     "streak alive",    "New goals every week. Same rules for everyone."),

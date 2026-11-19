@@ -124,16 +124,16 @@ struct LeaderboardView: View {
     /// Made-up rivals for App Store screenshots only (`-marketing`, debug builds).
     private static func marketingEntries(me: PlayerProfile) -> [LeaderboardEntry] {
         let rivals: [(String, String, Int)] = [
-            ("Priya K", "FF6FA1", 4_812), ("Marcus T", "3BA8FF", 4_177), ("Sofia R", "FFB020", 3_640),
-            ("Jonah W", "7B61FF", 2_955), ("Elena M", "2ED3B7", 1_728), ("Theo B", "FF7A45", 1_391),
-            ("Hana S", "A3E635", 1_206), ("Leo D", "F472B6", 988), ("Grace O", "38BDF8", 874),
-            ("Sam P", "FACC15", 731), ("Nina V", "C084FC", 652), ("Oscar L", "34D399", 540),
-            ("Maya J", "FB7185", 467),
+            ("Priya K 🇮🇳", "FF6FA1", 4_812), ("Marcus T 🇺🇸", "3BA8FF", 4_177), ("Sofia R 🇪🇸", "FFB020", 3_640),
+            ("Jonah W 🇦🇺", "7B61FF", 2_955), ("Elena M 🇮🇹", "2ED3B7", 1_728), ("Theo B 🇫🇷", "FF7A45", 1_391),
+            ("Hana S 🇯🇵", "A3E635", 1_206), ("Leo D 🇩🇪", "F472B6", 988), ("Grace O 🇳🇬", "38BDF8", 874),
+            ("Sam P 🇨🇦", "FACC15", 731), ("Nina V 🇳🇱", "C084FC", 652), ("Oscar L 🇸🇪", "34D399", 540),
+            ("Maya J 🇧🇷", "FB7185", 467),
         ]
         var list = rivals.enumerated().map { i, r in
             LeaderboardEntry(id: "m\(i)", rank: 0, name: r.0, colorHex: r.1, isBot: false, isMe: false, tokens: r.2)
         }
-        list.append(LeaderboardEntry(id: "me", rank: 0, name: me.name, colorHex: me.colorHex, isBot: false, isMe: true, tokens: 2_316))
+        list.append(LeaderboardEntry(id: "me", rank: 0, name: me.name + " 🇬🇧", colorHex: me.colorHex, isBot: false, isMe: true, tokens: 2_316))
         return list
     }
 
