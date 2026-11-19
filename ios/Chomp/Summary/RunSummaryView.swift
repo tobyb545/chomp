@@ -282,18 +282,28 @@ struct RunSummaryView: View {
         return r.uiImage.map { Image(uiImage: $0) }
     }
 
-    /// 9:16 card for Instagram/TikTok Stories: the coins headline, this run's streets and a "Get Chomp" footer.
+    /// 9:16 card for Instagram/TikTok Stories: this run's streets up close, coins and stats.
     @MainActor
     private func renderStory() -> Image? {
         let coins = record.tokens ?? model.tokens(of: outcome, in: model.area)
+        let miles = model.profile.useMiles
+        let unit = miles ? 1609.344 : 1000.0
+        let pace = record.distance > 0 ? record.movingTime / (record.distance / unit) : 0
+        let hour = Calendar.current.component(.hour, from: record.startedAt)
+        let when = hour < 5 ? "Night run" : hour < 12 ? "Morning run" : hour < 17 ? "Afternoon run" : hour < 21 ? "Evening run" : "Night run"
         let card = StoryCard(
-            poster: TerritoryPoster(area: model.area, state: model.state, me: model.state.me, colorHex: model.profile.colorHex,
-                                    highlight: Set(ordered.map(\.segmentID)), title: model.placeName,
-                                    subtitle: "\(model.progress.heldSegments) streets held", ownerColor: model.ownerColor),
-            coins: coins, stolen: outcome.stolen.count,
-            stats: [(formatDistance(record.distance, miles: model.profile.useMiles), "Distance"),
-                    (RunMath.formatDuration(record.movingTime), "Time"),
-                    ("\(outcome.gained.count)", outcome.gained.count == 1 ? "Street" : "Streets")],
+            map: StoryMap(area: model.area, state: model.state, me: model.state.me, colorHex: model.profile.colorHex,
+                          run: Set(ordered.map(\.segmentID)), zones: model.profile.privacyZones, ownerColor: model.ownerColor),
+            title: "\(when) · \(model.placeName)",
+            date: record.startedAt.formatted(.dateTime.day().month(.wide).year()),
+            coins: coins,
+            stats: [("Distance", formatDistance(record.distance, miles: miles)),
+                    ("Pace", RunMath.formatPace(pace) + (miles ? " /mi" : " /km")),
+                    ("Time", RunMath.formatDuration(record.movingTime))],
+            extras: [("Streets", "\(outcome.gained.count)"),
+                     outcome.stolen.isEmpty ? ("Streak", model.streak.current > 0 ? "\(model.streak.current) days" : "1 day")
+                                            : ("Stolen", "\(outcome.stolen.count)"),
+                     ("Points", "+\(outcome.totalPoints.formatted())")],
             colorHex: model.profile.colorHex)
         let r = ImageRenderer(content: card.frame(width: 360, height: 640))
         r.scale = 3
@@ -375,61 +385,145 @@ struct TerritoryPoster: View {
     }
 }
 
-/// Instagram Story card (1080x1920 when rendered at 3x).
-struct StoryCard: View {
-    let poster: TerritoryPoster
-    let coins: Int
-    let stolen: Int
-    let stats: [(String, String)]
+/// The streets of one run, zoomed in, for the Story card. Streets inside privacy
+/// zones are drawn like any other street (never highlighted).
+struct StoryMap: View {
+    let area: Area
+    let state: GameState
+    let me: OwnerRef
     let colorHex: String
-
-    private let lime = Color(hex: "D4FF3A")
+    let run: Set<SegmentID>
+    let zones: [PrivacyZone]
+    let ownerColor: (OwnerRef) -> String
 
     var body: some View {
-        ZStack {
-            LinearGradient(colors: [Color(hex: "4F7BFF"), Color(hex: "8640EC")], startPoint: .topLeading, endPoint: .bottomTrailing)
-            RadialGradient(colors: [.white.opacity(0.25), .clear], center: UnitPoint(x: 0.2, y: 0.08), startRadius: 0, endRadius: 330)
-            VStack(spacing: 14) {
-                Spacer(minLength: 46)
-                VStack(spacing: 0) {
-                    Text("I just grabbed").font(.system(size: 30, weight: .heavy, design: .rounded)).foregroundStyle(.white)
-                    HStack(spacing: 8) {
-                        Image(uiImage: CoinIcon.render(colorHex: "FFC83D")).resizable().frame(width: 34, height: 34)
-                        Text("\(coins) coin\(coins == 1 ? "" : "s")").font(.system(size: 44, weight: .black, design: .rounded)).foregroundStyle(lime)
-                    }
-                    if stolen > 0 {
-                        Text("and stole \(stolen) street\(stolen == 1 ? "" : "s") from rivals")
-                            .font(.system(size: 16, weight: .bold, design: .rounded)).foregroundStyle(.white.opacity(0.9)).padding(.top, 4)
-                    }
+        Canvas { ctx, size in
+            let proj = area.projection
+            let hidden = zones.map { (proj.project($0.center), $0.radius + 60) }
+            func inZone(_ seg: Segment) -> Bool {
+                seg.polyline.points.contains { p in hidden.contains { p.distance(to: $0.0) < $0.1 } }
+            }
+            let shown = area.segments.filter { run.contains($0.id) && !inZone($0) }
+            // Frame the run (or the whole area if nothing is shown), at least ~700 m across.
+            var pts = shown.flatMap(\.polyline.points)
+            if pts.isEmpty { pts = area.segments.flatMap(\.polyline.points) }
+            guard let first = pts.first else { return }
+            var lo = first, hi = first
+            for p in pts { lo = Vec2(min(lo.x, p.x), min(lo.y, p.y)); hi = Vec2(max(hi.x, p.x), max(hi.y, p.y)) }
+            let c = Vec2((lo.x + hi.x) / 2, (lo.y + hi.y) / 2)
+            let span = max(hi.x - lo.x, (hi.y - lo.y) * Double(size.width) / Double(size.height * 0.7), 700) * 1.35
+            let scale = Double(size.width) / span
+            func pt(_ v: Vec2) -> CGPoint {
+                CGPoint(x: Double(size.width) / 2 + (v.x - c.x) * scale, y: Double(size.height) * 0.42 - (v.y - c.y) * scale)
+            }
+            func path(_ seg: Segment) -> Path {
+                var p = Path()
+                for (i, v) in seg.polyline.points.enumerated() { i == 0 ? p.move(to: pt(v)) : p.addLine(to: pt(v)) }
+                return p
+            }
+            let mine = Color(hex: colorHex)
+            let shownIDs = Set(shown.map(\.id))
+            // Base streets, then territory, then the run on top.
+            for seg in area.segments where !shownIDs.contains(seg.id) {
+                let p = path(seg)
+                if let owner = state.mainOwner(of: seg, rules: RulesConfig.bundled) {
+                    ctx.stroke(p, with: .color(Color(hex: ownerColor(owner)).opacity(owner == me ? 0.75 : 0.55)),
+                               style: StrokeStyle(lineWidth: 2.6, lineCap: .round, lineJoin: .round))
+                } else {
+                    ctx.stroke(p, with: .color(Color(hex: "4B5175")), style: StrokeStyle(lineWidth: seg.isPath ? 1.2 : 2, lineCap: .round, lineJoin: .round))
                 }
-                .shadow(color: Color(hex: "1A0F55").opacity(0.35), radius: 6, y: 3)
-                poster
-                    .frame(height: 330)
-                    .clipShape(RoundedRectangle(cornerRadius: 26))
-                    .overlay(RoundedRectangle(cornerRadius: 26).stroke(.white.opacity(0.15), lineWidth: 1))
-                    .shadow(color: Color(hex: "140A40").opacity(0.5), radius: 16, y: 10)
-                    .padding(.horizontal, 22)
-                HStack(spacing: 8) {
-                    ForEach(Array(stats.enumerated()), id: \.offset) { _, s in
-                        VStack(spacing: 2) {
-                            Text(s.0).font(.system(size: 18, weight: .black, design: .rounded)).foregroundStyle(.white)
-                            Text(s.1).font(.system(size: 11, weight: .semibold, design: .rounded)).foregroundStyle(.white.opacity(0.75))
-                        }
-                        .frame(maxWidth: .infinity).padding(.vertical, 10)
-                        .background(.white.opacity(0.14), in: RoundedRectangle(cornerRadius: 14))
-                    }
+            }
+            for seg in shown {
+                let p = path(seg)
+                ctx.stroke(p, with: .color(mine.opacity(0.22)), style: StrokeStyle(lineWidth: 12, lineCap: .round, lineJoin: .round))
+                ctx.stroke(p, with: .color(mine), style: StrokeStyle(lineWidth: 5.5, lineCap: .round, lineJoin: .round))
+            }
+            for seg in shown {
+                ctx.stroke(path(seg), with: .color(.white.opacity(0.9)), style: StrokeStyle(lineWidth: 1.4, lineCap: .round, lineJoin: .round))
+            }
+            // Coins along the run's streets, like the map.
+            let gold = Color(hex: "FFC83D"), rim = Color(hex: "B07A00")
+            for seg in shown {
+                // One dot per ~30 m keeps the route readable.
+                let n = max(1, Int((seg.length / 30).rounded()))
+                for i in 0..<n {
+                    let q = pt(seg.polyline.point(at: (Double(i) + 0.5) * seg.length / Double(n)))
+                    let r: CGFloat = 2.2
+                    ctx.fill(Path(ellipseIn: CGRect(x: q.x - r, y: q.y - r, width: 2 * r, height: 2 * r)), with: .color(rim))
+                    ctx.fill(Path(ellipseIn: CGRect(x: q.x - r + 0.6, y: q.y - r + 0.6, width: 2 * r - 1.2, height: 2 * r - 1.2)), with: .color(gold))
                 }
-                .padding(.horizontal, 22)
-                Spacer(minLength: 8)
-                VStack(spacing: 6) {
-                    Text("Every street is covered in coins.").font(.system(size: 14, weight: .semibold, design: .rounded)).foregroundStyle(.white.opacity(0.9))
-                    Text("Get Chomp on the App Store")
-                        .font(.system(size: 16, weight: .heavy, design: .rounded)).foregroundStyle(Color(hex: "16123A"))
-                        .padding(.horizontal, 22).padding(.vertical, 11)
-                        .background(lime, in: Capsule())
-                }
-                .padding(.bottom, 52)
             }
         }
+    }
+}
+
+/// Instagram Story card (1080x1920 when rendered at 3x), laid out like a training
+/// app's share card: the map up top, condensed stats below.
+struct StoryCard: View {
+    let map: StoryMap
+    let title: String
+    let date: String
+    let coins: Int
+    let stats: [(String, String)]
+    let extras: [(String, String)]
+    let colorHex: String
+
+    private let ink = Color(hex: "0B0B14")
+    private let muted = Color(hex: "9A9DB8")
+
+    private func label(_ s: String) -> some View {
+        Text(s.uppercased()).font(.system(size: 10.5, weight: .semibold)).tracking(1.2).foregroundStyle(muted)
+    }
+    private func value(_ s: String, size: CGFloat) -> some View {
+        Text(s).font(.system(size: size, weight: .bold).width(.condensed)).foregroundStyle(.white).lineLimit(1).fixedSize()
+    }
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            ink
+            map.frame(width: 360, height: 420).clipped()
+                .overlay(alignment: .bottom) {
+                    LinearGradient(colors: [ink.opacity(0), ink.opacity(0.85), ink], startPoint: .top, endPoint: .bottom).frame(height: 150)
+                }
+                .overlay(alignment: .top) {
+                    LinearGradient(colors: [ink.opacity(0.7), ink.opacity(0)], startPoint: .top, endPoint: .bottom).frame(height: 90)
+                }
+            VStack(alignment: .leading, spacing: 0) {
+                Spacer().frame(height: 350)
+                Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(.white.opacity(0.92)).lineLimit(1)
+                Text(date).font(.system(size: 12, weight: .medium)).foregroundStyle(muted).padding(.top, 2)
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(coins.formatted()).font(.system(size: 64, weight: .heavy).width(.condensed)).foregroundStyle(Color(hex: "FFC83D"))
+                    Text("COINS\nCOLLECTED").font(.system(size: 13, weight: .heavy).width(.condensed)).tracking(0.8)
+                        .foregroundStyle(.white).lineSpacing(-2)
+                }
+                .padding(.top, 10)
+                Rectangle().fill(.white.opacity(0.12)).frame(height: 1).padding(.vertical, 14)
+                HStack(alignment: .top, spacing: 0) {
+                    ForEach(Array(stats.enumerated()), id: \.offset) { _, s in
+                        VStack(alignment: .leading, spacing: 3) { label(s.0); value(s.1, size: 26) }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                HStack(alignment: .top, spacing: 0) {
+                    ForEach(Array(extras.enumerated()), id: \.offset) { _, s in
+                        VStack(alignment: .leading, spacing: 3) { label(s.0); value(s.1, size: 26) }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    ForEach(0..<max(0, stats.count - extras.count), id: \.self) { _ in Color.clear.frame(maxWidth: .infinity, maxHeight: 1) }
+                }
+                .padding(.top, 14)
+                Spacer()
+                HStack(spacing: 7) {
+                    Image(uiImage: CoinIcon.render(colorHex: "FFC83D")).resizable().frame(width: 18, height: 18)
+                    Text("CHOMP").font(.system(size: 15, weight: .black).width(.condensed)).tracking(2).foregroundStyle(.white)
+                    Spacer()
+                    Text("Run your streets · App Store").font(.system(size: 11, weight: .semibold)).foregroundStyle(muted)
+                }
+                .padding(.bottom, 86)
+            }
+            .padding(.horizontal, 26)
+        }
+        .frame(width: 360, height: 640)
     }
 }
