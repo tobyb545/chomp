@@ -13,3 +13,4 @@ __pycache__/
 backend/supabase/.temp/
 backend/supabase/.branches/
 node_modules/
+marketing/*.mp4

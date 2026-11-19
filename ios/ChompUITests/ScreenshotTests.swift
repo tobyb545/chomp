@@ -73,4 +73,49 @@ final class ScreenshotTests: XCTestCase {
         sleep(12)  // let the replay finish drawing
         save("04-summary")
     }
+
+    // MARK: Reel footage
+    // The host records the simulator screen; this test plays the scenes and writes
+    // wall-clock marks to marks.json so tools/make-reels.swift can cut them.
+    private var marks: [String: Double] = [:]
+    private func mark(_ name: String) {
+        marks[name] = Date().timeIntervalSince1970
+        let data = try! JSONSerialization.data(withJSONObject: marks)
+        try? data.write(to: dir.appendingPathComponent("marks.json"))
+    }
+
+    func testReelFootage() {
+        app.launch()
+        XCTAssertTrue(app.buttons["START RUN"].waitForExistence(timeout: 60))
+        let loading = app.staticTexts["Loading the streets around you…"]
+        let noTokens = app.staticTexts.matching(NSPredicate(format: "label CONTAINS '· 0 tokens'")).firstMatch
+        for _ in 0..<60 where loading.exists || noTokens.exists { sleep(3) }
+        sleep(6)
+        mark("map")
+        sleep(4)
+        let mid = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.55))
+        mid.press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.35, dy: 0.42)), withVelocity: 120, thenHoldForDuration: 0.3)
+        sleep(2)
+        mark("startRun")
+        app.buttons["START RUN"].tap()
+        let sim = app.buttons["Simulated run (demo)"]
+        XCTAssertTrue(sim.waitForExistence(timeout: 5))
+        sim.tap()
+        XCTAssertTrue(app.staticTexts["HOLD TO FINISH"].waitForExistence(timeout: 10))
+        mark("run")
+        sleep(55)
+        mark("finish")
+        app.staticTexts["HOLD TO FINISH"].press(forDuration: 1.6)
+        XCTAssertTrue(app.staticTexts["Tokens eaten"].waitForExistence(timeout: 60))
+        mark("summary")
+        sleep(10)
+        done()
+        XCTAssertTrue(app.buttons["START RUN"].waitForExistence(timeout: 10))
+        sleep(1)
+        app.buttons["Leaderboards"].tap()
+        XCTAssertTrue(app.navigationBars["Leaderboards"].waitForExistence(timeout: 5))
+        mark("leaderboard")
+        sleep(5)
+        mark("end")
+    }
 }
