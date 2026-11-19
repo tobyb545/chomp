@@ -11,7 +11,7 @@ struct LeaderboardView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @State private var board: Board = .runners
-    @State private var scope: LeaderboardScope = .nearby
+    @State private var scope: LeaderboardScope = AppModel.marketing ? .global : .nearby
     @State private var clubScope: ClubScope = .nearby
     @State private var entries: [LeaderboardEntry] = []
     @State private var clubs: [ClubStanding] = []
@@ -67,7 +67,7 @@ struct LeaderboardView: View {
                 .accessibilityElement(children: .combine)
             }
         }
-        Section(model.placeName) {
+        Section(scope == .nearby ? model.placeName : scope.label) {
             ForEach(Array(sorted.enumerated()), id: \.element.id) { i, e in
                 Button { if !e.isMe && !e.isBot { selected = e } } label: { row(rank: i + 1, e) }
                     .buttonStyle(.plain)
@@ -121,10 +121,27 @@ struct LeaderboardView: View {
         .accessibilityLabel("Rank \(rank), \(e.name)\(e.isBot ? ", bot" : ""), \(e.tokens) tokens")
     }
 
+    /// Made-up rivals for App Store screenshots only (`-marketing`, debug builds).
+    private static func marketingEntries(me: PlayerProfile) -> [LeaderboardEntry] {
+        let rivals: [(String, String, Int)] = [
+            ("Priya K", "FF6FA1", 4_812), ("Marcus T", "3BA8FF", 4_177), ("Sofia R", "FFB020", 3_640),
+            ("Jonah W", "7B61FF", 2_955), ("Elena M", "2ED3B7", 1_728), ("Theo B", "FF7A45", 1_391),
+            ("Hana S", "A3E635", 1_206), ("Leo D", "F472B6", 988), ("Grace O", "38BDF8", 874),
+            ("Sam P", "FACC15", 731), ("Nina V", "C084FC", 652), ("Oscar L", "34D399", 540),
+            ("Maya J", "FB7185", 467),
+        ]
+        var list = rivals.enumerated().map { i, r in
+            LeaderboardEntry(id: "m\(i)", rank: 0, name: r.0, colorHex: r.1, isBot: false, isMe: false, tokens: r.2)
+        }
+        list.append(LeaderboardEntry(id: "me", rank: 0, name: me.name, colorHex: me.colorHex, isBot: false, isMe: true, tokens: 2_316))
+        return list
+    }
+
     private func load() async {
         error = nil
         switch board {
         case .runners:
+            if AppModel.marketing { entries = Self.marketingEntries(me: model.profile); return }
             do { entries = try await model.leaderboard(scope: scope) } catch {
                 entries = []
                 self.error = scope == .nearby ? error.localizedDescription
