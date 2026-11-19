@@ -127,7 +127,7 @@ struct RootView: View {
             Text(healthMessage)
         }
         .overlay(alignment: .top) { ToastView() }
-        .tint(Color(hex: model.profile.colorHex))
+        .tint(Theme.readableTint(model.profile.colorHex))
     }
 }
 

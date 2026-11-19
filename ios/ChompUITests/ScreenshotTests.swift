@@ -69,7 +69,7 @@ final class ScreenshotTests: XCTestCase {
         sleep(45)
         save("02-run")
         app.staticTexts["HOLD TO FINISH"].press(forDuration: 1.6)
-        XCTAssertTrue(app.staticTexts["Tokens eaten"].waitForExistence(timeout: 60))
+        XCTAssertTrue(app.staticTexts["Coins collected"].waitForExistence(timeout: 60))
         sleep(12)  // let the replay finish drawing
         save("04-summary")
     }
@@ -106,7 +106,7 @@ final class ScreenshotTests: XCTestCase {
         sleep(55)
         mark("finish")
         app.staticTexts["HOLD TO FINISH"].press(forDuration: 1.6)
-        XCTAssertTrue(app.staticTexts["Tokens eaten"].waitForExistence(timeout: 60))
+        XCTAssertTrue(app.staticTexts["Coins collected"].waitForExistence(timeout: 60))
         mark("summary")
         sleep(10)
         done()
@@ -128,5 +128,103 @@ final class ScreenshotTests: XCTestCase {
         for _ in 0..<6 where !(header.exists && header.frame.minY > 120 && header.frame.minY < 400) { app.swipeUp(velocity: 400) }
         sleep(1)
         save("badges")
+    }
+
+    // MARK: Full tour (every screen, for review)
+
+    private func tap(_ e: XCUIElement, _ name: String = "") {
+        XCTAssertTrue(e.waitForExistence(timeout: 10), "missing \(e) \(name)")
+        e.tap()
+    }
+    private func scrollTo(_ e: XCUIElement) {
+        for _ in 0..<8 where !(e.exists && e.isHittable) { app.swipeUp(velocity: 500) }
+    }
+    private var prefix: String { ProcessInfo.processInfo.environment["CHOMP_TOUR_PREFIX"] ?? "" }
+    private func shot(_ n: String) { sleep(1); save(prefix + n) }
+
+    func testTourIntroAndOnboarding() {
+        app.launchArguments = ["-demo", "-intro", "-marketing"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Skip"].waitForExistence(timeout: 20))
+        var n = 1
+        shot("t00-intro-\(n)")
+        while app.buttons["Next"].exists && n < 8 { app.buttons["Next"].tap(); n += 1; sleep(1); shot("t00-intro-\(n)") }
+        app.terminate()
+        app.launchArguments = ["-onboarding"]
+        app.launch()
+        tap(app.buttons["That's me"]); shot("t01-onboard-1")
+        let field = app.textFields["Runner name"]; tap(field); field.typeText("Sam")
+        shot("t01-onboard-2")
+        tap(app.buttons["Next"]); shot("t01-onboard-3")
+        tap(app.buttons["Not now"]); shot("t01-onboard-4")
+    }
+
+    func testTourMainScreens() {
+        app.launch()
+        XCTAssertTrue(app.buttons["START RUN"].waitForExistence(timeout: 90))
+        sleep(6); shot("t02-map")
+        tap(app.buttons["Leaderboards"]); shot("t03-leader-runners")
+        app.segmentedControls.buttons["Nearby"].tap(); shot("t03-leader-nearby")
+        app.segmentedControls.buttons["Friends"].tap(); shot("t03-leader-friends")
+        app.segmentedControls.buttons["Clubs"].tap(); shot("t03-leader-clubs")
+        done()
+        tap(app.buttons["Activity"]); shot("t04-activity"); done()
+        tap(app.buttons["Streets"]); shot("t05-streets"); done()
+        let chip = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Run streak'")).firstMatch
+        tap(chip); shot("t06-goals"); done()
+        tap(app.buttons["Plan a route"].firstMatch); shot("t07-route-sheet")
+        app.buttons["Grab streets"].tap()
+        app.collectionViews.buttons["Plan a route"].tap()
+        XCTAssertTrue(app.buttons["Show it on the map"].waitForExistence(timeout: 30)); shot("t07-route-planned")
+        app.buttons["Show it on the map"].tap(); shot("t07-route-map")
+        app.buttons["Clear planned route"].tap()
+
+        tap(app.buttons["Profile and settings"]); shot("t08-profile-1")
+        app.swipeUp(velocity: 500); shot("t08-profile-2")
+        app.swipeUp(velocity: 500); shot("t08-profile-3")
+        app.swipeUp(velocity: 500); shot("t08-profile-4")
+        let firstBadge = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'First bite'")).firstMatch
+        scrollTo(firstBadge); firstBadge.tap(); shot("t09-badge-detail")
+        app.buttons["Done"].firstMatch.tap()
+        let clubs = app.buttons["Clubs & friends"]; scrollTo(clubs)
+        if !clubs.exists { app.swipeDown(velocity: 2000); app.swipeDown(velocity: 2000); scrollTo(clubs) }
+        tap(clubs); shot("t10-clubs"); app.navigationBars.buttons.element(boundBy: 0).tap()
+        let pro = app.buttons["Get Chomp Pro"]; scrollTo(pro)
+        if pro.exists {
+            pro.tap(); sleep(2); shot("t11-paywall")
+            XCTAssertFalse(app.navigationBars["Profile"].isHittable, "paywall covers Profile")
+            app.swipeDown(velocity: 2000); sleep(1)
+        }
+        let settings = app.buttons["Settings"]; scrollTo(settings); tap(settings); shot("t12-settings-1")
+        app.swipeUp(velocity: 500); shot("t12-settings-2")
+        app.swipeUp(velocity: 500); shot("t12-settings-3")
+        let zones = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Privacy zones'")).firstMatch
+        for _ in 0..<4 where !zones.exists { app.swipeDown(velocity: 500) }
+        if zones.exists { zones.tap(); shot("t13-privacy-zones"); app.navigationBars.buttons.element(boundBy: 0).tap() }
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        for _ in 0..<6 { app.swipeDown(velocity: 2000) }
+        let invite = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Invite a friend'")).firstMatch
+        scrollTo(invite); if invite.exists { invite.tap(); shot("t14-invite"); app.navigationBars.buttons.element(boundBy: 0).tap() }
+        // Start over from the map so the Profile list is in a known state.
+        while app.navigationBars.buttons["Done"].exists == false && app.navigationBars.buttons.count > 0 {
+            app.navigationBars.buttons.element(boundBy: 0).tap(); sleep(1)
+        }
+        if app.navigationBars.buttons["Done"].exists { app.navigationBars.buttons["Done"].tap() }
+        XCTAssertTrue(app.buttons["START RUN"].waitForExistence(timeout: 10))
+        tap(app.buttons["Profile and settings"])
+        let practice = app.buttons["Practice run"]
+        scrollTo(practice); tap(practice)
+        XCTAssertTrue(app.staticTexts["Practice"].waitForExistence(timeout: 30)); sleep(10); shot("t15-practice")
+        XCTAssertTrue(app.staticTexts["You've got it"].waitForExistence(timeout: 60)); shot("t15-practice-done")
+        app.buttons["Got it"].tap()
+        XCTAssertTrue(app.buttons["START RUN"].waitForExistence(timeout: 10))
+        app.buttons["START RUN"].tap()
+        tap(app.buttons["Simulated run (demo)"])
+        XCTAssertTrue(app.staticTexts["HOLD TO FINISH"].waitForExistence(timeout: 10)); sleep(20); shot("t16-run")
+        app.buttons["Pause"].tap(); shot("t16-paused"); app.buttons["Resume"].tap()
+        app.staticTexts["HOLD TO FINISH"].press(forDuration: 1.6)
+        XCTAssertTrue(app.staticTexts["Coins collected"].waitForExistence(timeout: 60)); sleep(6); shot("t17-summary-1")
+        app.swipeUp(velocity: 500); shot("t17-summary-2")
+        app.swipeUp(velocity: 500); shot("t17-summary-3")
     }
 }

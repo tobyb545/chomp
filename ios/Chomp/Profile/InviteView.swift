@@ -94,7 +94,7 @@ struct InviteView: View {
     }
 
     private func shareText(_ code: String) -> String {
-        "Come and play Chomp with me: run your streets to eat the tokens and claim them before anyone else. "
+        "Come and play Chomp with me: run your streets to collect the coins and claim them before anyone else. "
             + "Join with my code \(code) and you get a month of Chomp Pro free. chomp://invite/\(code)"
     }
 

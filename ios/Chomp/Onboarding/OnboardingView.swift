@@ -71,7 +71,7 @@ struct OnboardingView: View {
                 .onSubmit { if valid { step = 2 } }
                 .onChange(of: name) { _, v in if v.count > 20 { name = String(v.prefix(20)) } }
             Text("Shown on leaderboards. You can play fully private later.").font(.footnote).foregroundStyle(Theme.hudSecondary)
-            next("Next") { step = 2 }.disabled(!valid).opacity(valid ? 1 : 0.4)
+            next("Next") { step = 2 }.disabled(!valid).grayscale(valid ? 0 : 1).brightness(valid ? 0 : -0.3)
         }
     }
 

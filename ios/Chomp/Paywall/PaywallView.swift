@@ -9,7 +9,7 @@ struct PaywallView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
-                    Text("CHOMP PRO").font(Theme.display(.largeTitle)).foregroundStyle(Color(hex: model.profile.colorHex))
+                    Text("CHOMP PRO").font(Theme.display(.largeTitle)).foregroundStyle(Theme.readableTint(model.profile.colorHex))
                         .accessibilityAddTraits(.isHeader)
                     Text("More ways to show off. Never more power: Pro can't help you capture or defend a single street.")
                         .multilineTextAlignment(.center).font(.headline).foregroundStyle(Theme.textSecondary)

@@ -28,7 +28,7 @@ struct RunHUDView: View {
                             StatTile(value: formatDistance(run.distance, miles: model.profile.useMiles), label: "Distance")
                             StatTile(value: RunMath.formatPace(run.paceSecondsPerKm), label: "Pace /km")
                             StatTile(value: "\(run.streetsCaptured)", label: "Streets", tint: Color(hex: model.profile.colorHex))
-                            StatTile(value: "\(run.pelletsEaten)", label: "Tokens", tint: Theme.pellet)
+                            StatTile(value: "\(run.pelletsEaten)", label: "Coins", tint: Theme.pellet)
                         }
                         if run.isFrenzy, let end = run.frenzyEndsAt {
                             HStack {

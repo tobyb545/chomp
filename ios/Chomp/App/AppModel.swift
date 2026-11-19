@@ -278,6 +278,9 @@ final class AppModel {
     private func seedDemoIfRequested() async {
         let args = ProcessInfo.processInfo.arguments
         if args.contains("-demo") { profile.seenIntro = !args.contains("-intro") }
+        if args.contains("-onboarding") {   // walk onboarding again (UI tour)
+            profile.seenIntro = true; profile.onboarded = false; return
+        }
         if let i = args.firstIndex(of: "-mapLook"), i + 1 < args.count, let look = PlayerProfile.MapLook(rawValue: args[i + 1]) {
             profile.mapLook = look
         }
@@ -303,6 +306,8 @@ final class AppModel {
         let sim = RouteSimulator(area: area)
         let ghosts = GhostSimulator(engine: engine)
         let start = Date().addingTimeInterval(-6 * 86_400)
+        quietRuns = true
+        defer { quietRuns = false }
         ghosts.ensureGhosts(state: &state, playerColorHex: profile.colorHex, now: start)
         for day in 0..<6 {
             let t = start.addingTimeInterval(Double(day) * 86_400 + 7 * 3600)
@@ -480,7 +485,7 @@ final class AppModel {
     func completeRun(id: UUID, trace raw: [TracePoint], signals: RunSignals, startedAt: Date, endedAt: Date, simulated: Bool) async {
         guard let record = await resolve(id: id, raw: raw, signals: signals, startedAt: startedAt, endedAt: endedAt,
                                          source: .live, isImport: false, simulated: simulated) else { return }
-        presentedSummary = record
+        if !quietRuns { presentedSummary = record }
         plannedRoute = nil
         if record.outcome.conqueredTown { Feedback.shared.play(.block) }
         if !simulated {
@@ -755,6 +760,8 @@ final class AppModel {
 
     /// Badges earned on the last run, shown one at a time once the run summary is closed.
     var pendingBadges: [Badge] = []
+    /// Demo seeding: don't pop up a summary for each seeded run.
+    private var quietRuns = false
 
     var badgeStats: BadgeStats {
         let facts = runFacts

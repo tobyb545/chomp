@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 import ChompKit
 
 struct RunSummaryView: View {
+    @State private var paywall = false
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     let record: RunRecord
@@ -37,6 +38,7 @@ struct RunSummaryView: View {
             }
             .background(Theme.background)
             .navigationTitle(record.startedAt.formatted(date: .abbreviated, time: .shortened))
+            .sheet(isPresented: $paywall) { PaywallView() }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
             .task {
@@ -101,7 +103,7 @@ struct RunSummaryView: View {
 
     private var headline: some View {
         VStack(spacing: 4) {
-            Text("+\(outcome.totalPoints)").font(Theme.display(.largeTitle)).foregroundStyle(Color(hex: model.profile.colorHex))
+            Text("+\(outcome.totalPoints)").font(Theme.display(.largeTitle)).foregroundStyle(Theme.readableTint(model.profile.colorHex))
             Text("points").font(.headline).foregroundStyle(Theme.textSecondary)
             if outcome.conqueredTown {
                 Label("You conquered a whole map square!", systemImage: "crown.fill")
@@ -127,8 +129,8 @@ struct RunSummaryView: View {
                 tile("\(lost)", "Lost this week")
             }
             GridRow {
-                tile("\(record.tokens ?? model.tokens(of: outcome, in: model.area))", "Tokens eaten")
-                tile("\(model.state.tokens(of: model.state.me).formatted())", "All-time tokens")
+                tile("\(record.tokens ?? model.tokens(of: outcome, in: model.area))", "Coins collected")
+                tile("\(model.state.tokens(of: model.state.me).formatted())", "All-time coins")
                 tile(model.streak.current > 0 ? "\(model.streak.current) day\(model.streak.current == 1 ? "" : "s")" : "–", "Run streak")
             }
         }
@@ -179,7 +181,7 @@ struct RunSummaryView: View {
             }
             if outcome.blockBonus > 0 {
                 Label("\(outcome.blocksCompleted.count) block\(outcome.blocksCompleted.count == 1 ? "" : "s") filled: +\(outcome.blockBonus)", systemImage: "square.grid.3x3.fill")
-                    .foregroundStyle(Color(hex: model.profile.colorHex))
+                    .foregroundStyle(Theme.readableTint(model.profile.colorHex))
             }
         }
         .font(.subheadline.weight(.semibold))
@@ -259,7 +261,7 @@ struct RunSummaryView: View {
             } else {
                 Button {
                     if model.pro.isPro { Task { exporting = true; gifURL = await exportGIF(); exporting = false } }
-                    else { model.showPaywall = true }
+                    else { paywall = true }
                 } label: {
                     Label(exporting ? "Rendering…" : "Export replay (Pro)", systemImage: "film.stack")
                 }

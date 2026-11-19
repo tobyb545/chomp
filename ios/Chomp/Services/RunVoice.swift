@@ -48,7 +48,7 @@ final class RunVoice {
         guard !pendingStreets.isEmpty else { return }
         let what = pendingStreets.count == 1 ? pendingStreets[0] : "\(pendingStreets.count) streets"
         let verb = pendingStolen == pendingStreets.count ? "Stole" : "Captured"
-        var line = "\(verb) \(what). \(pendingTokens) tokens."
+        var line = "\(verb) \(what). \(pendingTokens) coins."
         if pendingStolen > 0, pendingStolen < pendingStreets.count { line += " \(pendingStolen) taken from rivals." }
         say(line)
     }

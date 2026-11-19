@@ -27,7 +27,7 @@ struct LeaderboardView: View {
                     if board == .runners {
                         Picker("Scope", selection: $scope) { ForEach(LeaderboardScope.allCases) { Text($0.label).tag($0) } }
                             .pickerStyle(.segmented)
-                        Text("Ranked by tokens captured: every coin you run past.")
+                        Text("Ranked by coins collected: every coin you run past counts.")
                             .font(.footnote).foregroundStyle(Theme.textSecondary)
                     } else {
                         Picker("Area", selection: $clubScope) { ForEach(ClubScope.allCases) { Text($0.label).tag($0) } }
@@ -299,7 +299,7 @@ struct StreetListView: View {
                         .foregroundStyle(Theme.textSecondary)
                 } else if filter == .near, query.isEmpty {
                     let tokens = list.prefix(20).reduce(0) { $0 + $1.tokens }
-                    Text("The 20 closest hold \(tokens.formatted()) tokens. Closest first.")
+                    Text("The 20 closest hold \(tokens.formatted()) coins. Closest first.")
                         .font(.footnote).foregroundStyle(Theme.textSecondary)
                 }
                 ForEach(list.prefix(300)) { r in
@@ -323,7 +323,7 @@ struct StreetListView: View {
                                     .accessibilityLabel("strength \(Int(r.strength * 100)) percent")
                             } else {
                                 Label("\(r.tokens)", systemImage: "circle.fill").labelStyle(TokenCountStyle())
-                                    .accessibilityLabel("\(r.tokens) tokens")
+                                    .accessibilityLabel("\(r.tokens) coins")
                             }
                         }
                     }

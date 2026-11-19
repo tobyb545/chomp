@@ -18,8 +18,8 @@ struct IntroCardsView: View {
         let frenzyMin = Int(r.frenzy.durationSeconds / 60)
         let importDays = Int(r.imports.captureWindowHours / 24)
         return [
-            IntroCard(scene: .tokens, title: "Every street is full of tokens",
-                      body: "Wherever you are, the streets on the map are lined with white coins. Run along a street to collect them."),
+            IntroCard(scene: .tokens, title: "Every street is full of coins",
+                      body: "Wherever you are, the streets on the map are lined with silver coins. Run along a street to collect them."),
             IntroCard(scene: .capture, title: "Run past coins to make them yours",
                       body: "Every coin you run past turns gold: it's yours. You don't need to finish the street, and running the pavement counts for the road."),
             IntroCard(scene: .rivals, title: "Defend your streets",
@@ -31,7 +31,7 @@ struct IntroCardsView: View {
             IntroCard(scene: .health, title: "Forgot to press start?",
                       body: "Add the run from Apple Health afterwards. Runs from the last \(importDays) days still capture streets."),
             IntroCard(scene: .leaderboard, title: "Climb the leaderboard",
-                      body: "Rankings count the tokens you've captured: nearby, worldwide, with friends and in your club. Invite a friend and you both get a month of Pro."),
+                      body: "Rankings count the coins you've collected: nearby, worldwide, with friends and in your club. Invite a friend and you both get a month of Pro."),
         ]
     }
 

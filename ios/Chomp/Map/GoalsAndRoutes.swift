@@ -172,7 +172,7 @@ struct RoutePlannerSheet: View {
                     Section("Route") {
                         LabeledContent("Distance", value: formatDistance(r.distance, miles: miles))
                         LabeledContent("Streets to chomp", value: "\(r.targets)")
-                        LabeledContent("Tokens on them", value: r.tokens.formatted())
+                        LabeledContent("Coins on them", value: r.tokens.formatted())
                     }
                 } else if failed {
                     Section {

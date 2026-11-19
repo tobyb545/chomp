@@ -170,7 +170,7 @@ final class RunSession {
         LiveActivityController.shared.end(liveState)
         Feedback.shared.play(.finish)
         RunVoice.shared.stop()
-        RunVoice.shared.say("Run finished. \(streetsCaptured) street\(streetsCaptured == 1 ? "" : "s"), \(pelletsEaten) tokens.")
+        RunVoice.shared.say("Run finished. \(streetsCaptured) street\(streetsCaptured == 1 ? "" : "s"), \(pelletsEaten) coins.")
         let captured = trace
         let id = runID
         let wasSimulated = simulated

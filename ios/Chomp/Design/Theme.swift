@@ -7,6 +7,22 @@ enum Theme {
         Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(Color(hex: dark)) : UIColor(Color(hex: light)) })
     }
 
+    /// The player's colour for buttons and links. Light colours (like the default lime)
+    /// are darkened on light backgrounds so text stays readable; dark mode uses them as-is.
+    static func readableTint(_ hex: String) -> Color {
+        let base = UIColor(Color(hex: hex))
+        return Color(UIColor { traits in
+            guard traits.userInterfaceStyle != .dark else { return base }
+            var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+            base.getRed(&r, green: &g, blue: &b, alpha: &a)
+            let luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+            guard luminance > 0.5 else { return base }
+            // Scale down until it contrasts with white (target luminance ~0.3).
+            let k = 0.3 / luminance
+            return UIColor(red: r * k, green: g * k, blue: b * k, alpha: a)
+        })
+    }
+
     static let background = dynamic(light: "F4F3FA", dark: "07070E")
     static let surface = dynamic(light: "FFFFFF", dark: "14142A")
     static let surfaceRaised = dynamic(light: "ECEBF6", dark: "1D1D38")

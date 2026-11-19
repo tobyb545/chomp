@@ -4,6 +4,7 @@ import SwiftUI
 import ChompKit
 
 struct ProfileView: View {
+    @State private var paywall = false
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
 
@@ -45,11 +46,12 @@ struct ProfileView: View {
                     NavigationLink { ClubsView() } label: { Label("Clubs & friends", systemImage: "person.3.fill") }
                     NavigationLink { SettingsView() } label: { Label("Settings", systemImage: "gearshape.fill") }
                     if !model.pro.isPro {
-                        Button { model.showPaywall = true } label: { Label("Get Chomp Pro", systemImage: "sparkles") }
+                        Button { paywall = true } label: { Label("Get Chomp Pro", systemImage: "sparkles") }
                     }
                 }
             }
             .navigationTitle("Profile")
+            .sheet(isPresented: $paywall) { PaywallView() }
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
         }
     }
@@ -74,6 +76,7 @@ struct RunRow: View {
 }
 
 struct StatsSection: View {
+    @State private var paywall = false
     @Environment(AppModel.self) private var model
 
     var body: some View {
@@ -81,7 +84,7 @@ struct StatsSection: View {
         let live = model.runs.filter { $0.source == .live && !$0.simulated }
         let totalKm = live.reduce(0) { $0 + $1.distance } / 1000
         Group {
-            LabeledContent("Tokens captured", value: model.state.tokens(of: model.state.me).formatted())
+            LabeledContent("Coins collected", value: model.state.tokens(of: model.state.me).formatted())
             LabeledContent("Streets held", value: "\(model.streetsHeldEverywhere)")
             LabeledContent("Held around \(model.placeName)", value: p.heldFraction.percentString)
             LabeledContent("Explored around \(model.placeName)", value: p.exploredFraction.percentString)
@@ -93,11 +96,12 @@ struct StatsSection: View {
                 LabeledContent("Most-run street", value: mostRun ?? "–")
                 Toggle("Heatmap on the map", isOn: Bindable(model).heatmapOn)
             } else {
-                Button { model.showPaywall = true } label: {
+                Button { paywall = true } label: {
                     Label("Detailed stats and heatmaps with Pro", systemImage: "chart.xyaxis.line")
                 }
             }
         }
+        .sheet(isPresented: $paywall) { PaywallView() }
     }
 
     private var mostRun: String? {
@@ -109,6 +113,7 @@ struct StatsSection: View {
 }
 
 struct SettingsView: View {
+    @State private var paywall = false
     @Environment(AppModel.self) private var model
     @Environment(\.webAuthenticationSession) private var webAuth
     @State private var importing = false
@@ -149,7 +154,7 @@ struct SettingsView: View {
                         ForEach(PlayerProfile.TrailStyle.allCases) { Text($0.label).tag($0) }
                     }
                 } else {
-                    Button("Custom colours & trails (Pro)") { model.showPaywall = true }
+                    Button("Custom colours & trails (Pro)") { paywall = true }
                 }
             }
 
@@ -218,7 +223,7 @@ struct SettingsView: View {
                     }
                 }.disabled(importing)
                 Button(importing ? "Importing…" : "Import from Strava (Pro)") {
-                    guard model.pro.isPro else { model.showPaywall = true; return }
+                    guard model.pro.isPro else { paywall = true; return }
                     Task {
                         importing = true
                         importResult = await StravaImport.run(model: model, webAuth: webAuth)
@@ -260,7 +265,7 @@ struct SettingsView: View {
 
             Section("Chomp Pro") {
                 if model.pro.isPro { Label("Pro is active", systemImage: "checkmark.seal.fill") }
-                else { Button("See Pro") { model.showPaywall = true } }
+                else { Button("See Pro") { paywall = true } }
                 Button("Restore purchases") { Task { await model.pro.restore() } }
                 #if DEBUG
                 Toggle("Debug: pretend Pro", isOn: $model.profile.debugPro)
@@ -275,6 +280,7 @@ struct SettingsView: View {
             }
         }
         .navigationTitle("Settings")
+            .sheet(isPresented: $paywall) { PaywallView() }
         .confirmationDialog("Reset everything?", isPresented: $confirmReset, titleVisibility: .visible) {
             Button("Reset", role: .destructive) { Task { await model.resetAllData() } }
         } message: { Text("Deletes your streets, runs and settings from this phone.") }

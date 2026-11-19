@@ -217,9 +217,9 @@ final class SupabaseBackend: @unchecked Sendable {
             guard let client else { continuation.finish(); return }
             let task = Task {
                 let channel = client.channel("ownership:\(tiles.first ?? "")")
-                let list = tiles.map { "\"\($0)\"" }.joined(separator: ",")
-                let changes = channel.postgresChange(AnyAction.self, schema: "public", table: "segment_ownership_feed", filter: "tile=in.(\(list))")
-                await channel.subscribe()
+                let changes = channel.postgresChange(AnyAction.self, schema: "public", table: "segment_ownership_feed",
+                                                     filter: .in("tile", values: tiles))
+                do { try await channel.subscribeWithError() } catch { continuation.finish(); return }
                 let decoder = JSONDecoder()
                 decoder.dateDecodingStrategy = .iso8601
                 for await change in changes {

@@ -114,7 +114,7 @@ final class ChompUITests: XCTestCase {
         waitForMap()
         app.buttons["Profile and settings"].tap()
         XCTAssertTrue(app.navigationBars["Profile"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Tokens captured"].exists)
+        XCTAssertTrue(app.staticTexts["Coins collected"].exists)
         shot("profile")
 
         reveal(app.buttons.matching(NSPredicate(format: "label CONTAINS 'Invite a friend'")).firstMatch).tap()
@@ -153,11 +153,11 @@ final class ChompUITests: XCTestCase {
         app.buttons["Resume"].tap()
         sleep(25)  // let it eat some streets
         shot("run-hud")
-        XCTAssertTrue(app.staticTexts["Tokens"].exists)
+        XCTAssertTrue(app.staticTexts["Coins"].exists)
         app.buttons["Turn off spoken updates"].firstMatch.tap()
         _ = finish
         app.staticTexts["HOLD TO FINISH"].press(forDuration: 1.6)
-        XCTAssertTrue(app.staticTexts["Tokens eaten"].waitForExistence(timeout: 60), "run summary")
+        XCTAssertTrue(app.staticTexts["Coins collected"].waitForExistence(timeout: 60), "run summary")
         XCTAssertTrue(app.staticTexts["THIS WEEK"].exists)
         shot("summary")
         app.swipeUp()
@@ -176,7 +176,7 @@ final class ChompUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS 'Nothing counts'")).firstMatch.waitForExistence(timeout: 5),
                       "first coaching tip")
         XCTAssertTrue(app.staticTexts["You've got it"].waitForExistence(timeout: 70), "practice result after 45 s")
-        XCTAssertFalse(app.staticTexts["Tokens eaten"].exists, "no run summary: nothing was saved")
+        XCTAssertFalse(app.staticTexts["Coins collected"].exists, "no run summary: nothing was saved")
         app.buttons["Got it"].tap()
         waitForMap()
     }
