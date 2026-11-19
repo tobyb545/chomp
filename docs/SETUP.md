@@ -94,3 +94,15 @@ problem, run your own Overpass instance and put its URL first in `WorldStore.swi
 
 Edit `shared/rules.json`, then run `tools/sync-rules.sh`. Then run the Swift tests, then
 `cd backend && npm test`, then the Swift tests again, so the parity fixtures are regenerated.
+
+## 8. Website
+
+`website/` is a static site for GitHub Pages: the home page, `/invite/?c=CODE` and
+`/club/?c=CODE` landing pages for shared links, `/privacy/`, `/terms/` and `/contact/`.
+`.github/workflows/pages.yml` publishes it; turn Pages on with Source "GitHub Actions".
+All links are relative, so it works at a project path or on a custom domain.
+
+- Settings live in `website/assets/site.js`: `appStoreUrl` and `contactEmail`.
+- Set `CHOMP_WEB_URL` in `ios/Config/App.xcconfig` so the app shares website links and shows
+  the legal links. Leave it empty and the app falls back to `chomp://` links.
+- Preview locally: `cd website && python3 -m http.server` and open http://localhost:8000.

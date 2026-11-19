@@ -135,6 +135,7 @@ targets:
         SupabaseAnonKey: $(SUPABASE_ANON_KEY)
         RevenueCatAPIKey: $(REVENUECAT_API_KEY)
         StravaClientID: $(STRAVA_CLIENT_ID)
+        ChompWebURL: $(CHOMP_WEB_URL)
         MLNMapboxMetalRenderingEnabled: true
     settings:
       base:

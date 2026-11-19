@@ -44,6 +44,14 @@ struct PaywallView: View {
                     if let e = model.pro.lastError { Text(e).font(.footnote).foregroundStyle(Theme.danger) }
                     Text("Subscriptions renew automatically until cancelled in Settings › Apple ID › Subscriptions.")
                         .font(.caption).foregroundStyle(Theme.textSecondary).multilineTextAlignment(.center)
+                    // Required for subscriptions: links to the terms and privacy policy on the website.
+                    if let web = AppModel.webURL, let terms = URL(string: web + "/terms/"), let privacy = URL(string: web + "/privacy/") {
+                        HStack(spacing: 18) {
+                            Link("Terms of use", destination: terms)
+                            Link("Privacy policy", destination: privacy)
+                        }
+                        .font(.caption.weight(.semibold))
+                    }
                 }
                 .padding(20)
             }

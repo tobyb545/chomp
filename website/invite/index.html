@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>You're invited to Chomp</title>
+  <meta name="description" content="A friend invited you to Chomp, the running game where every street is covered in coins. Join with their code for a month of Chomp Pro free.">
+  <meta name="theme-color" content="#07070e">
+  <meta property="og:title" content="You're invited to Chomp">
+  <meta property="og:description" content="A friend invited you to Chomp, the running game where every street is covered in coins. Join with their code for a month of Chomp Pro free.">
+  <meta property="og:image" content="../assets/img/shot-1-make-running-fun.jpg">
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="../assets/img/favicon.png">
+  <link rel="apple-touch-icon" href="../assets/img/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Nunito:wght@800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="../"><img src="../assets/img/icon-256.png" alt="">Chomp</a>
+      <nav aria-label="Main" style="display:flex"><a class="btn small" data-download data-short href="#"><span data-download-label>Get Chomp</span></a></nav>
+    </div>
+  </header>
+  <main id="main" class="landing">
+    <div class="ticket">
+      <img class="app-icon" src="../assets/img/icon-256.png" alt="Chomp app icon" width="84" height="84">
+      <h1>You're invited to Chomp</h1>
+      <p class="sub">The running game where every street is covered in coins. Run past them to make them yours.</p>
+      <div data-has-code hidden>
+        <div class="code-chip" data-code aria-label="Invite code"></div>
+        <p class="sub">Join with this code and get <strong style="color:var(--text)">a month of Chomp Pro free</strong>.</p>
+        <div class="actions">
+          <a class="btn" data-open-app href="#">Open in Chomp</a>
+          <a class="btn ghost" data-download href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg><span data-download-label>Get Chomp</span></a>
+          <button class="btn ghost" type="button" data-copy>Copy code</button>
+        </div>
+        <div class="how">
+          <h2>New to Chomp?</h2>
+          <ol>
+            <li>Install Chomp and finish the quick setup.</li>
+            <li>Come back to this link and tap <strong>Open in Chomp</strong>, or go to <strong>Profile → Invite a friend</strong> and enter the code.</li>
+            <li>Go for a run. Your friend gets a free month too.</li>
+          </ol>
+          <p class="note">Works on new accounts within 30 days of joining, once per person. Online play needs Sign in with Apple.</p>
+        </div>
+      </div>
+      <div data-no-code>
+        <p class="sub" style="margin-top:18px">This invite link is missing its code. Ask your friend to send it again, or enter their code in the app under Profile → Invite a friend.</p>
+        <div class="actions"><a class="btn" data-download href="#"><span data-download-label>Get Chomp</span></a></div>
+      </div>
+    </div>
+  </main>
+  <footer class="site-footer">
+    <div class="wrap">
+      <span>© <span data-year>2026</span> Chomp. Map data © OpenStreetMap contributors.</span>
+      <nav aria-label="Footer">
+        <a href="../">Home</a>
+        <a href="../privacy/">Privacy</a>
+        <a href="../terms/">Terms</a>
+        <a href="../contact/">Contact</a>
+      </nav>
+    </div>
+  </footer>
+  <script src="../assets/site.js"></script>
+  <script>chompInvite("invite");</script>
+</body>
+</html>

@@ -3,13 +3,31 @@
 Status as of 19 Nov 2026, checked against the live Supabase project. Details for each step are
 in [SETUP.md](SETUP.md).
 
+## Website (built in `website/`)
+
+- [ ] **Turn on GitHub Pages**: repo Settings → Pages → Source: **GitHub Actions**. The
+  `Website` workflow publishes `website/` on every push to main (or run it from the Actions tab).
+- [ ] **Pick the address.** A project site lives at `https://tobyb545.github.io/<repo-name>/`,
+  so the current repo name (`pacman-run`) would appear in every invite link. Rename the repo
+  (e.g. `chomp`) or use a custom domain before sharing links.
+- [ ] **Set `CHOMP_WEB_URL`** in `ios/Config/App.xcconfig` (written `https:/$()/host/path`).
+  Invite and club links then point at the website, and the paywall and Settings show the
+  Terms, Privacy and Contact links that Apple requires for subscriptions.
+- [ ] **Set `contactEmail`** (and `appStoreUrl` once live) in `website/assets/site.js`.
+- [ ] **Optional, custom domain only: universal links**, so links open the app directly.
+  This needs the site at the domain root (it serves `.well-known/apple-app-site-association`)
+  plus the Associated Domains capability (`applinks:<domain>`) in the app. Until then the
+  invite page's "Open in Chomp" button does the same job.
+
 ## Supabase: needed for online play
 
-- [ ] **Run three migrations** in the SQL editor, in this order:
+- [ ] **Run four migrations** in the SQL editor, in this order:
   1. `backend/supabase/migrations/20261124000000_push.sql`: push tokens
   2. `backend/supabase/migrations/20261125000000_club_battles.sql`: club battles
   3. `backend/supabase/migrations/20261126000000_quiet_bots.sql`: bot names, retiring bots,
      the name check and the new leaderboard
+  4. `backend/supabase/migrations/20261127000000_delete_traces.sql`: lets account deletion
+     remove stored run traces
 
   The earlier migrations, up to `20261123000000_coins.sql`, are already live.
 - [ ] **Redeploy the Edge Functions** that changed:
@@ -41,10 +59,8 @@ in [SETUP.md](SETUP.md).
 
 ## App Store listing
 
-- [ ] **Privacy policy URL and terms of use (EULA) URL.** Apple requires both for
-  subscriptions, in the listing and on the paywall. Host them, then ask Claude to add the links
-  to the paywall. The terms should mention computer-controlled rivals.
-- [ ] **Support URL.**
+- [ ] **Privacy policy, terms and support URLs**: use the website's `/privacy/`, `/terms/` and
+  `/contact/` pages once it's live. Have someone review the policy and terms before launch.
 - [ ] **Create the app record** for `com.tobyb545.chomp`. Paste the text from
   `docs/APP_STORE.md` and upload `docs/screenshots/`.
 - [ ] **App Privacy questionnaire**: answers are in `docs/APP_STORE.md`.

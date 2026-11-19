@@ -1,0 +1,13 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["7KYR2X9MJA.com.tobyb545.chomp"],
+        "components": [
+          { "/": "/invite/*", "comment": "Friend invites" },
+          { "/": "/club/*", "comment": "Club invites" }
+        ]
+      }
+    ]
+  }
+}

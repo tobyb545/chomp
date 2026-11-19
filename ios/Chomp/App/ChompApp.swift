@@ -31,13 +31,10 @@ struct ChompApp: App {
                 .onOpenURL { url in
                     // chomp://run/start (from widgets / shortcuts)
                     if url.host == "run", url.path == "/start" { IntentRouter.shared.requestStart() }
-                    // chomp://invite/<code> (a friend's invite link)
-                    if url.host == "invite", let code = url.pathComponents.dropFirst().first {
-                        model.openInvite(code: code)
-                    }
-                    // chomp://club/<code> (a club's invite link)
-                    if url.host == "club", let code = url.pathComponents.dropFirst().first {
-                        model.openClubInvite(code: code)
+                    // Invite and club links: chomp://invite/<code>, chomp://club/<code>,
+                    // or the website's /invite/?c=<code> and /club/?c=<code> (universal links).
+                    if let link = AppModel.parseLink(url) {
+                        if link.kind == "invite" { model.openInvite(code: link.code) } else { model.openClubInvite(code: link.code) }
                     }
                 }
         }

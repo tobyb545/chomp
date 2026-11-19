@@ -123,6 +123,7 @@ struct SettingsView: View {
     @State private var nonce = ""
     @State private var accountError: String?
     @State private var nameError: String?
+    @State private var confirmDelete = false
     @State private var notificationsDenied = false
 
     var body: some View {
@@ -249,7 +250,17 @@ struct SettingsView: View {
                 } else if model.backend.isSignedIn {
                     LabeledContent("Signed in", value: "Apple")
                     Button("Sign out") { Task { await PushService.shared.unregister(); await model.backend.signOut() } }
-                    Button("Delete online account", role: .destructive) { Task { try? await model.backend.deleteAccount() } }
+                    Button("Delete online account", role: .destructive) { confirmDelete = true }
+                        .confirmationDialog("Delete your online account?", isPresented: $confirmDelete, titleVisibility: .visible) {
+                            Button("Delete account", role: .destructive) {
+                                Task {
+                                    do { try await model.backend.deleteAccount(); accountError = nil }
+                                    catch { accountError = "Couldn't delete your account: \(error.localizedDescription)" }
+                                }
+                            }
+                        } message: {
+                            Text("Your runner name, runs, streets and club memberships are removed from our servers. Runs on this phone stay. This can't be undone.")
+                        }
                 } else {
                     SignInWithAppleButton(.signIn) { req in
                         nonce = Nonce.random()
@@ -270,6 +281,15 @@ struct SettingsView: View {
                 }
                 if let accountError { Text(accountError).font(.footnote).foregroundStyle(Theme.danger) }
             } header: { Text("Online play") }
+
+            if let web = AppModel.webURL, let privacy = URL(string: web + "/privacy/"), let terms = URL(string: web + "/terms/"),
+               let contact = URL(string: web + "/contact/") {
+                Section("About") {
+                    Link("Privacy policy", destination: privacy)
+                    Link("Terms of use", destination: terms)
+                    Link("Contact and help", destination: contact)
+                }
+            }
 
             Section("Chomp Pro") {
                 if model.pro.isPro { Label("Pro is active", systemImage: "checkmark.seal.fill") }

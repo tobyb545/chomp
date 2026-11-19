@@ -701,8 +701,36 @@ final class AppModel {
         showClubs = true
     }
 
-    /// The link a club shares. Custom scheme for now; swap for a universal link once there's a website.
-    static func clubLink(_ code: String) -> String { "chomp://club/\(code)" }
+    /// The website, if this build has one (CHOMP_WEB_URL). Invite and club links point at it.
+    static let webURL: String? = {
+        guard let s = Bundle.main.object(forInfoDictionaryKey: "ChompWebURL") as? String,
+              !s.isEmpty, URL(string: s)?.scheme == "https" else { return nil }
+        return s.hasSuffix("/") ? String(s.dropLast()) : s
+    }()
+
+    /// The link a club shares: the website's club page when there is one, else the app scheme.
+    static func clubLink(_ code: String) -> String {
+        webURL.map { "\($0)/club/?c=\(code)" } ?? "chomp://club/\(code)"
+    }
+
+    /// The link a friend invite shares.
+    static func inviteLink(_ code: String) -> String {
+        webURL.map { "\($0)/invite/?c=\(code)" } ?? "chomp://invite/\(code)"
+    }
+
+    /// Reads a chomp:// or website link. Returns ("invite" | "club", code).
+    static func parseLink(_ url: URL) -> (kind: String, code: String)? {
+        if url.scheme == "chomp", let host = url.host, ["invite", "club"].contains(host),
+           let code = url.pathComponents.dropFirst().first {
+            return (host, code)
+        }
+        guard url.scheme == "https", let comps = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
+        let parts = url.pathComponents.filter { $0 != "/" }
+        guard let kind = parts.last(where: { $0 == "invite" || $0 == "club" }),
+              let code = comps.queryItems?.first(where: { $0.name == "c" || $0.name == "code" })?.value, !code.isEmpty
+        else { return nil }
+        return (kind, code)
+    }
 
     /// A friend's invite link was opened: remember the code until we can redeem it.
     func openInvite(code: String) {

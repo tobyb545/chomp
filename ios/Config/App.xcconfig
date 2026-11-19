@@ -4,4 +4,8 @@ SUPABASE_URL =
 SUPABASE_ANON_KEY =
 REVENUECAT_API_KEY =
 STRAVA_CLIENT_ID =
+// The Chomp website (GitHub Pages), written https:/$()/host/path with no trailing slash.
+// When set, invite and club links point at its /invite/ and /club/ pages, which work in
+// any messaging app. Empty: links use the chomp:// scheme.
+CHOMP_WEB_URL =
 #include? "Secrets.xcconfig"

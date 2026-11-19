@@ -388,6 +388,15 @@ final class SupabaseBackend: @unchecked Sendable {
 
     func deleteAccount() async throws {
         guard let client else { throw BackendError.notConfigured }
+        // Run traces live in Storage, which the database can't delete: remove them first.
+        if let userID {
+            let traces = client.storage.from("traces")
+            for _ in 0..<50 {
+                let files = try await traces.list(path: userID, options: SearchOptions(limit: 1000))
+                guard !files.isEmpty else { break }
+                _ = try await traces.remove(paths: files.map { "\(userID)/\($0.name)" })
+            }
+        }
         try await client.rpc("delete_own_account").execute()
         await signOut()
     }

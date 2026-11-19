@@ -195,3 +195,21 @@ struct AttackBannerTests {
         #expect(model.pendingClubCode == nil, "too short")
     }
 }
+
+@Suite("Links") @MainActor
+struct LinkTests {
+    @Test func readsAppAndWebsiteLinks() {
+        #expect(AppModel.parseLink(URL(string: "chomp://invite/ABC123")!)! == ("invite", "ABC123"))
+        #expect(AppModel.parseLink(URL(string: "chomp://club/K7Q2")!)! == ("club", "K7Q2"))
+        #expect(AppModel.parseLink(URL(string: "https://example.github.io/chomp/invite/?c=ABC123")!)! == ("invite", "ABC123"))
+        #expect(AppModel.parseLink(URL(string: "https://getchomp.app/club/?code=K7Q2")!)! == ("club", "K7Q2"))
+        #expect(AppModel.parseLink(URL(string: "https://getchomp.app/club/")!) == nil)
+        #expect(AppModel.parseLink(URL(string: "chomp://run/start")!) == nil)
+    }
+
+    @Test func linksUseTheAppSchemeWithoutAWebsite() {
+        // Test builds have no CHOMP_WEB_URL.
+        #expect(AppModel.clubLink("K7Q2") == "chomp://club/K7Q2")
+        #expect(AppModel.inviteLink("ABC123") == "chomp://invite/ABC123")
+    }
+}
