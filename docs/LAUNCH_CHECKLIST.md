@@ -21,7 +21,7 @@ in [SETUP.md](SETUP.md).
 
 ## Supabase: needed for online play
 
-- [ ] **Run five migrations** in the SQL editor, in this order:
+- [x] **Run five migrations** (done 19 Nov) in the SQL editor, in this order:
   1. `backend/supabase/migrations/20261124000000_push.sql`: push tokens
   2. `backend/supabase/migrations/20261125000000_club_battles.sql`: club battles
   3. `backend/supabase/migrations/20261126000000_quiet_bots.sql`: bot names, retiring bots,
@@ -31,11 +31,11 @@ in [SETUP.md](SETUP.md).
   5. `backend/supabase/migrations/20261128000000_coins_only.sql`: friends show coins held
 
   The earlier migrations, up to `20261123000000_coins.sql`, are already live.
-- [ ] **Redeploy the Edge Functions** that changed, plus the new `warm-tiles` (it fills the
+- [x] **Redeploy the Edge Functions** (all six deployed 19 Nov). This Mac has no Docker, so deploys need `--use-api`, and this CLI version needs `--remote=<ref>`, plus the new `warm-tiles` (it fills the
   shared street cache, so after the first player in an area everyone else loads it in about a
   second instead of waiting up to a minute for the free map servers):
-  `supabase functions deploy resolve-run strava-import` and
-  `supabase functions deploy ghost-tick revenuecat-webhook warm-tiles --no-verify-jwt`
+  `supabase functions deploy resolve-run strava-import --remote=kboxrdjdwbhqxkqahmbx --use-api --yes` and
+  `supabase functions deploy ghost-tick revenuecat-webhook warm-tiles send-push --remote=kboxrdjdwbhqxkqahmbx --no-verify-jwt --use-api --yes`
 - [ ] **Make sure the cron Vault secrets exist** (`chomp_functions_url`, `chomp_cron_secret`).
   Without them, bots never move online. See SETUP.md §3, "Cron".
 - [ ] **Sign in with Apple provider**: Authentication → Providers → Apple, enabled, with client ID
@@ -60,8 +60,7 @@ in [SETUP.md](SETUP.md).
 - [ ] **Apple Developer → Keys**: create an APNs key and download the .p8 file.
 - [ ] **Set Supabase secrets**: `APNS_KEY` (the .p8 contents), `APNS_KEY_ID`,
   `APNS_TEAM_ID=7KYR2X9MJA`, `APNS_TOPIC=com.tobyb545.chomp`.
-- [ ] **Deploy `send-push`**: `supabase functions deploy send-push --no-verify-jwt`.
-  It isn't deployed yet.
+- [x] **Deploy `send-push`** (done; it sends nothing until the APNs secrets above are set).
 
 ## Chomp Pro: subscriptions
 
