@@ -1,4 +1,5 @@
 import ActivityKit
+import CoreLocation
 import Foundation
 import UserNotifications
 import WatchConnectivity
@@ -108,5 +109,21 @@ final class WatchBridge: NSObject, WCSessionDelegate, @unchecked Sendable {
     func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
         guard let cmd = message[WatchMessage.command] as? String else { return }
         Task { @MainActor in self.onCommand?(cmd) }
+    }
+}
+
+/// Friendly name for where the player is ("West Byfleet", "Hackney"), from
+/// Apple's reverse geocoder. Only a tile centre is sent, never a run.
+enum PlaceNamer {
+    @MainActor private static var cache: [String: String] = [:]
+
+    @MainActor
+    static func name(for c: Coordinate) async -> String? {
+        let key = String(format: "%.3f,%.3f", c.latitude, c.longitude)
+        if let hit = cache[key] { return hit }
+        let marks = try? await CLGeocoder().reverseGeocodeLocation(CLLocation(latitude: c.latitude, longitude: c.longitude))
+        guard let m = marks?.first, let name = m.subLocality ?? m.locality ?? m.subAdministrativeArea ?? m.name else { return nil }
+        cache[key] = name
+        return name
     }
 }

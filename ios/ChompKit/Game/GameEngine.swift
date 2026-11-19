@@ -30,7 +30,7 @@ public struct RunContext: Sendable {
     public var runID: UUID
     public var startedAt: Date
     public var endedAt: Date
-    /// Imported history: counts for personal exploration only, never ownership.
+    /// Old imported history: counts for personal exploration only, never ownership.
     public var isImport: Bool
 
     public init(runID: UUID, startedAt: Date, endedAt: Date, isImport: Bool = false) {
@@ -164,6 +164,12 @@ public struct GameEngine: Sendable {
             if run.isImport { record(.rejected, reason: "Imported runs count for exploration only"); continue }
             if report.verdict == .underReview { record(.rejected, reason: "Run is under review"); continue }
 
+            // Later capture wins: a run added after the fact can't take back a
+            // street someone else ran more recently.
+            if isRival, let c = currentLive, c.capturedAt > at {
+                record(.rejected, reason: "Someone ran it more recently")
+                continue
+            }
             if isMine {
                 state.ownership[seg.id]?.lastVisitedAt = max(current!.lastVisitedAt, at)
                 record(.refreshed)
@@ -230,14 +236,17 @@ public struct GameEngine: Sendable {
                                 message: "\(rejected.count) street\(rejected.count == 1 ? "" : "s") not counted: \(rejected[0].reason ?? "")"))
         }
 
+        // Conquering: hold (practically) every street in a map tile.
         var conquered = false
-        let badge = "conquered:\(area.slug)"
-        if !state.badges.contains(badge), self.progress(for: me, state: state, now: run.endedAt).heldFraction >= 0.999 {
-            state.badges.append(badge)
-            conquered = true
-            state.log(GameEvent(date: run.endedAt, kind: .townConquered, actor: me, message: "You conquered \(area.name)!"))
+        let touchedTiles = Set(records.filter { $0.kind == .captured || $0.kind == .stolen }.compactMap { area.segmentIndex($0.segmentID).map { area.segmentTile[$0] } })
+        for tile in touchedTiles.sorted() {
+            let badge = "conquered:\(tile)"
+            if !state.badges.contains(badge), tileHeldFraction(tile, owner: me, state: state, now: run.endedAt) >= 0.999 {
+                state.badges.append(badge)
+                conquered = true
+                state.log(GameEvent(date: run.endedAt, kind: .townConquered, actor: me, message: "You conquered a whole map square!"))
+            }
         }
-
         return RunOutcome(runID: run.runID, captures: records, points: points, blockBonus: blockBonus, blocksCompleted: newBlocks,
                           pelletsCollected: pellets, frenzyWindows: frenzy, verdict: report.verdict, flags: report.flags,
                           conqueredTown: conquered)
@@ -294,6 +303,21 @@ public struct GameEngine: Sendable {
                             exploredFraction: area.totalLength > 0 ? explored / area.totalLength : 0,
                             blocksHeld: completedBlocks(for: owner, state: state, now: now).count,
                             totalSegments: area.segments.count)
+    }
+
+    /// Share of a tile's street length the owner holds.
+    public func tileHeldFraction(_ tile: TileKey, owner: OwnerRef, state: GameState, now: Date) -> Double {
+        guard let total = area.lengthByTile[tile], total > 0 else { return 0 }
+        var held = 0.0
+        for s in area.segments(in: tile) {
+            if let o = state.ownership[s.id], o.owner == owner, o.strength(at: now, decay: rules.decayInterval) > 0 { held += s.length }
+        }
+        return held / total
+    }
+
+    /// Streets the owner holds anywhere, loaded or not.
+    public func heldEverywhere(by owner: OwnerRef, state: GameState, now: Date) -> Int {
+        state.ownership.values.filter { $0.owner == owner && $0.strength(at: now, decay: rules.decayInterval) > 0 }.count
     }
 
     public func standings(state: GameState, playerName: String, playerColorHex: String, now: Date) -> [Standing] {

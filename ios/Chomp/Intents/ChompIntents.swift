@@ -30,7 +30,7 @@ struct StreetsHeldIntent: AppIntent {
     func perform() async throws -> some IntentResult & ProvidesDialog {
         guard let s = WidgetSnapshot.load() else { return .result(dialog: "Go for a run first!") }
         let attack = s.underAttack.first.map { " \($0.by) has been eating your streets on \($0.street)." } ?? ""
-        return .result(dialog: "You hold \(s.streetsHeld) streets in \(s.townName), \(Int(s.townPercent * 100)) percent of the town.\(attack)")
+        return .result(dialog: "You hold \(s.streetsHeld) streets in \(s.townName), \(Int(s.townPercent * 100)) percent of the streets nearby.\(attack)")
     }
 }
 

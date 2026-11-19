@@ -47,7 +47,7 @@ targets:
     platform: iOS
     sources:
       - path: ChompKitTests
-      - path: ../data/areas/west-byfleet.json
+      - path: ../shared/fixtures/osm-west-byfleet.json
         buildPhase: resources
       - path: ../shared/fixtures/server-response.json
         buildPhase: resources
@@ -66,10 +66,6 @@ targets:
     sources:
       - path: Chomp
       - path: Shared
-      - path: ../data/areas
-        type: folder
-        buildPhase: resources
-        name: Areas
     dependencies:
       - target: ChompKit
       - target: ChompWidgets

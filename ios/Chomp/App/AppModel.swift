@@ -24,12 +24,19 @@ struct MapSnapshot {
 @MainActor
 @Observable
 final class AppModel {
-    // Static game data
-    let areas: [String: Area]
+    enum WorldStatus: Equatable { case idle, needsLocation, loading(Int), failed(String) }
+
+    // Street data: the map tiles around wherever the player is (or is looking).
     let rules = RulesConfig.bundled
     private(set) var area: Area
     private(set) var engine: GameEngine
     private(set) var matcher: MapMatcher
+    private(set) var placeName = "Nearby"
+    private(set) var worldStatus: WorldStatus = .idle
+    private var focusTile: TileKey?
+    private var loadedTiles: [TileKey: TileFile] = [:]
+    private var worldTask: Task<Void, Never>?
+    private var geocodedTile: TileKey?
 
     // Player
     var profile: PlayerProfile { didSet { profile.save(); applyPreferences() } }
@@ -53,34 +60,164 @@ final class AppModel {
     let pro = ProStore()
     let backend = SupabaseBackend.shared
     private var realtimeTask: Task<Void, Never>?
+    private var realtimeTiles: [TileKey] = []
+
+    static let worldSlug = "world"
+    private static let focusKey = "chomp.world.focus"
 
     init() {
-        var loaded: [String: Area] = [:]
-        let urls = Bundle.main.urls(forResourcesWithExtension: "json", subdirectory: "areas") ?? []
-        for url in urls { if let a = try? Area.load(from: url) { loaded[a.slug] = a } }
-        if loaded.isEmpty, let url = Bundle.main.url(forResource: "west-byfleet", withExtension: "json"), let a = try? Area.load(from: url) {
-            loaded[a.slug] = a
-        }
-        guard let fallback = loaded["west-byfleet"] ?? loaded.values.first else {
-            fatalError("No playable areas bundled. Run tools/ingest/ingest.py first.")
-        }
-        areas = loaded
         let profile = PlayerProfile.load()
         self.profile = profile
-        let area = loaded[profile.homeArea] ?? fallback
-        self.area = area
-        engine = GameEngine(area: area, rules: rules)
-        matcher = MapMatcher(area: area, rules: rules.matching)
-        state = GameState(areaSlug: area.slug, playerID: profile.id)
+        let empty = Area(tiles: [])
+        area = empty
+        engine = GameEngine(area: empty, rules: rules)
+        matcher = MapMatcher(area: empty, rules: rules.matching)
+        state = GameState(areaSlug: Self.worldSlug, playerID: profile.id)
         run.model = self
         applyPreferences()
+    }
+
+    /// Where the map was last centred, so the app opens there (and offline).
+    var savedFocus: Coordinate? {
+        get {
+            guard let a = UserDefaults.standard.array(forKey: Self.focusKey) as? [Double], a.count == 2 else { return nil }
+            return Coordinate(latitude: a[0], longitude: a[1])
+        }
+        set {
+            if let c = newValue { UserDefaults.standard.set([c.latitude, c.longitude], forKey: Self.focusKey) }
+        }
+    }
+
+    // MARK: World
+
+    /// Loads the 3x3 tiles around `c` (about 4.5 km across). Called when the app
+    /// opens, when the player pans the map, and as a run moves along.
+    func focusWorld(on c: Coordinate, force: Bool = false) {
+        let center = TileKey(containing: c)
+        if !force, center == focusTile, !isFailed { return }
+        focusTile = center
+        savedFocus = c
+        let wanted = center.neighbourhood()
+        worldTask?.cancel()
+        worldTask = Task { [weak self] in await self?.load(wanted, around: center) }
+        Task { await geocode(center) }
+    }
+
+    private var isLoading: Bool { if case .loading = worldStatus { return true } else { return false } }
+    private var isFailed: Bool { if case .failed = worldStatus { return true } else { return false } }
+
+    /// The map camera settled. Streets load once the player zooms in far enough
+    /// to see them.
+    func mapSettled(at c: Coordinate, zoom: Double) {
+        guard zoom >= 12.5, !run.isActive else { return }
+        focusWorld(on: c)
+    }
+
+    /// While running, keep the tiles ahead loaded without dropping the ones behind.
+    func runMoved(to c: Coordinate) {
+        let around = TileKey(containing: c).neighbourhood()
+        let missing = around.filter { loadedTiles[$0] == nil }
+        guard !missing.isEmpty, worldTask == nil || !isLoading else { return }
+        worldTask = Task { [weak self] in
+            guard let self else { return }
+            await self.load(Array(Set(self.area.tiles + around)).sorted(), around: TileKey(containing: c))
+        }
+    }
+
+    private func load(_ wanted: [TileKey], around center: TileKey) async {
+        // Show whatever is already on the phone straight away.
+        let cached = await WorldStore.shared.cached(wanted)
+        for t in cached { if let k = TileKey(string: t.key) { loadedTiles[k] = t } }
+        var keep = Set(wanted)
+        if run.isActive { keep.formUnion(area.tiles) }
+        loadedTiles = loadedTiles.filter { keep.contains($0.key) }
+        await install()
+
+        let order = wanted.sorted { distance($0, center) < distance($1, center) }
+        var stale: [TileKey] = []
+        for k in order where !(await WorldStore.shared.isFresh(k)) { stale.append(k) }
+        guard !stale.isEmpty else { worldStatus = .idle; worldTask = nil; return }
+        var failure: String?
+        worldStatus = .loading(stale.count)
+        do {
+            let got = try await WorldStore.shared.tiles(stale)
+            if Task.isCancelled { return }
+            for (k, t) in got { loadedTiles[k] = t }
+            await install()
+            if stale.contains(where: { loadedTiles[$0] == nil }) { failure = WorldStore.WorldError.offline.localizedDescription }
+        } catch {
+            if Task.isCancelled { return }
+            failure = error.localizedDescription
+        }
+        worldStatus = failure.map { .failed($0) } ?? .idle
+        worldTask = nil
+    }
+
+    private func distance(_ a: TileKey, _ b: TileKey) -> Int { abs(a.x - b.x) + abs(a.y - b.y) }
+
+    /// Rebuilds the playable graph from the loaded tiles (off the main thread).
+    private func install() async {
+        let files = Array(loadedTiles.values)
+        let name = placeName
+        guard Set(files.map(\.key)) != Set(area.tiles.map(\.description)) else { return }
+        let built = await Task.detached(priority: .userInitiated) { Area(tiles: files, name: name) }.value
+        setArea(built)
+    }
+
+    private func setArea(_ a: Area) {
+        area = a
+        engine = GameEngine(area: a, rules: rules)
+        matcher = MapMatcher(area: a, rules: rules.matching)
+        refreshDay()
+        run.areaDidChange()
+        if state.ghosts.isEmpty, !a.segments.isEmpty { tickWorld() }
+        bumpMap()
+        Task { await subscribeRealtime() }
+    }
+
+    /// Street data for an arbitrary trace (a finished run or an import), which
+    /// may be outside the tiles on screen. Downloads what's missing.
+    func area(covering coords: [Coordinate]) async -> Area {
+        let keys = TileKey.covering(coords)
+        if Set(keys).isSubset(of: Set(area.tiles)) { return area }
+        var files: [TileFile] = keys.compactMap { loadedTiles[$0] }
+        let need = keys.filter { loadedTiles[$0] == nil }
+        if !need.isEmpty, let got = try? await WorldStore.shared.tiles(need) { files += got.values }
+        let name = placeName
+        return await Task.detached(priority: .userInitiated) { Area(tiles: files, name: name) }.value
+    }
+
+    private func geocode(_ tile: TileKey) async {
+        guard geocodedTile != tile else { return }
+        geocodedTile = tile
+        if let name = await PlaceNamer.name(for: tile.center), geocodedTile == tile { placeName = name; publishWidgets() }
+    }
+
+    /// Tries to centre the world on the player.
+    func locateAndLoad() async {
+        if let here = await LocationPermission.shared.currentLocation() {
+            focusRequest = here
+            focusWorld(on: here)
+        } else if let saved = savedFocus {
+            focusWorld(on: saved)
+        } else {
+            worldStatus = .needsLocation
+        }
     }
 
     // MARK: Lifecycle
 
     func bootstrap() async {
-        if let saved = await LocalStore.shared.loadState(area: area.slug) { state = saved }
+        if let saved = await LocalStore.shared.loadState(area: Self.worldSlug) {
+            state = saved
+        } else if var legacy = await LocalStore.shared.loadState(area: "west-byfleet") {
+            // Before the world map, everything lived in one town. Street IDs are
+            // unchanged (same OSM-derived scheme), so progress carries over.
+            legacy.areaSlug = Self.worldSlug
+            state = legacy
+        }
         state.playerID = profile.id
+        if let saved = savedFocus { focusWorld(on: saved) }
         runs = await LocalStore.shared.loadRuns()
         await backend.restoreSession()
         if let id = backend.userID { await pro.identify(userID: id) } else { await pro.refresh() }
@@ -94,6 +231,7 @@ final class AppModel {
         #if DEBUG
         await seedDemoIfRequested()
         #endif
+        if profile.onboarded { await locateAndLoad() }
         tickWorld()
         await syncOnline()
     }
@@ -111,6 +249,11 @@ final class AppModel {
         p.name = "Alex"
         p.onboarded = true
         profile = p
+        let demoCentre = Coordinate(latitude: 51.3392, longitude: -0.5063)  // West Byfleet
+        focusRequest = demoCentre
+        focusWorld(on: demoCentre, force: true)
+        await worldTask?.value
+        guard !area.segments.isEmpty else { return }
         let sim = RouteSimulator(area: area)
         let ghosts = GhostSimulator(engine: engine)
         let start = Date().addingTimeInterval(-6 * 86_400)
@@ -131,6 +274,7 @@ final class AppModel {
 
     func onForeground() {
         NotificationService.cancelRaid()
+        if case .failed = worldStatus, let f = savedFocus { focusWorld(on: f, force: true) }
         refreshDay()
         tickWorld()
         Task { await syncOnline() }
@@ -149,7 +293,7 @@ final class AppModel {
 
     /// Advances bots and decay to now, without ever touching an in-progress run.
     func tickWorld(now: Date = .now) {
-        guard run.phase == .idle else { return }
+        guard run.phase == .idle, !area.segments.isEmpty else { return }
         let ghosts = GhostSimulator(engine: engine)
         if !profile.privateMode || state.ghosts.isEmpty {
             ghosts.ensureGhosts(state: &state, playerColorHex: profile.colorHex, now: now)
@@ -204,7 +348,11 @@ final class AppModel {
 
     var displayName: String { profile.name.isEmpty ? "You" : profile.name }
 
-    var isConquered: Bool { state.badges.contains("conquered:\(area.slug)") }
+    /// The map square in the middle of the screen is fully held.
+    var isConquered: Bool { focusTile.map { state.badges.contains("conquered:\($0)") } ?? false }
+
+    /// Streets held anywhere in the world, not just nearby.
+    var streetsHeldEverywhere: Int { engine.heldEverywhere(by: state.me, state: state, now: .now) }
 
     func ownerName(_ o: OwnerRef) -> String {
         if o == state.me { return displayName }
@@ -279,41 +427,53 @@ final class AppModel {
 
     /// Resolves a finished run: privacy trim → full match → anti-cheat → rules.
     func completeRun(id: UUID, trace raw: [TracePoint], signals: RunSignals, startedAt: Date, endedAt: Date, simulated: Bool) async {
+        guard let record = await resolve(id: id, raw: raw, signals: signals, startedAt: startedAt, endedAt: endedAt,
+                                         source: .live, isImport: false, simulated: simulated) else { return }
+        presentedSummary = record
+        if record.outcome.conqueredTown { Feedback.shared.play(.block) }
+        if !simulated {
+            Task { try? await HealthService.shared.saveWorkout(start: startedAt, end: endedAt, distance: record.distance, trace: raw) }
+        }
+        if let end = raw.last?.coordinate { focusWorld(on: end) }
+    }
+
+    /// Shared by live runs and imports. Returns nil if the trace couldn't be used.
+    @discardableResult
+    private func resolve(id: UUID, raw: [TracePoint], signals: RunSignals, startedAt: Date, endedAt: Date,
+                         source: RunRecord.Source, isImport: Bool, simulated: Bool, upload: Bool = true) async -> RunRecord? {
         let trace = PrivacyTrimmer.trim(raw, zones: profile.privacyZones)
-        let matcher = self.matcher
+        let runArea = await area(covering: trace.map(\.coordinate))
+        let matcher = runArea === area ? self.matcher : MapMatcher(area: runArea, rules: rules.matching)
         let rules = self.rules
         let (match, report) = await Task.detached(priority: .userInitiated) {
             (matcher.match(trace), AntiCheat.evaluate(trace: trace, signals: signals, rules: rules.antiCheat, matching: rules.matching))
         }.value
+        guard source == .live || !match.pieces.isEmpty else { return nil }
         var s = state
-        let outcome = engine.resolve(run: RunContext(runID: id, startedAt: startedAt, endedAt: endedAt), trace: trace,
-                                     match: match, report: report, state: &s)
+        let runEngine = runArea === area ? engine : GameEngine(area: runArea, rules: rules)
+        let outcome = runEngine.resolve(run: RunContext(runID: id, startedAt: startedAt, endedAt: endedAt, isImport: isImport),
+                                        trace: trace, match: match, report: report, state: &s)
         state = s
-        let distance = RunMath.distance(raw)
-        let record = RunRecord(id: id, areaSlug: area.slug, startedAt: startedAt, endedAt: endedAt, distance: distance,
-                               movingTime: endedAt.timeIntervalSince(startedAt), source: .live, outcome: outcome,
+        let record = RunRecord(id: id, areaSlug: Self.worldSlug, startedAt: startedAt, endedAt: endedAt, distance: RunMath.distance(raw),
+                               movingTime: endedAt.timeIntervalSince(startedAt), source: source, outcome: outcome,
                                splits: RunMath.splits(raw).map { .init(distance: $0.distance, duration: $0.duration) },
                                simulated: simulated,
                                rawEndpoints: [raw.first?.coordinate, raw.last?.coordinate].compactMap { $0 })
         runs.insert(record, at: 0)
-        let runsCopy = runs
-        await LocalStore.shared.saveRuns(runsCopy)
+        runs.sort { $0.startedAt > $1.startedAt }
+        await LocalStore.shared.saveRuns(runs)
         await LocalStore.shared.saveTrace(trace, run: id)
         persist()
         bumpMap()
-        presentedSummary = record
-        if outcome.conqueredTown { Feedback.shared.play(.block) }
-
-        if !simulated {
-            Task { try? await HealthService.shared.saveWorkout(start: startedAt, end: endedAt, distance: distance, trace: raw) }
+        if upload, !simulated, backend.isSignedIn, !profile.privateMode {
+            await self.upload(id: id, trace: trace, signals: signals, startedAt: startedAt, endedAt: endedAt, source: source)
         }
-        if !simulated, backend.isSignedIn, !profile.privateMode {
-            await upload(id: id, trace: trace, signals: signals, startedAt: startedAt, endedAt: endedAt)
-        }
+        return runs.first { $0.id == id } ?? record
     }
 
-    private func upload(id: UUID, trace: [TracePoint], signals: RunSignals, startedAt: Date, endedAt: Date) async {
-        let upload = RunUpload(runId: id, areaSlug: area.slug, startedAt: startedAt, endedAt: endedAt, source: "live",
+    private func upload(id: UUID, trace: [TracePoint], signals: RunSignals, startedAt: Date, endedAt: Date, source: RunRecord.Source) async {
+        let upload = RunUpload(runId: id, startedAt: startedAt, endedAt: endedAt,
+                               source: source == .live ? "live" : source == .healthImport ? "health_import" : "strava_import",
                                polyline: PolylineCodec.encode(trace.map(\.coordinate)),
                                timestamps: trace.map { $0.timestamp.timeIntervalSince1970 },
                                accuracies: trace.map(\.horizontalAccuracy), speeds: trace.map(\.speed), signals: signals,
@@ -330,17 +490,23 @@ final class AppModel {
         }
     }
 
-    /// Pulls authoritative ownership from the server and listens for changes.
+    /// Pulls authoritative ownership for the tiles on screen and listens for changes.
     func syncOnline() async {
-        guard backend.isSignedIn, !profile.privateMode else { return }
+        guard backend.isSignedIn, !profile.privateMode, !area.tiles.isEmpty else { return }
         do {
-            let rows = try await backend.ownership(area: area.slug)
+            let rows = try await backend.ownership(tiles: area.tiles.map(\.description))
             apply(rows: rows)
         } catch { return }
-        guard realtimeTask == nil else { return }
-        let slug = area.slug
+        await subscribeRealtime()
+    }
+
+    private func subscribeRealtime() async {
+        guard backend.isSignedIn, !profile.privateMode, area.tiles != realtimeTiles, !area.tiles.isEmpty else { return }
+        realtimeTiles = area.tiles
+        realtimeTask?.cancel()
+        let tiles = area.tiles.map(\.description)
         realtimeTask = Task { [weak self] in
-            guard let stream = self?.backend.ownershipChanges(area: slug) else { return }
+            guard let stream = self?.backend.ownershipChanges(tiles: tiles) else { return }
             for await row in stream { self?.apply(rows: [row]) }
         }
     }
@@ -358,7 +524,7 @@ final class AppModel {
     /// Folds server-side exploration (e.g. Strava imports) into local coverage.
     func mergeServerCoverage() async {
         guard let rows = try? await backend.personalCoverage() else { return }
-        for r in rows where area.segment(r.segment_id) != nil {
+        for r in rows {
             var c = state.coverage[r.segment_id] ?? PersonalCoverage(firstRunAt: r.first_at, lastRunAt: r.last_at, timesRun: 0, importedOnly: r.source == "import")
             c.firstRunAt = min(c.firstRunAt, r.first_at)
             c.lastRunAt = max(c.lastRunAt, r.last_at)
@@ -370,36 +536,60 @@ final class AppModel {
         bumpMap()
     }
 
+    // MARK: Apple Health
+
+    /// Runs in Health that Chomp hasn't seen yet (recorded by another app or watch).
+    func healthRunsToImport() async -> [HealthService.WorkoutSummary] {
+        guard await HealthService.shared.requestAuthorization() else { return [] }
+        let since = Date().addingTimeInterval(-60 * 86_400)
+        return await HealthService.shared.recentRuns(since: since).filter { w in
+            !runs.contains { abs($0.startedAt.timeIntervalSince(w.start)) < 120 }
+        }
+    }
+
+    /// Whether an imported run this old still captures streets.
+    func importCaptures(endedAt: Date) -> Bool {
+        Date().timeIntervalSince(endedAt) <= rules.imports.captureWindowHours * 3600
+    }
+
+    /// Adds one run from Health as if it had been recorded in Chomp. Recent runs
+    /// capture streets (within the import window); older ones count as exploration.
+    func importHealthRun(_ w: HealthService.WorkoutSummary) async -> String {
+        let raw = await HealthService.shared.trace(for: w.id)
+        guard raw.count > 10 else { return "That run has no GPS route in Health, so there are no streets to add." }
+        var signals = RunSignals()
+        signals.heartRate = await HealthService.shared.heartRate(from: w.start, to: w.end)
+        let counts = importCaptures(endedAt: w.end)
+        guard let record = await resolve(id: UUID(), raw: raw, signals: signals, startedAt: w.start, endedAt: w.end,
+                                         source: .healthImport, isImport: !counts, simulated: false) else {
+            return "None of that run was on streets Chomp knows about."
+        }
+        presentedSummary = record
+        if let end = raw.last?.coordinate { focusRequest = end; focusWorld(on: end) }
+        if !counts { return "Added for exploration. Runs older than \(Int(rules.imports.captureWindowHours / 24)) days can't capture streets." }
+        let n = record.outcome.gained.count
+        return n == 0 ? "Run added. No new streets this time." : "Run added: \(n) street\(n == 1 ? "" : "s") captured."
+    }
+
     /// Imports past HealthKit runs as personal exploration only.
     func importHealthHistory() async -> Int {
         guard await HealthService.shared.requestAuthorization() else { return 0 }
         let past = await HealthService.shared.pastRuns(since: .now.addingTimeInterval(-365 * 86_400))
-        let matcher = self.matcher
         var imported = 0
-        for r in past where !runs.contains(where: { abs($0.startedAt.timeIntervalSince(r.start)) < 60 }) {
-            let trace = r.trace
-            let match = await Task.detached { matcher.match(trace) }.value
-            guard !match.pieces.isEmpty else { continue }
-            var s = state
-            let out = engine.resolve(run: RunContext(runID: UUID(), startedAt: r.start, endedAt: r.end, isImport: true),
-                                     trace: trace, match: match, report: .clean, state: &s)
-            state = s
-            runs.append(RunRecord(id: out.runID, areaSlug: area.slug, startedAt: r.start, endedAt: r.end, distance: RunMath.distance(trace),
-                                  movingTime: r.end.timeIntervalSince(r.start), source: .healthImport, outcome: out, splits: [], simulated: false))
-            imported += 1
+        for r in past where !runs.contains(where: { abs($0.startedAt.timeIntervalSince(r.start)) < 120 }) {
+            if await resolve(id: UUID(), raw: r.trace, signals: RunSignals(), startedAt: r.start, endedAt: r.end,
+                             source: .healthImport, isImport: true, simulated: false, upload: false) != nil {
+                imported += 1
+            }
         }
-        runs.sort { $0.startedAt > $1.startedAt }
-        await LocalStore.shared.saveRuns(runs)
-        persist()
-        bumpMap()
         return imported
     }
 
     func leaderboard(scope: LeaderboardScope) async throws -> [LeaderboardEntry] {
-        if backend.isSignedIn, !profile.privateMode {
-            return try await backend.leaderboard(scope: scope, area: area.slug)
+        if backend.isSignedIn, !profile.privateMode, let tile = focusTile {
+            return try await backend.leaderboard(scope: scope, tile: tile.description)
         }
-        guard scope == .town else { throw BackendError.notSignedIn }
+        guard scope == .nearby else { throw BackendError.notSignedIn }
         return standings.enumerated().map { i, s in
             LeaderboardEntry(id: s.id, rank: i + 1, name: s.name, colorHex: s.colorHex, isBot: s.owner.kind == .ghost,
                              isMe: s.owner == state.me, streets: s.streets, metres: s.metres, blocks: s.blocks)
@@ -408,7 +598,8 @@ final class AppModel {
 
     func resetAllData() async {
         await LocalStore.shared.deleteEverything()
-        state = GameState(areaSlug: area.slug, playerID: profile.id)
+        await WorldStore.shared.deleteAll()
+        state = GameState(areaSlug: Self.worldSlug, playerID: profile.id)
         runs = []
         var p = PlayerProfile()
         p.id = profile.id
@@ -429,7 +620,7 @@ final class AppModel {
             $0.owner == state.me && $0.strength(at: .now, decay: rules.decayInterval) < 0.2
         }.count
         WidgetBridge.publish(WidgetSnapshot(
-            townName: area.name, playerColorHex: profile.colorHex, streetsHeld: p.heldSegments, kmHeld: p.heldMetres / 1000,
+            townName: placeName, playerColorHex: profile.colorHex, streetsHeld: streetsHeldEverywhere, kmHeld: p.heldMetres / 1000,
             townPercent: p.heldFraction, blocksHeld: p.blocksHeld, underAttack: Array(attacks), fadingSoon: fading,
             pellets: pellets.map { .init(name: $0.landmark.name, kind: $0.landmark.kind, collected: state.collectedPellets[$0.id] != nil) },
             bonusLabels: activeBonus.map { $0.label() }, updatedAt: .now))

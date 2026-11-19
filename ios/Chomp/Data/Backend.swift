@@ -3,7 +3,8 @@ import ChompKit
 import Supabase
 
 enum LeaderboardScope: String, CaseIterable, Identifiable {
-    case town, county, country, friends, club
+    /// Everyone holding streets within roughly 25 km (the same zoom-10 map square).
+    case nearby, global, friends, club
     var id: String { rawValue }
     var label: String { rawValue.capitalized }
 }
@@ -56,7 +57,6 @@ struct Friend: Identifiable, Hashable, Codable {
 /// been privacy-trimmed on device.
 struct RunUpload: Codable {
     var runId: UUID
-    var areaSlug: String
     var startedAt: Date
     var endedAt: Date
     var source: String
@@ -92,6 +92,8 @@ final class SupabaseBackend: @unchecked Sendable {
     }
 
     var isConfigured: Bool { client != nil }
+    /// Public bucket of server-built street tiles (see backend _shared/world.ts).
+    let publicTilesURL: URL?
     var isSignedIn: Bool { userID != nil }
 
     private init() {
@@ -100,8 +102,10 @@ final class SupabaseBackend: @unchecked Sendable {
         let key = (info["SupabaseAnonKey"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         if let url, let key, url.host != nil {
             client = SupabaseClient(supabaseURL: url, supabaseKey: key)
+            publicTilesURL = url.appendingPathComponent("storage/v1/object/public/tiles")
         } else {
             client = nil
+            publicTilesURL = nil
         }
     }
 
@@ -146,18 +150,19 @@ final class SupabaseBackend: @unchecked Sendable {
             decoder: decoder)
     }
 
-    func ownership(area: String) async throws -> [ServerOwnershipRow] {
+    func ownership(tiles: [String]) async throws -> [ServerOwnershipRow] {
         guard let client else { throw BackendError.notConfigured }
-        return try await client.from("segment_ownership_public").select().eq("area_slug", value: area).execute().value
+        return try await client.from("segment_ownership_public").select().in("tile", values: tiles).execute().value
     }
 
-    /// Live ownership changes for a town (Supabase Realtime).
-    func ownershipChanges(area: String) -> AsyncStream<ServerOwnershipRow> {
+    /// Live ownership changes for the tiles on screen (Supabase Realtime).
+    func ownershipChanges(tiles: [String]) -> AsyncStream<ServerOwnershipRow> {
         AsyncStream { continuation in
             guard let client else { continuation.finish(); return }
             let task = Task {
-                let channel = client.channel("ownership:\(area)")
-                let changes = channel.postgresChange(AnyAction.self, schema: "public", table: "segment_ownership_feed", filter: "area_slug=eq.\(area)")
+                let channel = client.channel("ownership:\(tiles.first ?? "")")
+                let list = tiles.map { "\"\($0)\"" }.joined(separator: ",")
+                let changes = channel.postgresChange(AnyAction.self, schema: "public", table: "segment_ownership_feed", filter: "tile=in.(\(list))")
                 await channel.subscribe()
                 let decoder = JSONDecoder()
                 decoder.dateDecodingStrategy = .iso8601
@@ -183,10 +188,10 @@ final class SupabaseBackend: @unchecked Sendable {
         let blocks_held: Int
     }
 
-    func leaderboard(scope: LeaderboardScope, area: String) async throws -> [LeaderboardEntry] {
+    func leaderboard(scope: LeaderboardScope, tile: String) async throws -> [LeaderboardEntry] {
         guard let client else { throw BackendError.notConfigured }
-        struct Params: Encodable { let p_scope: String; let p_area: String }
-        let rows: [LeaderRow] = try await client.rpc("leaderboard", params: Params(p_scope: scope.rawValue, p_area: area)).execute().value
+        struct Params: Encodable { let p_scope: String; let p_tile: String }
+        let rows: [LeaderRow] = try await client.rpc("leaderboard", params: Params(p_scope: scope.rawValue, p_tile: tile)).execute().value
         return rows.enumerated().map { i, r in
             LeaderboardEntry(id: r.user_id, rank: i + 1, name: r.display_name, colorHex: r.color_hex, isBot: false,
                              isMe: r.user_id == userID, streets: r.streets_held, metres: r.metres_held, blocks: r.blocks_held)
@@ -239,10 +244,10 @@ final class SupabaseBackend: @unchecked Sendable {
 
     struct StravaImportResult: Decodable { let imported: Int; let streets: Int; let more: Bool }
 
-    func importStrava(code: String?, area: String) async throws -> StravaImportResult {
+    func importStrava(code: String?) async throws -> StravaImportResult {
         guard let client else { throw BackendError.notConfigured }
-        struct Body: Encodable { let code: String?; let areaSlug: String }
-        return try await client.functions.invoke("strava-import", options: FunctionInvokeOptions(body: Body(code: code, areaSlug: area)))
+        struct Body: Encodable { let code: String? }
+        return try await client.functions.invoke("strava-import", options: FunctionInvokeOptions(body: Body(code: code)))
     }
 
     struct CoverageRow: Decodable { let segment_id: String; let first_at: Date; let last_at: Date; let times_run: Int; let source: String }

@@ -61,7 +61,7 @@ final class RunSession {
         let source: LocationSource
         if simulated {
             let sim = RouteSimulator(area: model.area)
-            let origin = LocationPermission.shared.lastKnown.flatMap { model.area.contains($0) ? $0 : nil } ?? randomStart(model.area)
+            let origin = LocationPermission.shared.lastKnown.flatMap { model.area.contains($0) ? $0 : nil } ?? model.savedFocus.flatMap { model.area.contains($0) ? $0 : nil } ?? randomStart(model.area)
             let route = sim.route(from: origin, distance: 3200, seed: UInt64.random(in: 1...UInt64.max))
             source = SimulatedLocationSource(points: sim.trace(along: route, start: now, speed: 3.1, seed: UInt64.random(in: 1...UInt64.max)),
                                              speedUp: 8)
@@ -70,7 +70,7 @@ final class RunSession {
             motion.start(at: now)
         }
         Feedback.shared.play(.start)
-        LiveActivityController.shared.start(startedAt: now, colorHex: model.profile.colorHex, town: model.area.name)
+        LiveActivityController.shared.start(startedAt: now, colorHex: model.profile.colorHex, town: model.placeName)
         locationTask = Task { [weak self] in
             for await fix in source.stream() {
                 guard let self else { return }
@@ -81,6 +81,14 @@ final class RunSession {
         }
         model.mirrorToWatch()
         model.bumpMap()
+    }
+
+    /// New tiles loaded mid-run: re-match what we have against the bigger map,
+    /// keeping the streets already eaten so nothing is announced twice.
+    func areaDidChange() {
+        guard phase == .running || phase == .paused, let model, var t = tracker else { return }
+        t.rebase(matcher: model.matcher, trace: trace)
+        tracker = t
     }
 
     private func randomStart(_ area: Area) -> Coordinate {
@@ -176,6 +184,7 @@ final class RunSession {
 
         fixesSinceMatch += 1
         if fixesSinceMatch >= 5 { runLiveMatch() }
+        if trace.count % 20 == 1 { model.runMoved(to: fix.coordinate) }
         if trace.count % 3 == 0 { model.bumpMap() }
         if trace.count % 10 == 0 { pushLiveActivity(); model.mirrorToWatch() }
     }

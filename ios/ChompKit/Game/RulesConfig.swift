@@ -51,6 +51,12 @@ public struct RulesConfig: Codable, Sendable, Hashable {
         public var segmentsPerDayMax: Int
         public var maxTickHours: Double
     }
+    public struct Imports: Codable, Sendable, Hashable {
+        /// Runs added after the fact (Health import, late upload) still capture
+        /// streets if they ended within this many hours. Older ones only count
+        /// as exploration.
+        public var captureWindowHours: Double
+    }
     public struct Privacy: Codable, Sendable, Hashable {
         public var defaultZoneRadiusMetres: Double
         public var zoneJitterMetres: Double
@@ -66,6 +72,7 @@ public struct RulesConfig: Codable, Sendable, Hashable {
     public var matching: Matching
     public var antiCheat: AntiCheat
     public var ghosts: Ghosts
+    public var imports: Imports
     public var privacy: Privacy
 
     public var decayInterval: TimeInterval { decay.days * 86_400 }

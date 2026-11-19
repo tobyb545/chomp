@@ -23,18 +23,10 @@ struct ProfileView: View {
                 }
                 Section("Stats") { StatsSection() }
                 Section("Badges") { BadgesSection() }
-                Section("Towns") {
-                    ForEach(model.areas.values.sorted { $0.name < $1.name }, id: \.slug) { a in
-                        HStack {
-                            Text(a.name)
-                            Spacer()
-                            if a.slug == model.profile.homeArea { Chip(text: "Home", colorHex: model.profile.colorHex) }
-                        }
-                    }
-                    Text("More towns are added by running the ingest script. Playing outside your home town is part of Pro.")
-                        .font(.footnote).foregroundStyle(Theme.textSecondary)
-                }
                 Section("Runs") {
+                    NavigationLink { HealthImportView() } label: {
+                        Label("Add a run from Apple Health", systemImage: "heart.text.square.fill")
+                    }
                     if model.runs.isEmpty { Text("No runs yet").foregroundStyle(Theme.textSecondary) }
                     ForEach(model.runs.prefix(50)) { r in
                         Button { model.presentedSummary = r } label: { RunRow(record: r) }.buttonStyle(.plain)
@@ -80,9 +72,9 @@ struct StatsSection: View {
         let live = model.runs.filter { $0.source == .live && !$0.simulated }
         let totalKm = live.reduce(0) { $0 + $1.distance } / 1000
         Group {
-            LabeledContent("Streets held", value: "\(p.heldSegments) of \(p.totalSegments)")
-            LabeledContent("Town held", value: p.heldFraction.percentString)
-            LabeledContent("Town explored", value: p.exploredFraction.percentString)
+            LabeledContent("Streets held", value: "\(model.streetsHeldEverywhere)")
+            LabeledContent("Held around \(model.placeName)", value: p.heldFraction.percentString)
+            LabeledContent("Explored around \(model.placeName)", value: p.exploredFraction.percentString)
             LabeledContent("Blocks held", value: "\(p.blocksHeld)")
             if model.pro.isPro {
                 LabeledContent("Distance run", value: String(format: "%.1f km", totalKm))
@@ -112,10 +104,10 @@ struct BadgesSection: View {
         let p = model.progress
         let badges: [(String, String, Bool)] = [
             ("First bite", "circle.grid.cross.fill", p.heldSegments > 0 || !model.state.coverage.isEmpty),
-            ("10% of \(model.area.name)", "10.circle.fill", p.heldFraction >= 0.1),
+            ("10% of the map around you", "10.circle.fill", p.heldFraction >= 0.1),
             ("Block party", "square.grid.3x3.fill", !model.state.blockAwards.isEmpty),
             ("Frenzy", "bolt.circle.fill", !model.state.collectedPellets.isEmpty),
-            ("Conquered \(model.area.name)", "crown.fill", model.isConquered),
+            ("Conquered a map square", "crown.fill", model.state.badges.contains { $0.hasPrefix("conquered:") }),
         ]
         ForEach(badges, id: \.0) { b in
             Label(b.0, systemImage: b.1)
@@ -186,7 +178,8 @@ struct SettingsView: View {
             }
 
             Section {
-                Button(importing ? "Importing…" : "Import past runs from Health") {
+                NavigationLink("Add a run from Apple Health") { HealthImportView() }
+                Button(importing ? "Importing…" : "Import a year of Health runs (exploration)") {
                     Task {
                         importing = true
                         let n = await model.importHealthHistory()
@@ -204,7 +197,7 @@ struct SettingsView: View {
                 }.disabled(importing)
                 if let importResult { Text(importResult).font(.footnote).foregroundStyle(Theme.textSecondary) }
             } header: { Text("History") } footer: {
-                Text("Imported runs count towards streets you've explored, never towards ownership, so they can't steal anyone's streets.")
+                Text("A single run added from Health within 7 days of running it captures streets like any other run, unless someone has run them since. A year of history and Strava imports only count towards streets you've explored, so they can't steal anyone's streets.")
             }
 
             Section {
@@ -246,7 +239,7 @@ struct SettingsView: View {
 
             Section("About") {
                 LabeledContent("Version", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "")
-                Text(model.area.attribution).font(.footnote).foregroundStyle(Theme.textSecondary)
+                Text(Area.osmAttribution + ", via the Overpass API.").font(.footnote).foregroundStyle(Theme.textSecondary)
                 Text("Map tiles: OpenFreeMap, © OpenMapTiles, © OpenStreetMap contributors.").font(.footnote).foregroundStyle(Theme.textSecondary)
                 Button("Reset all data on this phone", role: .destructive) { confirmReset = true }
             }
@@ -341,10 +334,10 @@ enum StravaImport {
                 code = URLComponents(url: callback, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "code" }?.value
                 guard code != nil else { return "Strava didn't grant access." }
             }
-            let r = try await backend.importStrava(code: code, area: model.area.slug)
+            let r = try await backend.importStrava(code: code)
             UserDefaults.standard.set(true, forKey: "stravaConnected")
             await model.mergeServerCoverage()
-            if r.imported == 0 { return "No new Strava runs in \(model.area.name)." }
+            if r.imported == 0 { return "No new Strava runs to import." }
             return "Imported \(r.imported) Strava run\(r.imported == 1 ? "" : "s"), \(r.streets) streets explored." + (r.more ? " Tap again for more." : "")
         } catch let e as ASWebAuthenticationSessionError where e.code == .canceledLogin {
             return "Strava import cancelled."

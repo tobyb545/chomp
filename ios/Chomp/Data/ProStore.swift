@@ -3,18 +3,17 @@ import Observation
 import RevenueCat
 
 /// Chomp Pro via RevenueCat. Pro never affects capturing or defending streets;
-/// it only unlocks extra towns, clubs, stats, cosmetics and imports/exports.
+/// it only unlocks clubs, stats, cosmetics and imports/exports. The whole map is free.
 @MainActor
 @Observable
 final class ProStore {
     static let entitlement = "pro"
 
     enum Feature: String, CaseIterable, Identifiable {
-        case unlimitedTowns, clubs, stats, customColours, trails, stravaImport, replayExport
+        case clubs, stats, customColours, trails, stravaImport, replayExport
         var id: String { rawValue }
         var title: String {
             switch self {
-            case .unlimitedTowns: "Unlimited towns"
             case .clubs: "Clubs & club battles"
             case .stats: "Detailed stats & heatmaps"
             case .customColours: "Any colour you like"
@@ -25,7 +24,6 @@ final class ProStore {
         }
         var symbol: String {
             switch self {
-            case .unlimitedTowns: "map"
             case .clubs: "person.3.fill"
             case .stats: "chart.xyaxis.line"
             case .customColours: "paintpalette.fill"

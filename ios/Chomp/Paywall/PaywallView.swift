@@ -11,7 +11,7 @@ struct PaywallView: View {
                 VStack(spacing: 20) {
                     Text("CHOMP PRO").font(Theme.display(.largeTitle)).foregroundStyle(Color(hex: model.profile.colorHex))
                         .accessibilityAddTraits(.isHeader)
-                    Text("More towns, more ways to show off. Never more power: Pro can't help you capture or defend a single street.")
+                    Text("More ways to show off. Never more power: Pro can't help you capture or defend a single street.")
                         .multilineTextAlignment(.center).font(.headline).foregroundStyle(Theme.textSecondary)
                     VStack(alignment: .leading, spacing: 14) {
                         ForEach(ProStore.Feature.allCases) { f in

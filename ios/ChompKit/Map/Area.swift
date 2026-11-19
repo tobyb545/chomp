@@ -2,7 +2,7 @@ import Foundation
 
 /// The JSON produced by tools/ingest/ingest.py.
 public struct AreaFile: Codable, Sendable {
-    public struct SegmentRecord: Codable, Sendable {
+    public struct SegmentRecord: Codable, Sendable, Hashable {
         public let id: String
         public let name: String
         public let kind: String
@@ -12,13 +12,13 @@ public struct AreaFile: Codable, Sendable {
         public let b: Int64
         public let coords: [[Double]]
     }
-    public struct BlockRecord: Codable, Sendable {
+    public struct BlockRecord: Codable, Sendable, Hashable {
         public let id: String
         public let segments: [String]
         public let areaM2: Double
         public let ring: [[Double]]
     }
-    public struct POIRecord: Codable, Sendable {
+    public struct POIRecord: Codable, Sendable, Hashable {
         public let id: String
         public let name: String
         public let kind: String
@@ -90,7 +90,8 @@ public struct Landmark: Sendable, Identifiable, Hashable {
     public let coordinate: Coordinate
 }
 
-/// A playable town: segments, graph, blocks and landmarks, all immutable.
+/// The playable street network currently loaded: a set of map tiles merged into
+/// one immutable graph. Rebuilt (cheaply) whenever tiles are added.
 public final class Area: Sendable {
     public let slug: String
     public let name: String
@@ -113,50 +114,121 @@ public final class Area: Sendable {
     private let indexByID: [SegmentID: Int]
     public let blocksBySegment: [SegmentID: [BlockID]]
     public let blockByID: [BlockID: Block]
+    /// Tiles fully loaded into this area, sorted.
+    public let tiles: [TileKey]
+    /// Tile each segment belongs to (by its length-midpoint), indexed like `segments`.
+    public let segmentTile: [TileKey]
+    public let segmentsByTile: [TileKey: [Int]]
+    public let landmarksByTile: [TileKey: [Landmark]]
+    public let lengthByTile: [TileKey: Double]
 
-    public init(file: AreaFile) {
-        slug = file.slug
-        name = file.name
-        longName = file.longName
-        county = file.county
-        country = file.country
-        attribution = file.attribution
-        center = Coordinate(latitude: file.center[1], longitude: file.center[0])
-        bbox = file.bbox
-        boundary = file.boundary.map { poly in poly.map { ring in ring.map { Coordinate(latitude: $0[1], longitude: $0[0]) } } }
+    public static let osmAttribution = "Street data © OpenStreetMap contributors (ODbL)"
+
+    init(slug: String, name: String, longName: String, county: String, country: String, attribution: String,
+         center: Coordinate, boundary: [[[Coordinate]]], records: [(AreaFile.SegmentRecord, TileKey?)],
+         blocks blockRecords: [AreaFile.BlockRecord], pois: [AreaFile.POIRecord], lineage: [String: String], tiles: [TileKey]) {
+        self.slug = slug
+        self.name = name
+        self.longName = longName
+        self.county = county
+        self.country = country
+        self.attribution = attribution
+        self.center = center
+        self.boundary = boundary
         let proj = LocalProjection(origin: center)
         projection = proj
         var segs: [Segment] = []
-        segs.reserveCapacity(file.segments.count)
-        for (i, s) in file.segments.enumerated() {
-            let coords = s.coords.map { Coordinate(latitude: $0[1], longitude: $0[0]) }
-            segs.append(Segment(
-                id: s.id, index: i, name: s.name, isPath: s.kind == "path", highway: s.highway,
-                length: s.length, startNode: s.a, endNode: s.b, coordinates: coords,
-                polyline: Polyline(coords.map(proj.project))))
+        var segTiles: [TileKey] = []
+        segs.reserveCapacity(records.count)
+        var w = 180.0, s = 90.0, e = -180.0, n = -90.0
+        for (i, (r, tile)) in records.enumerated() {
+            let coords = r.coords.map { Coordinate(latitude: $0[1], longitude: $0[0]) }
+            for c in coords {
+                w = min(w, c.longitude); e = max(e, c.longitude); s = min(s, c.latitude); n = max(n, c.latitude)
+            }
+            let seg = Segment(
+                id: r.id, index: i, name: r.name, isPath: r.kind == "path", highway: r.highway,
+                length: r.length, startNode: r.a, endNode: r.b, coordinates: coords,
+                polyline: Polyline(coords.map(proj.project)))
+            segs.append(seg)
+            segTiles.append(tile ?? TileKey(containing: seg.midpoint))
         }
+        bbox = segs.isEmpty ? [center.longitude, center.latitude, center.longitude, center.latitude] : [w, s, e, n]
         segments = segs
-        indexByID = Dictionary(uniqueKeysWithValues: segs.map { ($0.id, $0.index) })
-        blocks = file.blocks.map { b in
+        segmentTile = segTiles
+        var byTile: [TileKey: [Int]] = [:]
+        var lenByTile: [TileKey: Double] = [:]
+        for (i, t) in segTiles.enumerated() {
+            byTile[t, default: []].append(i)
+            lenByTile[t, default: 0] += segs[i].length
+        }
+        segmentsByTile = byTile
+        lengthByTile = lenByTile
+        self.tiles = tiles.isEmpty ? byTile.keys.sorted() : tiles
+        indexByID = Dictionary(segs.map { ($0.id, $0.index) }, uniquingKeysWith: { a, _ in a })
+        blocks = blockRecords.map { b in
             Block(id: b.id, segmentIDs: b.segments, areaM2: b.areaM2,
                   ring: b.ring.map { Coordinate(latitude: $0[1], longitude: $0[0]) })
         }
         var bySeg: [SegmentID: [BlockID]] = [:]
         for b in blocks { for s in b.segmentIDs { bySeg[s, default: []].append(b.id) } }
         blocksBySegment = bySeg
-        blockByID = Dictionary(uniqueKeysWithValues: blocks.map { ($0.id, $0) })
-        landmarks = file.pois.map { Landmark(id: $0.id, name: $0.name, kind: $0.kind,
-                                             coordinate: Coordinate(latitude: $0.lat, longitude: $0.lon)) }
-        lineage = file.lineage
+        blockByID = Dictionary(blocks.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        landmarks = pois.map { Landmark(id: $0.id, name: $0.name, kind: $0.kind,
+                                        coordinate: Coordinate(latitude: $0.lat, longitude: $0.lon)) }
+        landmarksByTile = Dictionary(grouping: landmarks) { TileKey(containing: $0.coordinate) }
+        self.lineage = lineage
         totalLength = segs.reduce(0) { $0 + $1.length }
         graph = SegmentGraph(segments: segs)
         index = SpatialIndex(segments: segs, cell: 60)
+    }
+
+    /// A bundled town file (tools/ingest/ingest.py). Kept for tests and fixtures.
+    public convenience init(file: AreaFile) {
+        self.init(slug: file.slug, name: file.name, longName: file.longName, county: file.county, country: file.country,
+                  attribution: file.attribution, center: Coordinate(latitude: file.center[1], longitude: file.center[0]),
+                  boundary: file.boundary.map { poly in poly.map { ring in ring.map { Coordinate(latitude: $0[1], longitude: $0[0]) } } },
+                  records: file.segments.map { ($0, nil) }, blocks: file.blocks, pois: file.pois, lineage: file.lineage, tiles: [])
+    }
+
+    /// Merges tiles into one playable area. Order is fixed (tiles sorted by key,
+    /// then each tile's own order) so the server builds the identical graph.
+    public convenience init(tiles files: [TileFile], name: String = "Nearby") {
+        let sorted = files.compactMap { f in TileKey(string: f.key).map { ($0, f) } }.sorted { $0.0 < $1.0 }
+        var seenSeg = Set<String>(), seenBlock = Set<String>(), seenPOI = Set<String>()
+        var records: [(AreaFile.SegmentRecord, TileKey?)] = []
+        var blocks: [AreaFile.BlockRecord] = []
+        var pois: [AreaFile.POIRecord] = []
+        for (key, f) in sorted {
+            for s in f.segments where seenSeg.insert(s.id).inserted { records.append((s, key)) }
+            for b in f.blocks where seenBlock.insert(b.id).inserted { blocks.append(b) }
+            for p in f.pois where seenPOI.insert(p.id).inserted { pois.append(p) }
+        }
+        let keys = sorted.map(\.0)
+        let center: Coordinate
+        if keys.isEmpty {
+            center = Coordinate(latitude: 51.5, longitude: -0.12)
+        } else {
+            let cs = keys.map(\.center)
+            center = Coordinate(latitude: cs.map(\.latitude).reduce(0, +) / Double(cs.count),
+                                longitude: cs.map(\.longitude).reduce(0, +) / Double(cs.count))
+        }
+        let boundary = keys.map { k in
+            [[Coordinate(latitude: k.south, longitude: k.west), Coordinate(latitude: k.south, longitude: k.east),
+              Coordinate(latitude: k.north, longitude: k.east), Coordinate(latitude: k.north, longitude: k.west),
+              Coordinate(latitude: k.south, longitude: k.west)]]
+        }
+        self.init(slug: "world", name: name, longName: name, county: "", country: "", attribution: Area.osmAttribution,
+                  center: center, boundary: boundary, records: records, blocks: blocks, pois: pois, lineage: [:], tiles: keys)
     }
 
     public static func load(from url: URL) throws -> Area {
         let data = try Data(contentsOf: url)
         return Area(file: try JSONDecoder().decode(AreaFile.self, from: data))
     }
+
+    /// Segments belonging to `tile`.
+    public func segments(in tile: TileKey) -> [Segment] { (segmentsByTile[tile] ?? []).map { segments[$0] } }
 
     public func segment(_ id: SegmentID) -> Segment? {
         indexByID[id].map { segments[$0] }

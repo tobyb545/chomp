@@ -1,7 +1,7 @@
 import Foundation
 
 /// Deterministic PRNG (SplitMix64). Same seed → same sequence on iOS and server,
-/// so everyone in a town sees the same power pellets and bonus streets.
+/// so everyone nearby sees the same power pellets and bonus streets.
 public struct SeededRandom: RandomNumberGenerator, Sendable {
     private var state: UInt64
     public init(seed: UInt64) { state = seed }
@@ -65,41 +65,50 @@ public enum DailySpawns {
         return c
     }
 
+    /// Each map tile gets its own pellets every day, seeded only by the tile and
+    /// the date, so every player (and the server) sees the same ones no matter
+    /// which neighbouring tiles they have loaded.
     public static func powerPellets(area: Area, date: Date, rules: RulesConfig, calendar: Calendar = townCalendar) -> [PowerPellet] {
         let key = dayKey(date, calendar: calendar)
-        var rng = SeededRandom(string: "pellets|\(area.slug)|\(key)")
-        var pool = area.landmarks.sorted { $0.id < $1.id }
         let start = calendar.startOfDay(for: date)
         let end = calendar.date(byAdding: .day, value: 1, to: start)!
         var out: [PowerPellet] = []
-        let n = min(rules.powerPellets.perDay, pool.count)
-        for _ in 0..<n {
-            let i = rng.int(pool.count)
-            let lm = pool.remove(at: i)
-            out.append(PowerPellet(id: "\(key)|\(lm.id)", landmark: lm, activeFrom: start, activeUntil: end))
+        for tile in area.tiles {
+            var pool = (area.landmarksByTile[tile] ?? []).sorted { $0.id < $1.id }
+            guard !pool.isEmpty else { continue }
+            var rng = SeededRandom(string: "pellets|\(tile)|\(key)")
+            for _ in 0..<min(rules.powerPellets.perDay, pool.count) {
+                let lm = pool.remove(at: rng.int(pool.count))
+                out.append(PowerPellet(id: "\(key)|\(lm.id)", landmark: lm, activeFrom: start, activeUntil: end))
+            }
         }
         return out
     }
 
+    static let bonusWindows: [(Int, Int, Double)] = [(6, 8, 3), (17, 20, 2), (12, 14, 2)]
+
     public static func bonusStreets(area: Area, date: Date, rules: RulesConfig, calendar: Calendar = townCalendar) -> [BonusStreet] {
         let key = dayKey(date, calendar: calendar)
-        var rng = SeededRandom(string: "bonus|\(area.slug)|\(key)")
-        // Prefer proper named streets of a satisfying length.
-        let pool = area.segments.filter { !$0.name.isEmpty && $0.length >= 80 && !$0.isPath }.sorted { $0.id < $1.id }
-        guard !pool.isEmpty else { return [] }
         let day = calendar.startOfDay(for: date)
-        let windows: [(Int, Int, Double)] = [(6, 8, 3), (17, 20, 2), (12, 14, 2)]
         var out: [BonusStreet] = []
-        var used = Set<String>()
-        for w in windows.prefix(rules.bonusStreets.perDay) {
-            var s = pool[rng.int(pool.count)]
-            var tries = 0
-            while used.contains(s.name), tries < 10 { s = pool[rng.int(pool.count)]; tries += 1 }
-            used.insert(s.name)
-            out.append(BonusStreet(
-                segmentIDs: area.segments.filter { $0.name == s.name }.map(\.id), streetName: s.name, multiplier: w.2,
-                startsAt: calendar.date(byAdding: .hour, value: w.0, to: day)!,
-                endsAt: calendar.date(byAdding: .hour, value: w.1, to: day)!))
+        for tile in area.tiles {
+            let inTile = area.segments(in: tile)
+            // Prefer proper named streets of a satisfying length.
+            let pool = inTile.filter { !$0.name.isEmpty && $0.length >= 80 && !$0.isPath }.sorted { $0.id < $1.id }
+            guard !pool.isEmpty else { continue }
+            var rng = SeededRandom(string: "bonus|\(tile)|\(key)")
+            var used = Set<String>()
+            for _ in 0..<rules.bonusStreets.perDay {
+                var s = pool[rng.int(pool.count)]
+                var tries = 0
+                while used.contains(s.name), tries < 10 { s = pool[rng.int(pool.count)]; tries += 1 }
+                used.insert(s.name)
+                let w = bonusWindows[rng.int(bonusWindows.count)]
+                out.append(BonusStreet(
+                    segmentIDs: inTile.filter { $0.name == s.name }.map(\.id), streetName: s.name, multiplier: w.2,
+                    startsAt: calendar.date(byAdding: .hour, value: w.0, to: day)!,
+                    endsAt: calendar.date(byAdding: .hour, value: w.1, to: day)!))
+            }
         }
         return out
     }

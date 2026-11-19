@@ -4,7 +4,7 @@ import ChompKit
 struct LeaderboardView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
-    @State private var scope: LeaderboardScope = .town
+    @State private var scope: LeaderboardScope = .nearby
     @State private var metric: LeaderboardMetric = .streets
     @State private var entries: [LeaderboardEntry] = []
     @State private var error: String?
@@ -25,12 +25,12 @@ struct LeaderboardView: View {
                     Section { Text(error).foregroundStyle(Theme.textSecondary) }
                 }
                 let sorted = entries.sorted { $0.value(metric) > $1.value(metric) }
-                if let boss = sorted.first, scope == .town, boss.value(metric) > 0 {
+                if let boss = sorted.first, scope == .nearby, boss.value(metric) > 0 {
                     Section {
                         HStack(spacing: 12) {
                             Image(systemName: "crown.fill").font(.title).foregroundStyle(Color(hex: "FFD600"))
                             VStack(alignment: .leading) {
-                                Text("Town Boss this week").font(.caption.weight(.heavy)).textCase(.uppercase).foregroundStyle(Theme.textSecondary)
+                                Text("Local boss this week").font(.caption.weight(.heavy)).textCase(.uppercase).foregroundStyle(Theme.textSecondary)
                                 Text(boss.name).font(Theme.display(.title3))
                             }
                             if boss.isBot { Chip(text: "Bot", colorHex: "8888AA") }
@@ -38,7 +38,7 @@ struct LeaderboardView: View {
                         .accessibilityElement(children: .combine)
                     }
                 }
-                Section(model.area.name) {
+                Section(model.placeName) {
                     ForEach(Array(sorted.enumerated()), id: \.element.id) { i, e in
                         Button { if !e.isMe && !e.isBot { selected = e } } label: { row(rank: i + 1, e) }
                             .buttonStyle(.plain)
@@ -70,8 +70,8 @@ struct LeaderboardView: View {
         error = nil
         do { entries = try await model.leaderboard(scope: scope) } catch {
             entries = []
-            self.error = scope == .town ? error.localizedDescription
-                : "\(scope.label) leaderboards need online play. Solo town rankings (you vs the bots) work offline."
+            self.error = scope == .nearby ? error.localizedDescription
+                : "\(scope.label) leaderboards need online play. Nearby rankings (you vs the bots) work offline."
         }
     }
 }
@@ -279,7 +279,7 @@ struct ClubsView: View {
         Form {
             if !model.backend.isSignedIn {
                 Section {
-                    Text("Clubs, friends and club-vs-club town battles need online play. Sign in from Settings once the backend is connected.")
+                    Text("Clubs, friends and club-vs-club battles need online play. Sign in from Settings once the backend is connected.")
                         .foregroundStyle(Theme.textSecondary)
                 }
             }

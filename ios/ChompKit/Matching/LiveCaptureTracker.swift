@@ -58,6 +58,20 @@ public struct LiveCaptureTracker: Sendable {
         return Update(newlyEaten: newly, newlyStolen: stolen, touched: touched)
     }
 
+    /// Same tracker on a new (bigger) map: coverage is recomputed from the whole
+    /// trace, but streets already eaten stay eaten and aren't reported again.
+    public mutating func rebase(matcher: MapMatcher, trace: [TracePoint]) {
+        let keep = eaten, order = eatenOrder
+        self = LiveCaptureTracker(matcher: matcher, threshold: threshold)
+        eaten = keep
+        eatenOrder = order
+        guard trace.count >= 2 else { return }
+        let r = matcher.match(trace)
+        pieces = r.pieces
+        processed = trace.count
+        for p in r.pieces { coverage[p.segment, default: IntervalSet()].insert(p.from...p.to) }
+    }
+
     public func ratio(for id: SegmentID) -> Double {
         guard let i = matcher.area.segmentIndex(id) else { return 0 }
         return min(1, (coverage[i]?.coveredLength ?? 0) / max(matcher.area.segments[i].length, 0.1))

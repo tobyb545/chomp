@@ -5,10 +5,18 @@ import Testing
 final class TestBundle {}
 
 enum Fixtures {
-    static let area: Area = {
-        let url = Bundle(for: TestBundle.self).url(forResource: "west-byfleet", withExtension: "json")!
-        return try! Area.load(from: url)
+    /// Real OpenStreetMap data for 3x3 tiles around West Byfleet (shared/fixtures/osm-west-byfleet.json).
+    static let osm: OverpassResponse = {
+        let url = Bundle(for: TestBundle.self).url(forResource: "osm-west-byfleet", withExtension: "json")!
+        return try! JSONDecoder().decode(OverpassResponse.self, from: Data(contentsOf: url))
     }()
+    static let centerTile = TileKey(x: 8168, y: 5460)
+    static let builtAt = Date(timeIntervalSince1970: 1_790_000_000)
+
+    static let tiles: [TileFile] = centerTile.neighbourhood().map {
+        StreetBuilder.buildTile($0, osm: StreetBuilder.subset(osm, for: $0), generatedAt: builtAt)
+    }
+    static let area = Area(tiles: tiles, name: "West Byfleet")
     static let rules = RulesConfig.bundled
     static let t0 = Date(timeIntervalSince1970: 1_790_000_000) // fixed, mid-2026
 
@@ -60,19 +68,53 @@ struct GeometryTests {
 
 @Suite("Area data")
 struct AreaTests {
-    @Test func loadsWestByfleet() {
+    @Test func buildsWestByfleetFromOpenStreetMap() {
         let a = Fixtures.area
-        #expect(a.segments.count > 1500)
-        #expect(a.totalLength > 100_000)
+        #expect(a.tiles.count == 9)
+        #expect(a.segments.count > 800)
+        #expect(a.totalLength > 60_000)
         #expect(!a.blocks.isEmpty)
         #expect(!a.landmarks.isEmpty)
         #expect(Set(a.segments.map(\.id)).count == a.segments.count, "segment IDs must be unique")
         #expect(a.contains(a.center))
+        #expect(a.segments.contains { $0.name == "Old Woking Road" })
+    }
+
+    @Test func eachStreetBelongsToExactlyOneTile() {
+        var seen: [String: String] = [:]
+        for t in Fixtures.tiles {
+            for s in t.segments {
+                #expect(seen[s.id] == nil, "\(s.id) in \(t.key) and \(seen[s.id] ?? "")")
+                seen[s.id] = t.key
+            }
+        }
+    }
+
+    @Test func streetsJoinUpAcrossTileEdges() {
+        let a = Fixtures.area
+        var tilesAtNode: [Int64: Set<TileKey>] = [:]
+        for s in a.segments {
+            tilesAtNode[s.startNode, default: []].insert(a.segmentTile[s.index])
+            tilesAtNode[s.endNode, default: []].insert(a.segmentTile[s.index])
+        }
+        #expect(tilesAtNode.values.filter { $0.count > 1 }.count > 20)
+    }
+
+    @Test func tileMathRoundTrips() {
+        let c = Coordinate(latitude: 51.3392, longitude: -0.5063)
+        let t = TileKey(containing: c)
+        #expect(t == Fixtures.centerTile)
+        #expect(t.contains(c) && t.contains(t.center))
+        #expect(TileKey(string: t.description) == t)
+        #expect(t.west < c.longitude && c.longitude < t.east && t.south < c.latitude && c.latitude < t.north)
     }
 
     @Test func blocksReferenceRealSegments() {
-        for b in Fixtures.area.blocks {
-            for s in b.segmentIDs { #expect(Fixtures.area.segment(s) != nil) }
+        // Blocks in the middle tile only use streets from it and its loaded neighbours.
+        let mid = Fixtures.tiles.first { $0.key == Fixtures.centerTile.description }!
+        #expect(!mid.blocks.isEmpty)
+        for b in mid.blocks {
+            for s in b.segments { #expect(Fixtures.area.segment(s) != nil) }
         }
     }
 }
@@ -221,19 +263,59 @@ struct GameTests {
         let a = DailySpawns.powerPellets(area: Fixtures.area, date: Fixtures.t0, rules: Fixtures.rules).map(\.id)
         let b = DailySpawns.powerPellets(area: Fixtures.area, date: Fixtures.t0.addingTimeInterval(60), rules: Fixtures.rules).map(\.id)
         #expect(a == b)
-        #expect(a.count == min(Fixtures.rules.powerPellets.perDay, Fixtures.area.landmarks.count))
+        let withLandmarks = Fixtures.area.tiles.filter { !(Fixtures.area.landmarksByTile[$0] ?? []).isEmpty }.count
+        #expect(a.count == withLandmarks * Fixtures.rules.powerPellets.perDay)
         let bonus = DailySpawns.bonusStreets(area: Fixtures.area, date: Fixtures.t0, rules: Fixtures.rules)
-        #expect(bonus.count == Fixtures.rules.bonusStreets.perDay)
+        #expect(bonus.count >= Fixtures.area.tiles.count - 2)
         #expect(bonus[0].label().contains("×"))
+    }
+
+    @Test func spawnsDependOnlyOnTheirOwnTile() {
+        // A tile's pellets must not change when neighbouring tiles load or unload.
+        let one = Area(tiles: Fixtures.tiles.filter { $0.key == Fixtures.centerTile.description })
+        let mine = Set(DailySpawns.powerPellets(area: one, date: Fixtures.t0, rules: Fixtures.rules).map(\.id))
+        let all = Set(DailySpawns.powerPellets(area: Fixtures.area, date: Fixtures.t0, rules: Fixtures.rules).map(\.id))
+        #expect(mine.isSubset(of: all))
+        let b1 = DailySpawns.bonusStreets(area: one, date: Fixtures.t0, rules: Fixtures.rules).map(\.id)
+        let b9 = DailySpawns.bonusStreets(area: Fixtures.area, date: Fixtures.t0, rules: Fixtures.rules).map(\.id)
+        #expect(Set(b1).isSubset(of: Set(b9)))
+    }
+
+    @Test func holdingAWholeTileConquersIt() throws {
+        let area = Fixtures.area
+        let tile = try #require(area.tiles.min { (area.segmentsByTile[$0]?.count ?? 0) < (area.segmentsByTile[$1]?.count ?? 0) })
+        let segs = area.segments(in: tile)
+        let last = try #require(segs.filter { $0.length > 40 && !$0.isPath }.max { $0.length < $1.length })
+        var state = GameState(areaSlug: "world", playerID: "me")
+        for s in segs where s.id != last.id {
+            state.ownership[s.id] = Ownership(owner: state.me, capturedAt: Fixtures.t0, lastVisitedAt: Fixtures.t0)
+        }
+        let trace = RouteSimulator(area: area).trace(along: last.coordinates, start: Fixtures.t0.addingTimeInterval(60), speed: 2.5, noise: 1, seed: 5)
+        let out = resolve(trace, state: &state)
+        #expect(out.conqueredTown)
+        #expect(state.badges.contains("conquered:\(tile)"))
+    }
+
+    @Test func laterCaptureWins() throws {
+        let area = Fixtures.area
+        let seg = try #require(area.segments.first { $0.length > 120 && !$0.isPath })
+        var state = GameState(areaSlug: "world", playerID: "me")
+        // A bot ran it an hour after our (imported) run.
+        state.ownership[seg.id] = Ownership(owner: .ghost("bot-rook"), capturedAt: Fixtures.t0.addingTimeInterval(3600),
+                                            lastVisitedAt: Fixtures.t0.addingTimeInterval(3600))
+        let trace = RouteSimulator(area: area).trace(along: seg.coordinates, start: Fixtures.t0, speed: 2.5, noise: 1, seed: 6)
+        let out = resolve(trace, state: &state)
+        #expect(out.captures.first { $0.segmentID == seg.id }?.kind == .rejected)
+        #expect(state.ownership[seg.id]?.owner == .ghost("bot-rook"))
     }
 
     @Test func completingABlockPaysABonus() throws {
         let area = Fixtures.area
-        let block = try #require(area.blocks.first { $0.segmentIDs.count >= 3 })
+        let block = try #require(area.blocks.first { $0.segmentIDs.count >= 3 && $0.segmentIDs.allSatisfy { area.segment($0) != nil } })
         var state = GameState(areaSlug: "west-byfleet", playerID: "me")
-        // Own all but one side already.
-        let last = block.segmentIDs.last!
-        for s in block.segmentIDs.dropLast() {
+        // Own all but the longest side already.
+        let last = block.segmentIDs.max { area.segment($0)!.length < area.segment($1)!.length }!
+        for s in block.segmentIDs where s != last {
             state.ownership[s] = Ownership(owner: state.me, capturedAt: Fixtures.t0, lastVisitedAt: Fixtures.t0)
         }
         let seg = try #require(area.segment(last))
@@ -302,6 +384,12 @@ struct SplitTests {
 /// reaches the same answers, so client-side provisional results match the server.
 @Suite("Server parity fixture")
 struct ParityFixture {
+    /// iCloud-synced folders can refuse an in-place overwrite (EDEADLK), so replace the file instead.
+    func write(_ data: Data, to url: URL) throws {
+        try? FileManager.default.removeItem(at: url)
+        try data.write(to: url)
+    }
+
     @Test func writeFixture() throws {
         let area = Fixtures.area, rules = Fixtures.rules
         var out: [String: Any] = [:]
@@ -350,10 +438,14 @@ struct ParityFixture {
         }
         out["runs"] = runs
 
-        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("shared/fixtures/parity.json")
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try JSONSerialization.data(withJSONObject: out, options: [.sortedKeys]).write(to: url)
+        let dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("shared/fixtures")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try write(JSONSerialization.data(withJSONObject: out, options: [.sortedKeys]), to: dir.appendingPathComponent("parity.json"))
+        // The tiles themselves: the server's StreetBuilder port must produce exactly these.
+        let enc = JSONEncoder()
+        enc.outputFormatting = [.sortedKeys]
+        try write(enc.encode(Fixtures.tiles), to: dir.appendingPathComponent("tiles-west-byfleet.json"))
     }
 }
 
@@ -377,3 +469,4 @@ struct ServerResponseDecoding {
         #expect(o.flags.contains { $0.severity == .medium })
     }
 }
+

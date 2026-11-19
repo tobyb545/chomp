@@ -19,6 +19,9 @@ struct GameMapView: UIViewRepresentable {
     var interactive = true
     var showsUserLocation = true
     var onUserPan: (() -> Void)?
+    /// Called when the camera settles: centre and zoom. The home map uses it to
+    /// load streets wherever the player looks.
+    var onRegionChange: ((Coordinate, Double) -> Void)?
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -31,7 +34,7 @@ struct GameMapView: UIViewRepresentable {
         map.compassViewPosition = .topRight
         map.compassViewMargins = CGPoint(x: 16, y: 120)
         map.tintColor = UIColor(Color(hex: snapshot.playerColorHex))
-        map.minimumZoomLevel = 11
+        map.minimumZoomLevel = 9
         map.maximumZoomLevel = 19
         map.isPitchEnabled = false
         map.isRotateEnabled = interactive
@@ -39,7 +42,9 @@ struct GameMapView: UIViewRepresentable {
         map.isZoomEnabled = interactive
         if !LocationPermission.isAuthorized { map.locationManager = PassiveLocationManager() }
         map.showsUserLocation = showsUserLocation && LocationPermission.isAuthorized
-        map.setCenter(CLLocationCoordinate2D(latitude: area.center.latitude, longitude: area.center.longitude), zoomLevel: 14.4, animated: false)
+        let start = focus ?? (area.tiles.isEmpty ? LocationPermission.shared.lastKnown : nil) ?? area.center
+        context.coordinator.lastFocus = focus
+        map.setCenter(CLLocationCoordinate2D(latitude: start.latitude, longitude: start.longitude), zoomLevel: area.tiles.isEmpty && focus == nil ? 12 : 14.4, animated: false)
         map.isAccessibilityElement = false
         let pan = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.didPan(_:)))
         pan.delegate = context.coordinator
@@ -92,6 +97,7 @@ struct GameMapView: UIViewRepresentable {
         var lastFocus: Coordinate?
         var lastFit: [Coordinate]?
         private var segmentFeatures: [MLNPolylineFeature] = []
+        private weak var featuresArea: Area?
         private var registeredIcons = Set<String>()
         private var pulse: Timer?
 
@@ -122,12 +128,7 @@ struct GameMapView: UIViewRepresentable {
             NSLog("[ChompMap] style loaded with \(style.layers.count) layers")
             styleReady = true
             registeredIcons.removeAll()
-            segmentFeatures = parent.area.segments.map { seg in
-                var coords = seg.coordinates.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
-                let f = MLNPolylineFeature(coordinates: &coords, count: UInt(coords.count))
-                f.identifier = seg.id as NSString
-                return f
-            }
+            featuresArea = nil
             lastVersion = -1
             apply(parent.snapshot)
             startPulse()
@@ -148,8 +149,28 @@ struct GameMapView: UIViewRepresentable {
             }
         }
 
+        func mapView(_ mapView: MLNMapView, regionDidChangeAnimated animated: Bool) {
+            let c = mapView.centerCoordinate
+            parent.onRegionChange?(Coordinate(latitude: c.latitude, longitude: c.longitude), mapView.zoomLevel)
+        }
+
+        /// Street geometry only changes when tiles load; rebuild it then.
+        private func rebuildFeaturesIfNeeded() -> Bool {
+            guard featuresArea !== parent.area else { return false }
+            featuresArea = parent.area
+            segmentFeatures = parent.area.segments.map { seg in
+                var coords = seg.coordinates.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
+                let f = MLNPolylineFeature(coordinates: &coords, count: UInt(coords.count))
+                f.identifier = seg.id as NSString
+                return f
+            }
+            return true
+        }
+
         func apply(_ s: MapSnapshot) {
-            guard styleReady, let style = map?.style, s.version != lastVersion || lastVersion == -1 else { return }
+            guard styleReady, let style = map?.style else { return }
+            let rebuilt = rebuildFeaturesIfNeeded()
+            guard rebuilt || s.version != lastVersion || lastVersion == -1 else { return }
             lastVersion = s.version
             for (i, seg) in parent.area.segments.enumerated() where i < segmentFeatures.count {
                 let look = s.looks[seg.id]

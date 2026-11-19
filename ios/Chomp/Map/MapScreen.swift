@@ -1,7 +1,8 @@
 import SwiftUI
 import ChompKit
 
-/// Home screen: the town map with a big start button.
+/// Home screen: the map around you with a big start button. Pan anywhere and
+/// the streets there load too.
 struct MapScreen: View {
     @Environment(AppModel.self) private var model
     @State private var follow = true
@@ -17,7 +18,8 @@ struct MapScreen: View {
             GameMapView(area: model.area, snapshot: snapshot,
                         camera: model.run.isActive && follow ? .follow : .free,
                         focus: model.focusRequest,
-                        onUserPan: { follow = false })
+                        onUserPan: { follow = false },
+                        onRegionChange: { c, zoom in model.mapSettled(at: c, zoom: zoom) })
                 .ignoresSafeArea()
                 .accessibilityElement()
                 .accessibilityLabel(mapAccessibilityLabel)
@@ -28,6 +30,7 @@ struct MapScreen: View {
                     RunHUDView(follow: $follow)
                 } else {
                     TownHeader()
+                    WorldStatusBanner()
                     Spacer()
                     sideButtons
                     startButton
@@ -49,7 +52,7 @@ struct MapScreen: View {
             Button("Run for real") { start(simulated: false) }
             Button("Simulated run (demo)") { start(simulated: true) }
         } message: {
-            Text("Simulated runs replay a believable route through \(model.area.name) at 8× speed. Handy for trying the game in the simulator.")
+            Text("Simulated runs replay a believable route through the streets on screen at 8× speed. Handy for trying the game in the simulator.")
         }
         .onAppear { seenEvents = UserDefaults.standard.integer(forKey: "seenEvents") }
         .onChange(of: seenEvents) { _, v in UserDefaults.standard.set(v, forKey: "seenEvents") }
@@ -57,7 +60,7 @@ struct MapScreen: View {
 
     private var mapAccessibilityLabel: String {
         let p = model.progress
-        return "Map of \(model.area.name). You hold \(p.heldSegments) streets, \(p.heldFraction.percentString) of the town. "
+        return "Map of \(model.placeName). You hold \(p.heldSegments) streets here, \(p.heldFraction.percentString) of the streets nearby. "
             + "\(model.uncollectedPellets.count) power pellets on the map today."
     }
 
@@ -76,7 +79,10 @@ struct MapScreen: View {
                     }
                 }
                 RoundIconButton(symbol: "location.fill", label: "Centre on me") {
-                    model.focusRequest = LocationPermission.shared.lastKnown ?? model.area.center
+                    Task {
+                        _ = await LocationPermission.shared.requestWhenInUse()
+                        await model.locateAndLoad()
+                    }
                 }
                 RoundIconButton(symbol: "person.crop.circle.fill", label: "Profile and settings") { sheet = .profile }
             }
@@ -105,6 +111,10 @@ struct MapScreen: View {
 
     private func start(simulated: Bool) {
         follow = true
+        guard !model.area.segments.isEmpty else {
+            model.toast = "Streets are still loading. Give it a moment."
+            return
+        }
         Task {
             if !simulated {
                 let status = await LocationPermission.shared.requestWhenInUse()
@@ -119,7 +129,7 @@ struct MapScreen: View {
     }
 }
 
-/// Town name, completion ring and today's specials.
+/// Place name, completion ring and today's specials.
 struct TownHeader: View {
     @Environment(AppModel.self) private var model
 
@@ -135,11 +145,11 @@ struct TownHeader: View {
                     }
                     .frame(width: 58, height: 58)
                     .accessibilityElement()
-                    .accessibilityLabel("\(p.heldFraction.percentString) of \(model.area.name) held")
+                    .accessibilityLabel("\(p.heldFraction.percentString) of the streets around \(model.placeName) held")
 
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 6) {
-                            Text(model.area.name).font(Theme.display(.title3)).foregroundStyle(Theme.hudText)
+                            Text(model.placeName).font(Theme.display(.title3)).foregroundStyle(Theme.hudText).lineLimit(1)
                             if model.isConquered { Chip(text: "Conquered", colorHex: "FFD600") }
                         }
                         Text("\(p.heldSegments) streets · \(formatDistance(p.heldMetres, miles: model.profile.useMiles)) · \(p.blocksHeld) blocks")
@@ -161,8 +171,12 @@ struct TownHeader: View {
     }
 
     @ViewBuilder private var specials: some View {
-        let pellets = model.uncollectedPellets
-        let bonus = model.activeBonus
+        // Nearest few only: every map square has its own.
+        let here = model.savedFocus ?? model.area.center
+        let pellets = Array(model.uncollectedPellets.sorted { $0.landmark.coordinate.distance(to: here) < $1.landmark.coordinate.distance(to: here) }.prefix(4))
+        let bonus = Array(model.activeBonus.sorted {
+            (model.area.segment($0.segmentIDs[0])?.midpoint.distance(to: here) ?? 0) < (model.area.segment($1.segmentIDs[0])?.midpoint.distance(to: here) ?? 0)
+        }.prefix(3))
         if !pellets.isEmpty || !bonus.isEmpty {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
@@ -191,5 +205,46 @@ struct TownHeader: View {
                 }
             }
         }
+    }
+}
+
+/// Tells the player when streets are loading, or why they aren't there.
+struct WorldStatusBanner: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        switch model.worldStatus {
+        case .idle:
+            EmptyView()
+        case .loading(let n):
+            banner(symbol: nil, text: model.area.segments.isEmpty ? "Loading the streets around you…" : "Loading more streets… (\(n))")
+        case .needsLocation:
+            banner(symbol: "location.slash", text: "Allow location, or pan the map to any town, to load its streets.") {
+                Task {
+                    _ = await LocationPermission.shared.requestWhenInUse()
+                    await model.locateAndLoad()
+                }
+            }
+        case .failed(let why):
+            banner(symbol: "wifi.exclamationmark", text: why + " Tap to retry.") {
+                if let f = model.savedFocus { model.focusWorld(on: f, force: true) }
+            }
+        }
+    }
+
+    private func banner(symbol: String?, text: String, action: (() -> Void)? = nil) -> some View {
+        Button { action?() } label: {
+            HStack(spacing: 10) {
+                if let symbol { Image(systemName: symbol) } else { ProgressView().tint(Theme.hudText) }
+                Text(text).font(.subheadline.weight(.semibold)).multilineTextAlignment(.leading)
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(Theme.hudText)
+            .padding(12)
+            .background(.black.opacity(0.65), in: RoundedRectangle(cornerRadius: 14))
+        }
+        .buttonStyle(.plain)
+        .disabled(action == nil)
+        .accessibilityElement(children: .combine)
     }
 }

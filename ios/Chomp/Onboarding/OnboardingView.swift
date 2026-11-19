@@ -83,7 +83,8 @@ struct OnboardingView: View {
                 .accessibilityHidden(true)
             Text("Location while you run").font(Theme.display(.title)).foregroundStyle(.white)
             VStack(alignment: .leading, spacing: 10) {
-                bullet("figure.run", "Only while a run is recording, to see which streets you cover.")
+                bullet("map.fill", "To load the streets around you. Chomp works anywhere in the world.")
+                bullet("figure.run", "While a run is recording, to see which streets you cover.")
                 bullet("eye.slash.fill", "Rivals never see where you are. They only see which streets you own.")
                 bullet("house.fill", "Add privacy zones to hide where your runs start and end.")
             }
@@ -97,7 +98,7 @@ struct OnboardingView: View {
     private var readyStep: some View {
         VStack(spacing: 18) {
             Text("Ready, \(name.trimmingCharacters(in: .whitespaces))").font(Theme.display(.title)).foregroundStyle(.white)
-            Text("\(model.area.name) is full of pellets. A few bots are already out there. Go win some streets.")
+            Text("Every street near you is covered in dots. A few bots are already out there. Go eat some streets.")
                 .font(.title3.weight(.semibold)).multilineTextAlignment(.center).foregroundStyle(Theme.hudSecondary)
             next("Show me the map") { finish() }
         }
@@ -122,8 +123,10 @@ struct OnboardingView: View {
         p.colorHex = colorHex
         p.onboarded = true
         model.profile = p
-        model.tickWorld()
-        Task { _ = await NotificationService.requestPermission() }
+        Task {
+            await model.locateAndLoad()
+            _ = await NotificationService.requestPermission()
+        }
     }
 }
 

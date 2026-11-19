@@ -99,7 +99,7 @@ struct RunSummaryView: View {
             Text("+\(outcome.totalPoints)").font(Theme.display(.largeTitle)).foregroundStyle(Color(hex: model.profile.colorHex))
             Text("points").font(.headline).foregroundStyle(Theme.textSecondary)
             if outcome.conqueredTown {
-                Label("You conquered \(model.area.name)!", systemImage: "crown.fill")
+                Label("You conquered a whole map square!", systemImage: "crown.fill")
                     .font(.headline).foregroundStyle(Color(hex: "FFD600")).padding(.top, 6)
             }
             if record.simulated { Chip(text: "Simulated run", colorHex: "8B5CFF").padding(.top, 4) }
@@ -217,7 +217,7 @@ struct RunSummaryView: View {
     private var shareRow: some View {
         VStack(spacing: 10) {
             if let img = shareImage {
-                ShareLink(item: img, preview: SharePreview("My streets in \(model.area.name)", image: img)) {
+                ShareLink(item: img, preview: SharePreview("My streets in \(model.placeName)", image: img)) {
                     Label("Share my territory", systemImage: "square.and.arrow.up")
                 }
                 .buttonStyle(ChunkyButtonStyle(colorHex: model.profile.colorHex, height: 56))
@@ -244,7 +244,7 @@ struct RunSummaryView: View {
     private func renderPoster(reveal: Int? = nil) -> Image? {
         let poster = TerritoryPoster(area: model.area, state: model.state, me: model.state.me, colorHex: model.profile.colorHex,
                                      highlight: Set(ordered.prefix(reveal ?? ordered.count).map(\.segmentID)),
-                                     title: model.area.name, subtitle: "\(model.progress.heldSegments) streets held · +\(outcome.totalPoints) pts",
+                                     title: model.placeName, subtitle: "\(model.progress.heldSegments) streets held · +\(outcome.totalPoints) pts",
                                      ownerColor: model.ownerColor)
         let r = ImageRenderer(content: poster.frame(width: 1080 / 3, height: 1350 / 3))
         r.scale = 3
@@ -260,7 +260,7 @@ struct RunSummaryView: View {
         for f in 0...frames {
             let reveal = Int(Double(ordered.count) * Double(f) / Double(frames))
             let poster = TerritoryPoster(area: model.area, state: model.state, me: model.state.me, colorHex: model.profile.colorHex,
-                                         highlight: Set(ordered.prefix(reveal).map(\.segmentID)), title: model.area.name,
+                                         highlight: Set(ordered.prefix(reveal).map(\.segmentID)), title: model.placeName,
                                          subtitle: "+\(outcome.totalPoints) pts", ownerColor: model.ownerColor)
             let r = ImageRenderer(content: poster.frame(width: 300, height: 375))
             r.scale = 2

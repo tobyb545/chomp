@@ -71,6 +71,7 @@ final class LocationPermission: NSObject, CLLocationManagerDelegate {
     static let shared = LocationPermission()
     private let manager = CLLocationManager()
     private var waiters: [CheckedContinuation<CLAuthorizationStatus, Never>] = []
+    private var fixWaiters: [CheckedContinuation<Coordinate?, Never>] = []
 
     override init() {
         super.init()
@@ -95,6 +96,36 @@ final class LocationPermission: NSObject, CLLocationManagerDelegate {
 
     var lastKnown: Coordinate? {
         manager.location.map { Coordinate(latitude: $0.coordinate.latitude, longitude: $0.coordinate.longitude) }
+    }
+
+    /// One fix, for loading the streets around the player. Nil if not authorised.
+    func currentLocation() async -> Coordinate? {
+        guard Self.isAuthorized else { return nil }
+        if let l = manager.location, l.timestamp.timeIntervalSinceNow > -600 {
+            return Coordinate(latitude: l.coordinate.latitude, longitude: l.coordinate.longitude)
+        }
+        return await withCheckedContinuation { c in
+            fixWaiters.append(c)
+            if fixWaiters.count == 1 {
+                manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
+                manager.requestLocation()
+            }
+        }
+    }
+
+    private func resolveFix(_ c: Coordinate?) {
+        let w = fixWaiters
+        fixWaiters.removeAll()
+        w.forEach { $0.resume(returning: c ?? lastKnown) }
+    }
+
+    nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        let c = locations.last.map { Coordinate(latitude: $0.coordinate.latitude, longitude: $0.coordinate.longitude) }
+        Task { @MainActor in self.resolveFix(c) }
+    }
+
+    nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        Task { @MainActor in self.resolveFix(nil) }
     }
 
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
@@ -220,17 +251,51 @@ final class HealthService {
         let trace: [TracePoint]
     }
 
-    /// Past running workouts with routes, for seeding personal exploration.
-    func pastRuns(since: Date, limit: Int = 200) async -> [ImportedRun] {
+    /// A running workout in Health, without its route (cheap to list).
+    struct WorkoutSummary: Identifiable, Sendable, Hashable {
+        let id: UUID
+        let start: Date
+        let end: Date
+        let distance: Double?
+        let source: String
+    }
+
+    private func runningWorkouts(since: Date, limit: Int) async -> [HKWorkout] {
         guard isAvailable else { return [] }
         let predicate = HKQuery.predicateForWorkouts(with: .running)
         let dates = HKQuery.predicateForSamples(withStart: since, end: .now)
         let descriptor = HKSampleQueryDescriptor(
             predicates: [.workout(NSCompoundPredicate(andPredicateWithSubpredicates: [predicate, dates]))],
             sortDescriptors: [SortDescriptor(\.startDate, order: .reverse)], limit: limit)
-        let workouts = (try? await descriptor.result(for: store)) ?? []
+        return (try? await descriptor.result(for: store)) ?? []
+    }
+
+    /// Recent runs recorded by other apps (Apple Watch Workout, Strava, Garmin
+    /// Connect...), so a run Chomp didn't record can be added afterwards.
+    func recentRuns(since: Date) async -> [WorkoutSummary] {
+        let mine = Bundle.main.bundleIdentifier ?? ""
+        return await runningWorkouts(since: since, limit: 100).compactMap { w in
+            if w.sourceRevision.source.bundleIdentifier == mine { return nil }
+            if (w.metadata?[HKMetadataKeyWasUserEntered] as? Bool) == true { return nil }  // typed in: no route
+            let d = w.statistics(for: HKQuantityType(.distanceWalkingRunning))?.sumQuantity()?.doubleValue(for: .meter())
+            return WorkoutSummary(id: w.uuid, start: w.startDate, end: w.endDate, distance: d, source: w.sourceRevision.source.name)
+        }
+    }
+
+    /// GPS route of one workout, or empty if it has none.
+    func trace(for id: UUID) async -> [TracePoint] {
+        guard isAvailable else { return [] }
+        let d = HKSampleQueryDescriptor(predicates: [.workout(HKQuery.predicateForObject(with: id))], sortDescriptors: [])
+        guard let w = (try? await d.result(for: store))?.first else { return [] }
+        var trace: [TracePoint] = []
+        for r in await routes(for: w) { trace += await locations(for: r) }
+        return trace.sorted { $0.timestamp < $1.timestamp }
+    }
+
+    /// Past running workouts with routes, for seeding personal exploration.
+    func pastRuns(since: Date, limit: Int = 200) async -> [ImportedRun] {
         var out: [ImportedRun] = []
-        for w in workouts {
+        for w in await runningWorkouts(since: since, limit: limit) {
             let routes = await routes(for: w)
             var trace: [TracePoint] = []
             for r in routes { trace += await locations(for: r) }
