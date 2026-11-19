@@ -25,7 +25,7 @@
 #   - com.tobyb545.chomp.widgets  App Groups
 #   - both App IDs assigned the SAME group: group.com.tobyb545.chomp
 # An app record for com.tobyb545.chomp must exist in App Store Connect (the
-# widget is embedded in it). Its numeric Apple ID is looked up automatically.
+# widget is embedded in it). Its Apple ID is APP_STORE_APPLE_ID below.
 
 workflows:
   ios-app-store:
@@ -46,6 +46,7 @@ workflows:
         APPLE_TEAM_ID: "7KYR2X9MJA"
         BUNDLE_ID: "com.tobyb545.chomp"
         WIDGET_BUNDLE_ID: "com.tobyb545.chomp.widgets"
+        APP_STORE_APPLE_ID: "6836975846"   # App Store Connect > App Information > Apple ID
       xcode: latest
 
     scripts:
@@ -114,8 +115,7 @@ workflows:
       - name: Set build number
         script: |
           set -e
-          APP_ID=$(app-store-connect apps list --bundle-id-identifier "$BUNDLE_ID" --strict-match-identifier --json 2>/dev/null \
-            | python3 -c "import json,sys; a=json.load(sys.stdin); print(a[0]['id'] if a else '')" || true)
+          APP_ID="$APP_STORE_APPLE_ID"
           LATEST=0
           if [ -n "$APP_ID" ]; then
             LATEST=$(app-store-connect get-latest-build-number "$APP_ID" 2>/dev/null || echo 0)
