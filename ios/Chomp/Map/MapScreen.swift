@@ -8,6 +8,7 @@ struct MapScreen: View {
     @State private var follow = true
     @State private var sheet: Sheet?
     @State private var startConfirm = false
+    @State private var locationProblem: LocationPermission.Problem?
     @State private var seenEvents = 0
 
     enum Sheet: String, Identifiable { case leaderboard, activity, profile, streets, goals, route; var id: String { rawValue } }
@@ -33,6 +34,7 @@ struct MapScreen: View {
                     TownHeader(onGoals: { sheet = .goals })
                     WorldStatusBanner()
                     if let report = model.attackReport { AttackBanner(report: report) }
+                    if model.locationApproximate { PreciseLocationBanner() }
                     Spacer()
                     sideButtons
                     if let r = model.plannedRoute { plannedRouteBar(r) }
@@ -52,6 +54,21 @@ struct MapScreen: View {
             case .goals: GoalsSheet()
             case .route: RoutePlannerSheet()
             }
+        }
+        .alert(locationProblem == .off ? "Location is off for Chomp" : "Precise Location is off",
+               isPresented: Binding(get: { locationProblem != nil }, set: { if !$0 { locationProblem = nil } })) {
+            Button("Open Settings") {
+                locationProblem = nil
+                if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+            }
+            if locationProblem == .approximate {
+                Button("Run anyway") { locationProblem = nil; Task { model.run.start(simulated: false) } }
+            }
+            Button("Cancel", role: .cancel) { locationProblem = nil }
+        } message: {
+            Text(locationProblem == .off
+                 ? "Chomp needs your location during a run to see which streets you've run. In Settings, tap Location and choose While Using the App."
+                 : "With approximate location, Chomp can't tell which street you're on, so you won't collect any coins. In Settings, tap Location and turn on Precise Location.")
         }
         .confirmationDialog("Start a run", isPresented: $startConfirm) {
             Button("Run for real") { start(simulated: false) }
@@ -149,9 +166,10 @@ struct MapScreen: View {
             if !simulated {
                 let status = await LocationPermission.shared.requestWhenInUse()
                 guard status == .authorizedWhenInUse || status == .authorizedAlways else {
-                    model.toast = "Chomp needs location access to see which streets you run. Turn it on in Settings."
+                    locationProblem = .off
                     return
                 }
+                if let p = LocationPermission.shared.problem { locationProblem = p; return }
                 _ = await HealthService.shared.requestAuthorization()
             }
             model.run.start(simulated: simulated)
@@ -374,5 +392,26 @@ struct PracticeResultView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(hex: "0C0C1A").ignoresSafeArea())
         .presentationDetents([.medium])
+    }
+}
+
+/// Shown on the map while Precise Location is off: runs can't collect coins.
+struct PreciseLocationBanner: View {
+    var body: some View {
+        Button {
+            if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "location.slash.fill").foregroundStyle(Color(hex: "FFD600"))
+                Text("Precise Location is off, so runs can't collect coins. Tap to fix in Settings.")
+                    .font(.subheadline.weight(.semibold)).multilineTextAlignment(.leading)
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(Theme.hudText)
+            .padding(12)
+            .background(.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 14))
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Opens Settings")
     }
 }

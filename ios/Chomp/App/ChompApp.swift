@@ -16,6 +16,7 @@ struct ChompApp: App {
                     PushService.shared.model = model
                     await model.bootstrap()
                     model.checkForAttacks()
+                    model.locationApproximate = LocationPermission.shared.problem == .approximate
                     await model.checkForNewHealthRuns()
                     await PushService.shared.refresh()
                     IntentRouter.shared.flush()

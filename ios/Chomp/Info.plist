@@ -44,7 +44,7 @@
 	<key>NSLocationRequireExplicitServiceSession</key>
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Chomp uses your location during a run to work out which streets you've run, so it can eat the pellets on them and claim them in your colour. Your exact position is never shown to other players.</string>
+	<string>Chomp uses your location during a run to work out which streets you've run, so it can collect the coins on them and claim them in your colour. Your exact position is never shown to other players.</string>
 	<key>NSMotionUsageDescription</key>
 	<string>Chomp checks you're running or walking (not cycling or driving) so street captures stay fair for everyone.</string>
 	<key>NSSupportsLiveActivities</key>

@@ -320,6 +320,7 @@ final class AppModel {
     func onForeground() {
         NotificationService.cancelRaid()
         checkForAttacks()
+        locationApproximate = LocationPermission.shared.problem == .approximate
         Task { await checkForNewHealthRuns() }
         if case .failed = worldStatus, let f = savedFocus { focusWorld(on: f, force: true) }
         refreshDay()
@@ -745,6 +746,8 @@ final class AppModel {
         }
     }
     var attackReport: AttackReport?
+    /// Precise Location switched off for Chomp (checked on launch and foreground).
+    var locationApproximate = false
 
     /// Builds the banner from losses since it was last dismissed (none on a first launch).
     func checkForAttacks() {

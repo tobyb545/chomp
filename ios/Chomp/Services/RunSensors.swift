@@ -79,6 +79,18 @@ final class LocationPermission: NSObject, CLLocationManagerDelegate {
     }
 
     var status: CLAuthorizationStatus { manager.authorizationStatus }
+    /// False when the player has switched off Precise Location for Chomp (fixes are then kilometres out).
+    var isPrecise: Bool { manager.accuracyAuthorization == .fullAccuracy }
+
+    /// What would stop a run recording properly, if anything.
+    enum Problem: Equatable { case off, approximate }
+    var problem: Problem? {
+        switch manager.authorizationStatus {
+        case .denied, .restricted: .off
+        case .authorizedWhenInUse, .authorizedAlways: isPrecise ? nil : .approximate
+        default: nil
+        }
+    }
 
     /// Checked without creating a prompt.
     nonisolated static var isAuthorized: Bool {
