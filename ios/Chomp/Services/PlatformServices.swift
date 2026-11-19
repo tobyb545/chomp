@@ -22,8 +22,9 @@ final class LiveActivityController {
     }
 
     func update(_ state: ChompRunAttributes.ContentState) {
-        guard let activity else { return }
-        Task { await activity.update(.init(state: state, staleDate: Date().addingTimeInterval(120))) }
+        guard let id = activity?.id else { return }
+        let content = ActivityContent(state: state, staleDate: Date().addingTimeInterval(120))
+        Task.detached { await Self.update(id: id, content) }
     }
 
     /// The run is over: take it off the lock screen straight away.
@@ -35,8 +36,21 @@ final class LiveActivityController {
     /// Ends every Chomp activity, including any left behind if the app was
     /// closed mid-run. Called at launch when no run is going.
     func endAll(_ state: ChompRunAttributes.ContentState? = nil) {
-        for a in Activity<ChompRunAttributes>.activities where a.id != activity?.id {
-            Task { await a.end(state.map { .init(state: $0, staleDate: nil) }, dismissalPolicy: .immediate) }
+        let keep = activity?.id
+        let content = state.map { ActivityContent(state: $0, staleDate: nil) }
+        Task.detached { await Self.end(except: keep, content) }
+    }
+
+    // Activities aren't Sendable, so they're looked up by ID off the main actor
+    // rather than handed across (Xcode 26's compiler rejects that).
+    private nonisolated static func update(id: String, _ content: ActivityContent<ChompRunAttributes.ContentState>) async {
+        guard let a = Activity<ChompRunAttributes>.activities.first(where: { $0.id == id }) else { return }
+        await a.update(content)
+    }
+
+    private nonisolated static func end(except keep: String?, _ content: ActivityContent<ChompRunAttributes.ContentState>?) async {
+        for a in Activity<ChompRunAttributes>.activities where a.id != keep {
+            await a.end(content, dismissalPolicy: .immediate)
         }
     }
 }
