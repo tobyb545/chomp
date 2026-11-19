@@ -27,6 +27,7 @@
     "captureWindowHours": 168
   },
   "blocks": {
+    "enabled": false,
     "bonusBasePoints": 250,
     "bonusPointsPerHundredSquareMetres": 1,
     "reawardCooldownHours": 24

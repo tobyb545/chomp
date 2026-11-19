@@ -1,6 +1,6 @@
 # Chomp
 
-Run any street, anywhere, to eat the pellets on it and claim it in your colour.
+Run any street, anywhere, to collect the coins (tokens) on it: they turn your colour.
 Rivals can win them back; streets you don't revisit fade to neutral after 21 days.
 An original arcade-styled iOS game: no Pac-Man names, characters, sounds or art.
 

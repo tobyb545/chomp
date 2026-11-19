@@ -165,8 +165,12 @@ struct MatchingTests {
 @Suite("Game rules")
 struct GameTests {
     let engine = GameEngine(area: Fixtures.area, rules: Fixtures.rules)
+    /// Capture areas are switched off in rules.json for now; these tests keep them working for later.
+    static let areasOn: GameEngine = { var r = Fixtures.rules; r.blocks.enabled = true; return GameEngine(area: Fixtures.area, rules: r) }()
 
-    func resolve(_ trace: [TracePoint], state: inout GameState, signals: RunSignals = RunSignals(), isImport: Bool = false) -> RunOutcome {
+    func resolve(_ trace: [TracePoint], state: inout GameState, signals: RunSignals = RunSignals(), isImport: Bool = false,
+                 engine: GameEngine? = nil) -> RunOutcome {
+        let engine = engine ?? self.engine
         let match = MapMatcher(area: Fixtures.area, rules: Fixtures.rules.matching).match(trace)
         let report = AntiCheat.evaluate(trace: trace, signals: signals, rules: Fixtures.rules.antiCheat, matching: Fixtures.rules.matching)
         return engine.resolve(run: RunContext(runID: UUID(), startedAt: trace.first!.timestamp, endedAt: trace.last!.timestamp, isImport: isImport),
@@ -291,7 +295,10 @@ struct GameTests {
             state.ownership[s.id] = Ownership(owner: state.me, capturedAt: Fixtures.t0, lastVisitedAt: Fixtures.t0)
         }
         let trace = RouteSimulator(area: area).trace(along: last.coordinates, start: Fixtures.t0.addingTimeInterval(60), speed: 2.5, noise: 1, seed: 5)
-        let out = resolve(trace, state: &state)
+        var off = state
+        let outOff = resolve(trace, state: &off)
+        #expect(!outOff.conqueredTown && !off.badges.contains("conquered:\(tile)"), "capture areas are off by default")
+        let out = resolve(trace, state: &state, engine: Self.areasOn)
         #expect(out.conqueredTown)
         #expect(state.badges.contains("conquered:\(tile)"))
     }
@@ -320,7 +327,12 @@ struct GameTests {
         }
         let seg = try #require(area.segment(last))
         let trace = RouteSimulator(area: area).trace(along: seg.coordinates, start: Fixtures.t0.addingTimeInterval(60), speed: 2.5, noise: 1, seed: 3)
-        let out = resolve(trace, state: &state)
+        var off = state
+        let outOff = resolve(trace, state: &off)
+        #expect(outOff.blockBonus == 0 && outOff.blocksCompleted.isEmpty, "capture areas are off by default")
+        #expect(engine.completedBlocks(for: off.me, state: off, now: trace.last!.timestamp).isEmpty)
+        #expect(!outOff.gained.isEmpty, "the street itself still counts")
+        let out = resolve(trace, state: &state, engine: Self.areasOn)
         #expect(out.blocksCompleted.contains(block.id))
         #expect(out.blockBonus >= Fixtures.rules.blocks.bonusBasePoints)
     }

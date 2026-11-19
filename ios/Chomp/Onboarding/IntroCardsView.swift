@@ -20,15 +20,13 @@ struct IntroCardsView: View {
         let importDays = Int(r.imports.captureWindowHours / 24)
         return [
             IntroCard(scene: .tokens, title: "Every street is full of tokens",
-                      body: "Wherever you are, the streets on the map are lined with dots. Run along a street to eat them."),
+                      body: "Wherever you are, the streets on the map are lined with gold coins. Run along a street to collect them."),
             IntroCard(scene: .capture, title: "Run it to make it yours",
-                      body: "Cover \(pct)% of a street in one run and it turns your colour. Running the pavement counts for the road."),
+                      body: "Cover \(pct)% of a street in one run and its coins turn your colour. Running the pavement counts for the road."),
             IntroCard(scene: .rivals, title: "Defend your streets",
-                      body: "Rivals and bots can take your streets by running them. Streets you don't rerun fade back to neutral after \(days) days."),
+                      body: "Rivals and bots can take your coins back by running your streets. Streets you don't rerun fade back to gold after \(days) days."),
             IntroCard(scene: .power, title: "Power pellets and bonus streets",
                       body: "Run past the glowing pink landmark for a \(frenzyMin)-minute frenzy: double points, and rivals' streets flip more easily. Some streets glow pink for bonus points at certain times."),
-            IntroCard(scene: .block, title: "Box in a block",
-                      body: "Own every street around a block and you win the whole block, plus a bonus."),
             IntroCard(scene: .health, title: "Forgot to press start?",
                       body: "Add the run from Apple Health afterwards. Runs from the last \(importDays) days still capture streets."),
             IntroCard(scene: .leaderboard, title: "Climb the leaderboard",
@@ -148,13 +146,35 @@ private struct IntroScene: View {
         g.stroke(p, with: .color(c), style: StrokeStyle(lineWidth: w, lineCap: .round))
     }
 
-    private func dots(_ ctx: inout GraphicsContext, _ a: CGPoint, _ b: CGPoint, n: Int, from: Double = 0, to: Double = 1, color: Color? = nil) {
+    /// A row of coins. Coins before `taken` are drawn in `takenColor` (or left out if nil).
+    private func dots(_ ctx: inout GraphicsContext, _ a: CGPoint, _ b: CGPoint, n: Int, from: Double = 0, to: Double = 1,
+                      color: Color? = nil, taken: Double = 0, takenColor: Color? = nil, takenOpacity: Double = 1) {
         for i in 0...n {
             let f = Double(i) / Double(n)
-            guard f >= from - 0.0001, f <= to + 0.0001 else { continue }
+            guard f <= to + 0.0001 else { continue }
             let p = CGPoint(x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f)
-            ctx.fill(Path(ellipseIn: CGRect(x: p.x - 4, y: p.y - 4, width: 8, height: 8)), with: .color(color ?? pellet))
+            if f < taken || f < from - 0.0001 {
+                if let takenColor { coin(&ctx, p, takenColor, opacity: takenOpacity) }
+            } else {
+                coin(&ctx, p, color ?? gold)
+            }
         }
+    }
+
+    private let gold = Color(hex: "FFC83D")
+
+    /// The same coin as on the map: rim, face, inner ring and a glint.
+    private func coin(_ ctx: inout GraphicsContext, _ p: CGPoint, _ c: Color, r: CGFloat = 6.5, opacity: Double = 1) {
+        var g = ctx
+        g.opacity = opacity
+        g.fill(Path(ellipseIn: CGRect(x: p.x - r, y: p.y - r + 1.2, width: r * 2, height: r * 2)), with: .color(.black.opacity(0.35)))
+        g.fill(Path(ellipseIn: CGRect(x: p.x - r, y: p.y - r, width: r * 2, height: r * 2)), with: .color(c))
+        g.fill(Path(ellipseIn: CGRect(x: p.x - r, y: p.y - r, width: r * 2, height: r * 2)), with: .color(.black.opacity(0.32)))
+        let f = r - 1.8
+        g.fill(Path(ellipseIn: CGRect(x: p.x - f, y: p.y - f, width: f * 2, height: f * 2)), with: .color(c))
+        let i = f * 0.55
+        g.stroke(Path(ellipseIn: CGRect(x: p.x - i, y: p.y - i, width: i * 2, height: i * 2)), with: .color(.white.opacity(0.45)), lineWidth: 1)
+        g.fill(Path(ellipseIn: CGRect(x: p.x - f * 0.6, y: p.y - f * 0.68, width: f * 0.45, height: f * 0.3)), with: .color(.white.opacity(0.75)))
     }
 
     private func runner(_ ctx: inout GraphicsContext, _ p: CGPoint, _ c: Color) {
@@ -180,7 +200,7 @@ private struct IntroScene: View {
             dots(&ctx, CGPoint(x: w * 0.5, y: 24), CGPoint(x: w * 0.5, y: h - 24), n: 8)
             let f = min(1, phase(t, 3.2) * 1.2)
             let a = CGPoint(x: 24, y: rows[1]), b = CGPoint(x: w - 24, y: rows[1])
-            dots(&ctx, a, b, n: 12, from: f)
+            dots(&ctx, a, b, n: 12, taken: f, takenColor: me, takenOpacity: 0.45)
             runner(&ctx, lerp(a, b, f), me)
 
         case .capture:
@@ -189,11 +209,9 @@ private struct IntroScene: View {
             let f = min(1, phase(t, 3.6) * 1.35)
             let done = f >= 0.8
             if done {
-                line(&ctx, a, b, me.opacity(0.5), 26, blur: 8)
-                line(&ctx, a, b, me, 10)
+                dots(&ctx, a, b, n: 14, taken: 2, takenColor: me)
             } else {
-                line(&ctx, a, lerp(a, b, f), me.opacity(0.7), 10)
-                dots(&ctx, a, b, n: 14, from: f)
+                dots(&ctx, a, b, n: 14, taken: f, takenColor: me, takenOpacity: 0.45)
                 runner(&ctx, lerp(a, b, f), me)
             }
             let label = done ? "YOURS" : "\(Int(f * 100))%"
@@ -204,11 +222,11 @@ private struct IntroScene: View {
             let y1 = h * 0.32, y2 = h * 0.68
             let fade = 0.35 + 0.65 * (0.5 + 0.5 * cos(t * 1.4))
             line(&ctx, CGPoint(x: 30, y: y1), CGPoint(x: w - 30, y: y1), street, 10)
-            line(&ctx, CGPoint(x: 30, y: y1), CGPoint(x: w - 30, y: y1), me.opacity(fade), 10)
+            dots(&ctx, CGPoint(x: 30, y: y1), CGPoint(x: w - 30, y: y1), n: 12, taken: 2, takenColor: me, takenOpacity: fade)
             let a = CGPoint(x: 30, y: y2), b = CGPoint(x: w - 30, y: y2)
             let f = phase(t, 3.0)
-            line(&ctx, a, b, me, 10)
-            line(&ctx, a, lerp(a, b, f), bot, 10)
+            line(&ctx, a, b, street, 10)
+            dots(&ctx, a, b, n: 12, color: me, taken: f, takenColor: bot)
             runner(&ctx, lerp(a, b, f), bot)
             ctx.draw(Text("Bot Dusk").font(.system(size: 13, weight: .heavy, design: .rounded)).foregroundStyle(bot),
                      at: CGPoint(x: lerp(a, b, f).x, y: y2 + 28))

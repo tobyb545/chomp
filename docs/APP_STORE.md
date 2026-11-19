@@ -11,14 +11,13 @@ Every street, wherever you are, is covered in pellets. Run one to eat them and p
 ## Description
 Chomp turns your runs into a game of territory.
 
-Every street around you is lined with pellets, at home or on holiday. Run a street and you eat them, and the street turns your colour. Keep running and you'll fill whole blocks, climb the local leaderboard and conquer your neighbourhood.
+Every street around you is lined with gold coins, at home or on holiday. Run a street and its coins turn your colour. Keep running to collect more tokens than anyone nearby and climb the leaderboard.
 
 But your streets don't stay yours by themselves. Rivals can run them and win them back, and any street you don't revisit fades to neutral after three weeks. So there's always a reason to head out the door, and a new route to try.
 
 • REAL STREETS, ANYWHERE: built from OpenStreetMap wherever you run. Run the pavement and the road counts.
 • POWER PELLETS: three landmarks light up each day. Reach one to start a 10-minute frenzy and win rival streets twice as fast.
 • BONUS STREETS: daily streets worth double or triple at set times.
-• BLOCKS: claim every street around a block for a big bonus.
 • RIVALS AND CLUBS: leaderboards for nearby, worldwide, friends and club.
 • SOLO TOO: no one nearby yet? Clearly labelled bots keep the map moving.
 • FAIR PLAY: driving, cycling and GPS tricks don't count. Every run is checked.
@@ -40,7 +39,7 @@ First release. Go and eat some streets.
 1. **Home map**, with owned streets glowing and pellet dots. Caption: "Run a street. Eat the pellets. It's yours."
 2. **Mid-run HUD**, with the streets counter and a "just ate" toast. Caption: "Every street you run turns your colour."
 3. **Frenzy**: the power pellet hit, with the frenzy timer. Caption: "Hit a power pellet. Win streets back twice as fast."
-4. **Run summary**: +points, streets won back, block bonus. Caption: "Fill a block for a big bonus."
+4. **Run summary**: tokens eaten, streets won back, weekly goals. Caption: "Every coin counts."
 5. **Leaderboard** (nearby / friends / club). Caption: "Take your neighbourhood."
 6. **Privacy zones** screen. Caption: "Your routes and home stay private."
 

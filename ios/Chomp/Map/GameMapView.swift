@@ -98,7 +98,8 @@ struct GameMapView: UIViewRepresentable {
         var lastVersion = -1
         var lastFocus: Coordinate?
         var lastFit: [Coordinate]?
-        private var segmentFeatures: [MLNPolylineFeature] = []
+        private var coinFeatures: [MLNPointCollectionFeature] = []
+        private var coinPoints: [[CLLocationCoordinate2D]] = []
         private weak var featuresArea: Area?
         private var registeredIcons = Set<String>()
         private var pulse: Timer?
@@ -110,7 +111,7 @@ struct GameMapView: UIViewRepresentable {
         }
 
         static func styleURL(look: PlayerProfile.MapLook, conquered: Bool) -> URL {
-            let name = "chomp-style-\(look.rawValue)\(conquered ? "-conquered" : "")-v3.json"
+            let name = "chomp-style-\(look.rawValue)\(conquered ? "-conquered" : "")-v4.json"
             let url = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent(name)
             let json = MapStyle.json(palette: MapStyle.palette(look, conquered: conquered))
             try? json.write(to: url, atomically: true, encoding: .utf8)
@@ -146,7 +147,6 @@ struct GameMapView: UIViewRepresentable {
                     t += 1 / 15
                     let s = (sin(t * 3) + 1) / 2
                     (style.layer(withIdentifier: "power-glow") as? MLNCircleStyleLayer)?.circleRadius = NSExpression(forConstantValue: 16 + 10 * s)
-                    (style.layer(withIdentifier: "bonus-glow") as? MLNLineStyleLayer)?.lineOpacity = NSExpression(forConstantValue: 0.25 + 0.45 * s)
                     (style.layer(withIdentifier: "runner-glow") as? MLNCircleStyleLayer)?.circleRadius = NSExpression(forConstantValue: 14 + 8 * s)
                 }
             }
@@ -157,49 +157,69 @@ struct GameMapView: UIViewRepresentable {
             parent.onRegionChange?(Coordinate(latitude: c.latitude, longitude: c.longitude), mapView.zoomLevel)
         }
 
-        /// Street geometry only changes when tiles load; rebuild it then.
-        private func rebuildFeaturesIfNeeded() -> Bool {
+        /// Street geometry only changes when tiles load; rebuild it then. Each street
+        /// gets one coin per token, evenly spaced along it.
+        private func rebuildFeaturesIfNeeded(metresPerToken: Double) -> Bool {
             guard featuresArea !== parent.area else { return false }
-            featuresArea = parent.area
-            segmentFeatures = parent.area.segments.map { seg in
-                var coords = seg.coordinates.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
-                let f = MLNPolylineFeature(coordinates: &coords, count: UInt(coords.count))
-                f.identifier = seg.id as NSString
+            let area = parent.area
+            featuresArea = area
+            coinPoints = area.segments.map { seg in
+                let n = max(1, Int((seg.length / metresPerToken).rounded()))
+                return (0..<n).map { i in
+                    let c = area.projection.unproject(seg.polyline.point(at: seg.length * (Double(i) + 0.5) / Double(n)))
+                    return CLLocationCoordinate2D(latitude: c.latitude, longitude: c.longitude)
+                }
+            }
+            coinFeatures = coinPoints.enumerated().map { i, pts in
+                var pts = pts
+                let f = MLNPointCollectionFeature(coordinates: &pts, count: UInt(pts.count))!  // never empty: n >= 1
+                f.identifier = area.segments[i].id as NSString
                 return f
             }
             return true
         }
 
+        private func coinIcon(_ hex: String, in style: MLNStyle) -> String {
+            let name = "coin-\(hex)"
+            if !registeredIcons.contains(name) {
+                style.setImage(CoinIcon.render(colorHex: hex), forName: name)
+                registeredIcons.insert(name)
+            }
+            return name
+        }
+
+        private static func heatHex(_ times: Int) -> String {
+            switch times { case ..<2: "3B6BFF"; case 2: "8B5CFF"; case 3...4: "FF2BD6"; case 5...7: "FF8A3D"; default: "FFE14D" }
+        }
+
         func apply(_ s: MapSnapshot) {
             guard styleReady, let style = map?.style else { return }
-            let rebuilt = rebuildFeaturesIfNeeded()
+            let rebuilt = rebuildFeaturesIfNeeded(metresPerToken: s.metresPerToken)
             guard rebuilt || s.version != lastVersion || lastVersion == -1 else { return }
             lastVersion = s.version
-            for (i, seg) in parent.area.segments.enumerated() where i < segmentFeatures.count {
+            let neutral = MapStyle.neutralCoin(s.look)
+            for (i, seg) in parent.area.segments.enumerated() where i < coinFeatures.count {
                 let look = s.looks[seg.id]
-                segmentFeatures[i].attributes = [
-                    "state": look?.state ?? "off",
-                    "color": "#" + (look?.colorHex ?? "FFF1C1"),
+                let state = look?.state ?? "neutral"
+                var hex: String
+                if let heat = s.heat?[seg.id], heat > 0 { hex = Self.heatHex(heat) }
+                else if state == "neutral" { hex = s.bonus.contains(seg.id) ? MapStyle.bonusCoin : neutral }
+                else { hex = look?.colorHex ?? neutral }
+                hex = hex.uppercased()
+                coinFeatures[i].attributes = [
+                    "icon": coinIcon(hex, in: style),
+                    "state": state,
                     "strength": look?.strength ?? 0,
-                    "bonus": s.bonus.contains(seg.id) ? 1 : 0,
-                    "heat": s.heat?[seg.id] ?? 0,
+                    // Lower draws first when coins compete for space: yours win, then rivals', then gold.
+                    "rank": state == "mine" ? 0 : state == "rival" ? 1 : 2,
                 ]
             }
-            set(style, "segments", MLNShapeCollectionFeature(shapes: segmentFeatures))
+            set(style, "coins", MLNShapeCollectionFeature(shapes: coinFeatures))
 
-            let blocks: [MLNPolygonFeature] = s.blocks.compactMap { b in
-                guard let block = parent.area.blockByID[b.id] else { return nil }
-                var coords = block.ring.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
-                let f = MLNPolygonFeature(coordinates: &coords, count: UInt(coords.count))
-                f.attributes = ["color": "#" + b.colorHex]
-                return f
-            }
-            set(style, "blocks", MLNShapeCollectionFeature(shapes: blocks))
-
-            let eaten: [MLNPolylineFeature] = s.eaten.suffix(3).compactMap { id in
-                guard let seg = parent.area.segment(id) else { return nil }
-                var coords = seg.coordinates.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
-                return MLNPolylineFeature(coordinates: &coords, count: UInt(coords.count))
+            let eaten: [MLNPointCollectionFeature] = s.eaten.suffix(3).compactMap { id in
+                guard let idx = parent.area.segmentIndex(id), idx < coinPoints.count else { return nil }
+                var pts = coinPoints[idx]
+                return MLNPointCollectionFeature(coordinates: &pts, count: UInt(pts.count))
             }
             set(style, "eaten", MLNShapeCollectionFeature(shapes: eaten))
 
@@ -289,6 +309,49 @@ enum GhostIcon {
             c.setFill()
             eye.fill()
             _ = ctx
+        }
+    }
+}
+
+/// A token: a chunky coin with a rim, an inner ring and a glint. Original art,
+/// drawn in code so it can take any player's colour.
+enum CoinIcon {
+    static let points: CGFloat = 26
+
+    @MainActor
+    static func render(colorHex: String) -> UIImage {
+        let size = CGSize(width: points, height: points)
+        let fmt = UIGraphicsImageRendererFormat()
+        fmt.scale = 3
+        return UIGraphicsImageRenderer(size: size, format: fmt).image { ctx in
+            let g = ctx.cgContext
+            let base = UIColor(Color(hex: colorHex))
+            var h: CGFloat = 0, sat: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+            base.getHue(&h, saturation: &sat, brightness: &b, alpha: &a)
+            let rim = UIColor(hue: h, saturation: min(1, sat * 1.05), brightness: b * 0.62, alpha: 1)
+            let light = UIColor(hue: h, saturation: sat * 0.45, brightness: min(1, b * 1.15 + 0.1), alpha: 1)
+
+            let outer = CGRect(origin: .zero, size: size).insetBy(dx: 2, dy: 2)
+            // Soft shadow so coins sit on any map brightness.
+            g.setFillColor(UIColor.black.withAlphaComponent(0.35).cgColor)
+            g.fillEllipse(in: outer.offsetBy(dx: 0, dy: 1.2))
+            // Rim, then face.
+            g.setFillColor(rim.cgColor)
+            g.fillEllipse(in: outer)
+            let face = outer.insetBy(dx: 2.4, dy: 2.4)
+            g.setFillColor(base.cgColor)
+            g.fillEllipse(in: face)
+            // Embossed inner ring.
+            g.setStrokeColor(rim.withAlphaComponent(0.55).cgColor)
+            g.setLineWidth(1.3)
+            g.strokeEllipse(in: face.insetBy(dx: 3.6, dy: 3.6))
+            g.setStrokeColor(light.withAlphaComponent(0.8).cgColor)
+            g.setLineWidth(0.9)
+            g.strokeEllipse(in: face.insetBy(dx: 3.6, dy: 3.6).offsetBy(dx: 0.5, dy: 0.6))
+            // Glint.
+            g.setFillColor(UIColor.white.withAlphaComponent(0.75).cgColor)
+            g.fillEllipse(in: CGRect(x: face.minX + face.width * 0.2, y: face.minY + face.height * 0.16,
+                                     width: face.width * 0.22, height: face.height * 0.14))
         }
     }
 }

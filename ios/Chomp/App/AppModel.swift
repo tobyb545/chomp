@@ -12,7 +12,6 @@ struct MapSnapshot {
     var looks: [SegmentID: SegmentLook] = [:]
     var bonus: Set<SegmentID> = []
     var pellets: [PowerPellet] = []
-    var blocks: [(id: BlockID, colorHex: String)] = []
     var ghosts: [GhostMarker] = []
     var heat: [SegmentID: Int]? = nil
     var trail: [Coordinate] = []
@@ -22,6 +21,7 @@ struct MapSnapshot {
     var conquered = false
     var look: PlayerProfile.MapLook = .dusk
     var route: [Coordinate] = []
+    var metresPerToken = 10.0
 }
 
 @MainActor
@@ -373,7 +373,9 @@ final class AppModel {
     var displayName: String { profile.name.isEmpty ? "You" : profile.name }
 
     /// The map square in the middle of the screen is fully held.
-    var isConquered: Bool { focusTile.map { state.badges.contains("conquered:\($0)") } ?? false }
+    var isConquered: Bool {
+        rules.blocks.isEnabled && (focusTile.map { state.badges.contains("conquered:\($0)") } ?? false)
+    }
 
     /// Streets held anywhere in the world, not just nearby.
     var streetsHeldEverywhere: Int { engine.heldEverywhere(by: state.me, state: state, now: .now) }
@@ -417,11 +419,7 @@ final class AppModel {
         }
         s.bonus = Set(activeBonus.flatMap(\.segmentIDs))
         s.pellets = uncollectedPellets.filter { pellet in !run.collectedThisRun.contains(pellet.id) }
-        for owner in Set(state.ownership.values.map(\.owner)) {
-            for b in engine.completedBlocks(for: owner, state: state, now: now) {
-                s.blocks.append((b, ownerColor(owner)))
-            }
-        }
+        s.metresPerToken = rules.tokens.metresPerToken
         s.ghosts = ghostMarkers(now: now)
         if heatmapOn { s.heat = state.coverage.mapValues(\.timesRun) }
         s.trail = run.trail

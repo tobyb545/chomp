@@ -51,6 +51,16 @@ enum MapStyle {
     static let routeColour = "#38E8FF"
     static let powerColour = "#FF2BD6"
 
+    /// Coin artwork is drawn at `CoinIcon.points`; this scales it with zoom.
+    /// Slightly bigger than the old dots, and roughly one coin per 10 m when zoomed in.
+    static var coinSize: [Any] { ["interpolate", ["exponential", 1.5], ["zoom"], 13, 0.2, 15, 0.34, 16, 0.46, 17, 0.62, 18, 0.9, 19, 1.15] }
+    static func coinRadius(_ scale: Double) -> [Any] {
+        ["interpolate", ["exponential", 1.5], ["zoom"], 13, 2.2 * scale, 15, 3.7 * scale, 16, 5 * scale, 17, 6.8 * scale, 18, 9.9 * scale]
+    }
+    /// Unowned coins: gold.
+    static func neutralCoin(_ look: PlayerProfile.MapLook) -> String { look == .light ? "F0A400" : "FFC83D" }
+    static let bonusCoin = "FF2BD6"
+
     static func json(palette p: Palette) -> String {
         let empty: [String: Any] = ["type": "FeatureCollection", "features": [Any]()]
         func geo() -> [String: Any] { ["type": "geojson", "data": empty] }
@@ -77,51 +87,24 @@ enum MapStyle {
              "paint": ["line-color": p.road, "line-width": zoomWidth(1, 6)]],
 
             // Game layers
-            ["id": "blocks", "type": "fill", "source": "blocks",
-             "paint": ["fill-color": ["to-color", ["get", "color"]], "fill-opacity": 0.24]],
-            ["id": "seg-base", "type": "line", "source": "segments",
-             "layout": ["line-cap": "round", "line-join": "round"],
-             "paint": ["line-color": p.segmentBase, "line-width": zoomWidth(1.2, 5)]],
-            // A planned loop: cyan dashes under the game layers.
+            // A planned loop: cyan dashes under the coins.
             ["id": "route-casing", "type": "line", "source": "route",
              "layout": ["line-cap": "round", "line-join": "round"],
              "paint": ["line-color": "#0B0B16", "line-width": zoomWidth(5, 14), "line-opacity": 0.35 + p.casingOpacity * 0.6]],
             ["id": "route", "type": "line", "source": "route",
              "layout": ["line-cap": "round", "line-join": "round"],
              "paint": ["line-color": routeColour, "line-width": zoomWidth(3, 9), "line-dasharray": [1.4, 1.1], "line-opacity": 0.95]],
-            ["id": "heat", "type": "line", "source": "segments",
-             "filter": [">", ["get", "heat"], 0],
-             "layout": ["line-cap": "round", "line-join": "round"],
-             "paint": ["line-color": ["interpolate", ["linear"], ["get", "heat"], 1, "#3B2BFF", 3, "#FF2BD6", 8, "#FFE14D"],
-                       "line-width": zoomWidth(2.5, 9), "line-opacity": 0.9]],
-            ["id": "seg-casing", "type": "line", "source": "segments",
-             "filter": ["all", ["in", ["get", "state"], ["literal", ["mine", "rival"]]], ["==", ["get", "heat"], 0]],
-             "layout": ["line-cap": "round", "line-join": "round"],
-             "paint": ["line-color": "#14141F", "line-width": zoomWidth(3, 9), "line-opacity": p.casingOpacity]],
-            ["id": "seg-glow", "type": "line", "source": "segments",
-             "filter": ["all", ["in", ["get", "state"], ["literal", ["mine", "rival"]]], ["==", ["get", "heat"], 0]],
-             "layout": ["line-cap": "round", "line-join": "round"],
-             "paint": ["line-color": ["to-color", ["get", "color"]], "line-width": zoomWidth(5, 18), "line-blur": zoomWidth(3, 10),
-                       "line-opacity": ["*", 0.5, ["get", "strength"]]]],
-            ["id": "seg-owned", "type": "line", "source": "segments",
-             "filter": ["all", ["in", ["get", "state"], ["literal", ["mine", "rival"]]], ["==", ["get", "heat"], 0]],
-             "layout": ["line-cap": "round", "line-join": "round"],
-             "paint": ["line-color": ["to-color", ["get", "color"]], "line-width": zoomWidth(1.8, 6),
-                       "line-opacity": ["+", 0.3, ["*", 0.7, ["get", "strength"]]]]],
-            ["id": "bonus-glow", "type": "line", "source": "segments",
-             "filter": ["==", ["get", "bonus"], 1],
-             "layout": ["line-cap": "round"],
-             "paint": ["line-color": powerColour, "line-width": zoomWidth(6, 20), "line-blur": zoomWidth(4, 12), "line-opacity": 0.55]],
-            // Chunky pellets: zero-length dashes with round caps render as dots.
-            ["id": "pellets", "type": "line", "source": "segments", "minzoom": 13.5,
-             "filter": ["all", ["in", ["get", "state"], ["literal", ["neutral", "rival"]]], ["==", ["get", "heat"], 0]],
-             "layout": ["line-cap": "round", "line-join": "round"],
-             "paint": ["line-color": ["case", ["==", ["get", "bonus"], 1], powerColour, p.pellet],
-                       "line-width": zoomWidth(2, 7), "line-dasharray": [0, 2.4],
-                       "line-opacity": ["case", ["==", ["get", "state"], "rival"], 0.75, 1]]],
-            ["id": "eaten-flash", "type": "line", "source": "eaten",
-             "layout": ["line-cap": "round"],
-             "paint": ["line-color": p.trail, "line-width": zoomWidth(3, 10), "line-blur": 2, "line-opacity": 0.85]],
+            // Just-eaten coins flash.
+            ["id": "eaten-flash", "type": "circle", "source": "eaten",
+             "paint": ["circle-color": p.trail, "circle-radius": coinRadius(1.9), "circle-blur": 0.8, "circle-opacity": 0.7]],
+            // Tokens: one coin per token along every street, tinted by owner. When
+            // zoomed out, overlapping coins are dropped so they never merge into a line.
+            ["id": "coins", "type": "symbol", "source": "coins", "minzoom": 13,
+             "layout": ["icon-image": ["get", "icon"], "icon-size": coinSize,
+                        "icon-allow-overlap": false, "icon-ignore-placement": true, "icon-padding": 0,
+                        "symbol-sort-key": ["get", "rank"]],
+             "paint": ["icon-opacity": ["case", ["==", ["get", "state"], "neutral"], 1,
+                                        ["+", 0.4, ["*", 0.6, ["get", "strength"]]]]]],
             ["id": "trail", "type": "line", "source": "trail",
              "layout": ["line-cap": "round", "line-join": "round"],
              "paint": ["line-color": p.trail, "line-width": zoomWidth(1.5, 4), "line-opacity": 0.55]],
@@ -158,7 +141,7 @@ enum MapStyle {
             "sources": [
                 "ofm": ["type": "vector", "url": "https://tiles.openfreemap.org/planet",
                         "attribution": "<a href=\"https://openfreemap.org\">OpenFreeMap</a> © <a href=\"https://www.openmaptiles.org/\">OpenMapTiles</a> Data from <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a>"],
-                "segments": geo(), "blocks": geo(), "eaten": geo(), "trail": geo(), "route": geo(),
+                "coins": geo(), "eaten": geo(), "trail": geo(), "route": geo(),
                 "pellets-power": geo(), "ghosts": geo(), "runner": geo(),
             ],
             "layers": layers,

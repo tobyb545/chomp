@@ -132,6 +132,21 @@ Outcomes:
 All five share the TypeScript port in `functions/_shared/chomp`, and its pure core is
 `_shared/resolve.ts`. Under Node, `backend/tests` checks it against ChompKit's own outputs.
 
+## Coins, and capture areas (off)
+
+Every street is drawn as a row of coins, one per token (`rules.tokens.metresPerToken`, 10 m),
+evenly spaced: gold when nobody holds the street, the owner's colour when someone does,
+fading with strength. There are no street lines. Coin art is drawn in code
+(`CoinIcon` in `GameMapView.swift`) per colour and placed with a MapLibre symbol layer.
+Overlapping coins are dropped when zoomed out, so the coins never merge into a line.
+
+Capture areas (block bonuses and conquering a map square) are switched off with
+`rules.blocks.enabled = false`. Both engines skip them, the UI hides them, and the tests
+still cover them with the switch on. The server applies the switch from its bundled
+copy of rules.json, so it takes effect there at the next Edge Function deploy. Until
+then, the server can still add block-bonus points (points only: tokens and the
+leaderboard are unaffected).
+
 ## On-device extras
 
 These run on the phone only and need no server:

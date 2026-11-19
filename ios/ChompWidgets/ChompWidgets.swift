@@ -76,7 +76,6 @@ struct StreetsHeldView: View {
                 if family == .systemMedium {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(s.townName).font(.headline).foregroundStyle(.white)
-                        Label("\(s.blocksHeld) blocks", systemImage: "square.grid.3x3.fill").foregroundStyle(c)
                         Label("\(s.fadingSoon) fading", systemImage: "hourglass").foregroundStyle(muted)
                         if let b = s.bonusLabels.first { Label(b, systemImage: "star.fill").foregroundStyle(power).lineLimit(1) }
                     }

@@ -40,9 +40,13 @@ final class ChompUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.buttons["Skip"].waitForExistence(timeout: 15))
         shot("intro-1")
-        for _ in 0..<6 {
+        var cards = 1
+        while app.buttons["Next"].exists && cards < 12 {
             app.buttons["Next"].tap()
+            cards += 1
+            if cards == 2 { sleep(2); shot("intro-capture") }
         }
+        XCTAssertEqual(cards, 6, "six intro cards")
         shot("intro-last")
         XCTAssertTrue(app.buttons["Let's play"].waitForExistence(timeout: 5))
         app.buttons["Let's play"].tap()

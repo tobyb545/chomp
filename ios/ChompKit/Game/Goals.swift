@@ -74,7 +74,7 @@ public enum Goals {
     /// This week's three goals with progress from `runs`.
     public static func weekly(runs: [RunFacts], now: Date) -> [WeeklyGoal] {
         var rng = SeededRandom(string: "goals|\(weekKey(now))")
-        var kinds = WeeklyGoal.Kind.allCases
+        var kinds = WeeklyGoal.Kind.allCases.filter { $0 != .blocks }  // capture areas are off for now
         var picked: [WeeklyGoal] = []
         for _ in 0..<3 {
             let k = kinds.remove(at: rng.int(kinds.count))

@@ -172,7 +172,7 @@ struct TownHeader: View {
                             Text(model.placeName).font(Theme.display(.title3)).foregroundStyle(Theme.hudText).lineLimit(1)
                             if model.isConquered { Chip(text: "Conquered", colorHex: "FFD600") }
                         }
-                        Text("\(p.heldSegments) streets · \(formatDistance(p.heldMetres, miles: model.profile.useMiles)) · \(p.blocksHeld) blocks")
+                        Text("\(p.heldSegments) streets · \(formatDistance(p.heldMetres, miles: model.profile.useMiles)) · \(model.state.tokens(of: model.state.me).formatted()) tokens")
                             .font(.subheadline.weight(.semibold)).foregroundStyle(Theme.hudSecondary)
                         Text("Explored \(p.exploredFraction.percentString)").font(.caption).foregroundStyle(Theme.hudSecondary)
                         StreakChip(action: onGoals).fixedSize().padding(.top, 2)

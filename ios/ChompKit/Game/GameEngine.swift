@@ -240,7 +240,7 @@ public struct GameEngine: Sendable {
         // Conquering: hold (practically) every street in a map tile.
         var conquered = false
         let touchedTiles = Set(records.filter { $0.kind == .captured || $0.kind == .stolen }.compactMap { area.segmentIndex($0.segmentID).map { area.segmentTile[$0] } })
-        for tile in touchedTiles.sorted() {
+        for tile in touchedTiles.sorted() where rules.blocks.isEnabled {
             let badge = "conquered:\(tile)"
             if !state.badges.contains(badge), tileHeldFraction(tile, owner: me, state: state, now: run.endedAt) >= 0.999 {
                 state.badges.append(badge)
@@ -279,7 +279,8 @@ public struct GameEngine: Sendable {
     }
 
     public func completedBlocks(for owner: OwnerRef, state: GameState, now: Date) -> [BlockID] {
-        area.blocks.filter { b in
+        guard rules.blocks.isEnabled else { return [] }
+        return area.blocks.filter { b in
             b.segmentIDs.allSatisfy { id in
                 guard let o = state.ownership[id] else { return false }
                 return o.owner == owner && o.strength(at: now, decay: rules.decayInterval) > 0

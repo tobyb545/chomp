@@ -80,7 +80,7 @@ struct StatsSection: View {
             LabeledContent("Streets held", value: "\(model.streetsHeldEverywhere)")
             LabeledContent("Held around \(model.placeName)", value: p.heldFraction.percentString)
             LabeledContent("Explored around \(model.placeName)", value: p.exploredFraction.percentString)
-            LabeledContent("Blocks held", value: "\(p.blocksHeld)")
+            if model.rules.blocks.isEnabled { LabeledContent("Blocks held", value: "\(p.blocksHeld)") }
             if model.pro.isPro {
                 LabeledContent("Distance run", value: String(format: "%.1f km", totalKm))
                 LabeledContent("Streets stolen back", value: "\(model.runs.reduce(0) { $0 + $1.outcome.stolen.count })")
@@ -110,10 +110,12 @@ struct BadgesSection: View {
         let badges: [(String, String, Bool)] = [
             ("First bite", "circle.grid.cross.fill", p.heldSegments > 0 || !model.state.coverage.isEmpty),
             ("10% of the map around you", "10.circle.fill", p.heldFraction >= 0.1),
-            ("Block party", "square.grid.3x3.fill", !model.state.blockAwards.isEmpty),
             ("Frenzy", "bolt.circle.fill", !model.state.collectedPellets.isEmpty),
+            ("1,000 tokens", "circle.circle.fill", model.state.tokens(of: model.state.me) >= 1000),
+        ] + (model.rules.blocks.isEnabled ? [
+            ("Block party", "square.grid.3x3.fill", !model.state.blockAwards.isEmpty),
             ("Conquered a map square", "crown.fill", model.state.badges.contains { $0.hasPrefix("conquered:") }),
-        ]
+        ] : [])
         ForEach(badges, id: \.0) { b in
             Label(b.0, systemImage: b.1)
                 .foregroundStyle(b.2 ? Color(hex: model.profile.colorHex) : Theme.textSecondary.opacity(0.5))

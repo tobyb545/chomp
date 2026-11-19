@@ -17,6 +17,10 @@ public struct RulesConfig: Codable, Sendable, Hashable {
     }
     public struct Count: Codable, Sendable, Hashable { public var perDay: Int }
     public struct Blocks: Codable, Sendable, Hashable {
+        /// Capture areas: filling a block (bonus) and conquering a map square.
+        /// Off for now; streets and their tokens are the whole game.
+        public var enabled: Bool?
+        public var isEnabled: Bool { enabled ?? true }
         public var bonusBasePoints: Int
         public var bonusPointsPerHundredSquareMetres: Double
         public var reawardCooldownHours: Double

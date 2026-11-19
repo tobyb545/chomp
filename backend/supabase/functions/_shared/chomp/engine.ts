@@ -74,6 +74,7 @@ export class GameEngine {
   }
 
   completedBlocks(owner: OwnerRef, ownership: Map<string, Ownership>, now: number): string[] {
+    if (this.rules.blocks.enabled === false) return [];
     return this.area.blocks.filter((b) => b.segmentIDs.every((id) => {
       const o = this.live(ownership.get(id), now);
       return !!o && sameOwner(o.owner, owner);
@@ -216,7 +217,7 @@ export class GameEngine {
       const seg = this.area.segment(c.segmentID);
       if (seg) touched.add(this.area.segmentTile[seg.index]);
     }
-    for (const tile of [...touched].sort()) {
+    for (const tile of this.rules.blocks.enabled === false ? [] : [...touched].sort()) {
       if (!world.conqueredTiles.has(tile) && this.tileHeldFraction(tile, me, ownership, run.endedAt) >= 0.999) writes.conqueredTiles.push(tile);
     }
 
