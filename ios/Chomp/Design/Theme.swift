@@ -16,6 +16,7 @@ enum Theme {
     static let pellet = Color(hex: "FFF1C1")
     static let power = Color(hex: "FF2BD6")
     static let danger = Color(hex: "FF3355")
+    static let success = Color(hex: "2BE38B")
 
     /// HUD panels floating over the (always dark) map.
     static let hud = Color(hex: "0C0C1A").opacity(0.86)

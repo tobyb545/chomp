@@ -27,7 +27,7 @@ struct RunHUDView: View {
                             StatTile(value: formatDistance(run.distance, miles: model.profile.useMiles), label: "Distance")
                             StatTile(value: RunMath.formatPace(run.paceSecondsPerKm), label: "Pace /km")
                             StatTile(value: "\(run.streetsCaptured)", label: "Streets", tint: Color(hex: model.profile.colorHex))
-                            StatTile(value: "\(run.pelletsEaten)", label: "Pellets", tint: Theme.pellet)
+                            StatTile(value: "\(run.pelletsEaten)", label: "Tokens", tint: Theme.pellet)
                         }
                         if run.isFrenzy, let end = run.frenzyEndsAt {
                             HStack {
@@ -60,6 +60,12 @@ struct RunHUDView: View {
                     RoundIconButton(symbol: "location.north.line.fill", label: "Follow me") { follow = true }
                 }
                 Spacer()
+                RoundIconButton(symbol: model.profile.voiceOn ? "speaker.wave.2.fill" : "speaker.slash.fill",
+                                label: model.profile.voiceOn ? "Turn off spoken updates" : "Turn on spoken updates") {
+                    model.profile.voiceOn.toggle()
+                    RunVoice.shared.enabled = model.profile.voiceOn
+                    RunVoice.shared.say("Spoken updates on.")
+                }
                 RoundIconButton(symbol: "xmark", label: "Discard run") { confirmDiscard = true }
             }
 

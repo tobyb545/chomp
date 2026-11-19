@@ -470,3 +470,78 @@ struct ServerResponseDecoding {
     }
 }
 
+
+@Suite("Routes, goals and tokens")
+struct RoutesGoalsTokens {
+    @Test func plannedRouteIsALoopNearTheTargetDistance() throws {
+        let area = Fixtures.area
+        let planner = RoutePlanner(area: area)
+        let start = Coordinate(latitude: 51.3392, longitude: -0.5063)
+        let wanted = Set(area.segments.filter { !$0.isPath }.map(\.index))
+        let r = try #require(planner.plan(from: start, distance: 4000, seed: 7,
+                                          value: { wanted.contains($0) ? 1 : 0 }, tokens: { _ in 1 }))
+        #expect(r.distance > 2800 && r.distance < 5600, "distance \(r.distance)")
+        let a = try #require(r.coordinates.first), b = try #require(r.coordinates.last)
+        #expect(a.distance(to: b) < 1, "a loop ends where it starts")
+        #expect(r.targets > 0)
+        // Consecutive segments must share a junction.
+        for (x, y) in zip(r.segments, r.segments.dropFirst()) {
+            let a = area.segments[x], b = area.segments[y]
+            #expect(!Set([a.startNode, a.endNode]).isDisjoint(with: [b.startNode, b.endNode]))
+        }
+    }
+
+    @Test func streakCountsConsecutiveDays() {
+        let cal = Goals.calendar
+        let now = cal.date(from: DateComponents(year: 2026, month: 11, day: 19, hour: 18))!
+        func day(_ back: Int) -> RunFacts {
+            RunFacts(date: cal.date(byAdding: .day, value: -back, to: now)!, distance: 3000, streets: 4, stolen: 1, tokens: 40, pellets: 0, blocks: 0)
+        }
+        let s = Goals.streak(runs: [day(1), day(2), day(3), day(6), day(7)], now: now)
+        #expect(s.current == 3 && !s.ranToday && s.atRisk)
+        #expect(s.best == 3)
+        #expect(Goals.streak(runs: [day(0), day(1)], now: now).current == 2)
+        #expect(Goals.streak(runs: [day(2)], now: now).current == 0)
+    }
+
+    @Test func weeklyGoalsAreStableAndCountThisWeekOnly() {
+        let cal = Goals.calendar
+        let now = cal.date(from: DateComponents(year: 2026, month: 11, day: 19, hour: 18))!  // a Thursday
+        let thisWeek = RunFacts(date: now.addingTimeInterval(-3600), distance: 5200, streets: 9, stolen: 2, tokens: 210, pellets: 1, blocks: 1)
+        let lastWeek = RunFacts(date: now.addingTimeInterval(-8 * 86_400), distance: 9000, streets: 30, stolen: 9, tokens: 900, pellets: 2, blocks: 2)
+        let g = Goals.weekly(runs: [thisWeek, lastWeek], now: now)
+        #expect(g.count == 3 && Set(g.map(\.kind)).count == 3)
+        #expect(g == Goals.weekly(runs: [thisWeek, lastWeek], now: now))
+        for goal in g {
+            switch goal.kind {
+            case .streets: #expect(goal.progress == 9)
+            case .tokens: #expect(goal.progress == 210)
+            case .days: #expect(goal.progress == 1)
+            case .distance: #expect(goal.progress == 5)
+            case .steal: #expect(goal.progress == 2)
+            case .pellets, .blocks: #expect(goal.progress == 1)
+            }
+        }
+    }
+
+    @Test func capturingAStreetEarnsItsTokens() {
+        let engine = GameEngine(area: Fixtures.area, rules: Fixtures.rules)
+        #expect(Fixtures.rules.tokens(forLength: 4) == 1)
+        #expect(Fixtures.rules.tokens(forLength: 104) == 10)
+        var state = GameState(areaSlug: "world", playerID: "p1")
+        let seg = Fixtures.area.segments.first { !$0.isPath && $0.length > 120 }!
+        let t = Fixtures.t0
+        let pts = stride(from: 0.0, through: 1.0, by: 0.02).map { f -> TracePoint in
+            let c = seg.polyline.point(at: seg.length * f)
+            return TracePoint(coordinate: Fixtures.area.projection.unproject(c), timestamp: t.addingTimeInterval(f * seg.length / 3),
+                              horizontalAccuracy: 5, speed: 3)
+        }
+        let match = MapMatcher(area: Fixtures.area, rules: Fixtures.rules.matching).match(pts)
+        let report = AntiCheat.evaluate(trace: pts, signals: RunSignals(), rules: Fixtures.rules.antiCheat, matching: Fixtures.rules.matching)
+        let out = engine.resolve(run: RunContext(runID: UUID(), startedAt: t, endedAt: pts.last!.timestamp, isImport: false),
+                                 trace: pts, match: match, report: report, state: &state)
+        let expected = out.gained.compactMap { Fixtures.area.segment($0.segmentID) }.reduce(0) { $0 + Fixtures.rules.tokens(forLength: $1.length) }
+        #expect(expected > 0)
+        #expect(state.tokens(of: state.me) == expected)
+    }
+}

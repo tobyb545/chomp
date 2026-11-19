@@ -90,7 +90,7 @@ targets:
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
-        UIBackgroundModes: [location]
+        UIBackgroundModes: [location, audio]
         NSSupportsLiveActivities: true
         NSLocationRequireExplicitServiceSession: true
         NSLocationWhenInUseUsageDescription: "Chomp uses your location during a run to work out which streets you've run, so it can eat the pellets on them and claim them in your colour. Your exact position is never shown to other players."

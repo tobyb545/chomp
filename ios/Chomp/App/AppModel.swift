@@ -2,6 +2,7 @@ import Foundation
 import Observation
 import SwiftUI
 import ChompKit
+import UserNotifications
 
 /// What the map draws. Rebuilt whenever ownership or the run changes.
 struct MapSnapshot {
@@ -20,6 +21,7 @@ struct MapSnapshot {
     var playerColorHex = "C6FF00"
     var conquered = false
     var look: PlayerProfile.MapLook = .dusk
+    var route: [Coordinate] = []
 }
 
 @MainActor
@@ -52,6 +54,10 @@ final class AppModel {
     // UI
     private(set) var mapVersion = 0
     var heatmapOn = false { didSet { bumpMap() } }
+    /// A loop planned before a run, drawn on the map until the run ends.
+    var plannedRoute: PlannedRoute? { didSet { bumpMap() } }
+    /// Centre of the map when it last settled (where a route starts if we don't know where you are).
+    private(set) var lastMapCentre: Coordinate?
     var presentedSummary: RunRecord?
     var showPaywall = false
     var showInvite = false
@@ -111,6 +117,7 @@ final class AppModel {
     /// The map camera settled. Streets load once the player zooms in far enough
     /// to see them.
     func mapSettled(at c: Coordinate, zoom: Double) {
+        lastMapCentre = c
         guard zoom >= 12.5, !run.isActive else { return }
         focusWorld(on: c)
     }
@@ -251,6 +258,12 @@ final class AppModel {
         if args.contains("-demo") { profile.seenIntro = !args.contains("-intro") }
         if let i = args.firstIndex(of: "-mapLook"), i + 1 < args.count, let look = PlayerProfile.MapLook(rawValue: args[i + 1]) {
             profile.mapLook = look
+        }
+        if args.contains("-planRoute") {
+            Task {
+                for _ in 0..<60 where area.segments.isEmpty { try? await Task.sleep(for: .seconds(1)) }
+                plannedRoute = await planRoute(goal: .capture, distance: 4000, seed: 3)
+            }
         }
         guard args.contains("-demo"), runs.isEmpty else {
             if args.contains("-autorun"), profile.onboarded { run.start(simulated: true) }
@@ -413,6 +426,7 @@ final class AppModel {
         if heatmapOn { s.heat = state.coverage.mapValues(\.timesRun) }
         s.trail = run.trail
         s.runner = run.trail.last
+        s.route = plannedRoute?.coordinates ?? []
         s.eaten = run.tracker?.eatenOrder ?? []
         return s
     }
@@ -442,6 +456,7 @@ final class AppModel {
         guard let record = await resolve(id: id, raw: raw, signals: signals, startedAt: startedAt, endedAt: endedAt,
                                          source: .live, isImport: false, simulated: simulated) else { return }
         presentedSummary = record
+        plannedRoute = nil
         if record.outcome.conqueredTown { Feedback.shared.play(.block) }
         if !simulated {
             Task { try? await HealthService.shared.saveWorkout(start: startedAt, end: endedAt, distance: record.distance, trace: raw) }
@@ -466,17 +481,21 @@ final class AppModel {
         let outcome = runEngine.resolve(run: RunContext(runID: id, startedAt: startedAt, endedAt: endedAt, isImport: isImport),
                                         trace: trace, match: match, report: report, state: &s)
         state = s
-        let record = RunRecord(id: id, areaSlug: Self.worldSlug, startedAt: startedAt, endedAt: endedAt, distance: RunMath.distance(raw),
+        let goalsBefore = Set(weeklyGoals.filter(\.done).map(\.id))
+        var record = RunRecord(id: id, areaSlug: Self.worldSlug, startedAt: startedAt, endedAt: endedAt, distance: RunMath.distance(raw),
                                movingTime: endedAt.timeIntervalSince(startedAt), source: source, outcome: outcome,
                                splits: RunMath.splits(raw).map { .init(distance: $0.distance, duration: $0.duration) },
                                simulated: simulated,
                                rawEndpoints: [raw.first?.coordinate, raw.last?.coordinate].compactMap { $0 })
+        record.tokens = tokens(of: outcome, in: runArea)
         runs.insert(record, at: 0)
         runs.sort { $0.startedAt > $1.startedAt }
         await LocalStore.shared.saveRuns(runs)
         await LocalStore.shared.saveTrace(trace, run: id)
         persist()
         bumpMap()
+        announceGoals(before: goalsBefore)
+        scheduleStreakReminder()
         if upload, !simulated, backend.isSignedIn, !profile.privateMode {
             await self.upload(id: id, trace: trace, signals: signals, startedAt: startedAt, endedAt: endedAt, source: source)
         }
@@ -494,6 +513,7 @@ final class AppModel {
             let res = try await backend.submit(upload)
             if let o = res.outcome, let i = runs.firstIndex(where: { $0.id == id }) {
                 runs[i].outcome = o  // the server's answer wins
+                if o.gained.allSatisfy({ area.segment($0.segmentID) != nil }) { runs[i].tokens = tokens(of: o, in: area) }
                 await LocalStore.shared.saveRuns(runs)
             }
             await syncOnline()
@@ -503,6 +523,98 @@ final class AppModel {
     }
 
     /// Pulls authoritative ownership for the tiles on screen and listens for changes.
+    // MARK: Goals, streaks and route planning
+
+    /// Tokens a run earned: the dots on every street it captured or stole.
+    func tokens(of outcome: RunOutcome, in a: Area) -> Int {
+        outcome.gained.compactMap { a.segment($0.segmentID) }.reduce(0) { $0 + rules.tokens(forLength: $1.length) }
+    }
+
+    /// Runs that count for goals and streaks. Debug builds count simulated runs
+    /// too, so the features can be tried in the simulator.
+    var runFacts: [RunFacts] {
+        runs.filter { r in
+            #if DEBUG
+            true
+            #else
+            !r.simulated
+            #endif
+        }.map { r in
+            RunFacts(date: r.startedAt, distance: r.distance, streets: r.outcome.gained.count, stolen: r.outcome.stolen.count,
+                     tokens: r.tokens ?? r.outcome.gained.count * 8, pellets: r.outcome.pelletsCollected.count,
+                     blocks: r.outcome.blocksCompleted.count)
+        }
+    }
+
+    var weeklyGoals: [WeeklyGoal] { Goals.weekly(runs: runFacts, now: .now) }
+    var streak: Goals.Streak { Goals.streak(runs: runFacts, now: .now) }
+
+    private func announceGoals(before: Set<String>) {
+        let goals = weeklyGoals
+        let fresh = goals.filter { $0.done && !before.contains($0.id) }
+        guard let g = fresh.first else { return }
+        Feedback.shared.play(.block)
+        toast = goals.allSatisfy(\.done) ? "All three weekly goals done!" : "Goal done: \(g.title)"
+    }
+
+    /// 7pm reminder when a streak would end tonight; cleared once you've run today.
+    func scheduleStreakReminder() {
+        let s = streak
+        let id = "streak-reminder"
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [id])
+        guard s.current >= 2, !s.ranToday else { return }
+        var at = Goals.calendar.date(bySettingHour: 19, minute: 0, second: 0, of: .now) ?? .now
+        if at < .now { at = Date().addingTimeInterval(60) }
+        guard Goals.calendar.isDate(at, inSameDayAs: .now) else { return }
+        let c = UNMutableNotificationContent()
+        c.title = "Keep your \(s.current)-day streak"
+        c.body = "A short run today keeps it going. Even one street counts."
+        c.sound = .default
+        let comps = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: at)
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: id, content: c,
+            trigger: UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)))
+    }
+
+    enum RouteGoal: String, CaseIterable, Identifiable {
+        case capture, defend, explore
+        var id: String { rawValue }
+        var label: String { switch self { case .capture: "Grab streets"; case .defend: "Save fading"; case .explore: "Explore" } }
+        var detail: String {
+            switch self {
+            case .capture: "Neutral streets and rivals' streets to take."
+            case .defend: "Your streets that are fading, before they turn neutral."
+            case .explore: "Streets you've never run."
+            }
+        }
+    }
+
+    /// Where a planned loop starts: where you are, or the middle of the map.
+    var routeStart: Coordinate {
+        if let here = LocationPermission.shared.lastKnown, area.contains(here) { return here }
+        return lastMapCentre ?? savedFocus ?? area.center
+    }
+
+    func planRoute(goal: RouteGoal, distance: Double, seed: UInt64) async -> PlannedRoute? {
+        let a = area, st = state, me = state.me, now = Date(), decay = rules.decayInterval, r = rules
+        let start = routeStart
+        let wanted: [Double] = a.segments.map { seg in
+            let o = st.ownership[seg.id].flatMap { $0.strength(at: now, decay: decay) > 0 ? $0 : nil }
+            switch goal {
+            case .capture: return o == nil ? 1 : (o!.owner == me ? 0 : 1.2)
+            case .defend:
+                guard let o, o.owner == me else { return 0 }
+                let strength = o.strength(at: now, decay: decay)
+                return strength < 0.6 ? 1.2 - strength : 0
+            case .explore: return st.coverage[seg.id] == nil ? 1 : 0
+            }
+        }
+        let lengths = a.segments.map(\.length)
+        return await Task.detached(priority: .userInitiated) {
+            RoutePlanner(area: a).plan(from: start, distance: distance, seed: seed,
+                                       value: { wanted[$0] }, tokens: { r.tokens(forLength: lengths[$0]) })
+        }.value
+    }
+
     // MARK: Invites
 
     /// A friend's invite link was opened: remember the code until we can redeem it.

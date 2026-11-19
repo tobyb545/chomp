@@ -132,6 +132,23 @@ Outcomes:
 All five share the TypeScript port in `functions/_shared/chomp`, and its pure core is
 `_shared/resolve.ts`. Under Node, `backend/tests` checks it against ChompKit's own outputs.
 
+## On-device extras
+
+These run on the phone only and need no server:
+
+- **Weekly goals and streaks** (`ChompKit/Game/Goals.swift`) come from run history. Everyone
+  gets the same three goals each week, seeded from the ISO week in UK time. The streak counts
+  consecutive days with a run; if a streak of two or more days would end tonight, a local
+  notification goes out at 7pm. Release builds ignore simulated runs.
+- **Route planner** (`ChompKit/Game/RoutePlanner.swift`) tries 24 randomised walks over the
+  junction graph, scored by wanted streets per metre and closeness to the target distance.
+  Each walk closes the loop by Dijkstra back to the start. The aims are: grab neutral or rival
+  streets, save your fading streets, or explore streets you've never run. Simulated runs follow
+  the planned loop.
+- **Spoken updates** (`Chomp/Services/RunVoice.swift`) use AVSpeechSynthesizer. They cover
+  batched captures with token counts, steals, frenzy, pause/resume and a split each km or mile.
+  The `audio` background mode keeps it talking when the phone is locked.
+
 ## Not built yet
 
 - **Push delivery.** Lost-street and bot-raid messages are written to `notification_outbox`,

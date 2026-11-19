@@ -32,6 +32,9 @@ final class RunSession {
     private var motion = MotionRecorder()
     private var fixesSinceMatch = 0
     private var frenzyTimer: Task<Void, Never>?
+    private var nextSplitAt: Double = 1000
+    private var lastSplitTime: TimeInterval = 0
+    private var splitIndex = 0
 
     var isActive: Bool { phase != .idle }
     var isFrenzy: Bool { (frenzyEndsAt ?? .distantPast) > .now }
@@ -62,7 +65,8 @@ final class RunSession {
         if simulated {
             let sim = RouteSimulator(area: model.area)
             let origin = LocationPermission.shared.lastKnown.flatMap { model.area.contains($0) ? $0 : nil } ?? model.savedFocus.flatMap { model.area.contains($0) ? $0 : nil } ?? randomStart(model.area)
-            let route = sim.route(from: origin, distance: 3200, seed: UInt64.random(in: 1...UInt64.max))
+            // Follow the planned loop if there is one, so route planning can be tried in the simulator.
+            let route = model.plannedRoute?.coordinates ?? sim.route(from: origin, distance: 3200, seed: UInt64.random(in: 1...UInt64.max))
             source = SimulatedLocationSource(points: sim.trace(along: route, start: now, speed: 3.1, seed: UInt64.random(in: 1...UInt64.max)),
                                              speedUp: 8)
         } else {
@@ -70,6 +74,16 @@ final class RunSession {
             motion.start(at: now)
         }
         Feedback.shared.play(.start)
+        let voice = RunVoice.shared
+        voice.reset()
+        voice.enabled = model.profile.voiceOn
+        voice.splits = model.profile.voiceSplits
+        nextSplitAt = model.profile.useMiles ? 1609.344 : 1000
+        if let r = model.plannedRoute {
+            voice.say("Run started. Your route is \(formatDistance(r.distance, miles: model.profile.useMiles)) with \(r.targets) streets to chomp.")
+        } else {
+            voice.say("Run started.")
+        }
         LiveActivityController.shared.start(startedAt: now, colorHex: model.profile.colorHex, town: model.placeName)
         locationTask = Task { [weak self] in
             for await fix in source.stream() {
@@ -99,6 +113,7 @@ final class RunSession {
         guard phase == .running else { return }
         phase = .paused
         pausedAt = .now
+        RunVoice.shared.say("Paused.")
         pushLiveActivity()
     }
 
@@ -107,11 +122,13 @@ final class RunSession {
         pausedDuration += Date().timeIntervalSince(p)
         pausedAt = nil
         phase = .running
+        RunVoice.shared.say("Resumed.")
         pushLiveActivity()
     }
 
     func discard() {
         locationTask?.cancel()
+        RunVoice.shared.reset()
         _ = motion.stop(at: .now)
         LiveActivityController.shared.end(liveState)
         reset()
@@ -128,6 +145,8 @@ final class RunSession {
         if !simulated { signals.heartRate = await HealthService.shared.heartRate(from: startedAt, to: end) }
         LiveActivityController.shared.end(liveState)
         Feedback.shared.play(.finish)
+        RunVoice.shared.stop()
+        RunVoice.shared.say("Run finished. \(streetsCaptured) street\(streetsCaptured == 1 ? "" : "s"), \(pelletsEaten) tokens.")
         let captured = trace
         let id = runID
         let wasSimulated = simulated
@@ -156,6 +175,9 @@ final class RunSession {
         pausedDuration = 0
         pausedAt = nil
         fixesSinceMatch = 0
+        nextSplitAt = 1000
+        lastSplitTime = 0
+        splitIndex = 0
         frenzyTimer?.cancel()
         motion = MotionRecorder()
     }
@@ -168,6 +190,15 @@ final class RunSession {
             if dt > 0, step / dt < 12, fix.horizontalAccuracy <= model.rules.matching.maxAccuracyMetres { distance += step }
         }
         trace.append(fix)
+        if distance >= nextSplitAt {
+            splitIndex += 1
+            let unit = model.profile.useMiles ? 1609.344 : 1000
+            let now = elapsed
+            RunVoice.shared.split(index: splitIndex, miles: model.profile.useMiles,
+                                  paceSecondsPerUnit: (now - lastSplitTime) * (simulated ? 8 : 1), streets: streetsCaptured)
+            lastSplitTime = now
+            nextSplitAt += unit
+        }
         if fix.horizontalAccuracy <= model.rules.matching.maxAccuracyMetres { trail.append(fix.coordinate) }
 
         // Power pellets.
@@ -178,6 +209,7 @@ final class RunSession {
                 frenzyEndsAt = max(frenzyEndsAt ?? .distantPast, end)
                 Feedback.shared.play(.powerUp)
                 model.toast = "FRENZY! Double points at \(pellet.landmark.name)"
+                RunVoice.shared.say("Frenzy! Double points for \(Int(model.rules.frenzy.durationSeconds / 60)) minutes. Rival streets flip faster.")
                 scheduleFrenzyEnd()
             }
         }
@@ -209,7 +241,9 @@ final class RunSession {
                 continue
             }
             streetsCaptured += 1
-            pelletsEaten += max(1, Int(seg.length / 8))
+            let tokens = model.rules.tokens(forLength: seg.length)
+            pelletsEaten += tokens
+            RunVoice.shared.captured(street: seg.displayName, tokens: tokens, stolen: update.newlyStolen.contains(id))
             let mult = (isFrenzy ? model.rules.frenzy.multiplier : 1)
                 * (model.activeBonus.filter { $0.segmentIDs.contains(id) && $0.isActive(at: .now) }.map(\.multiplier).max() ?? 1)
             pointsProvisional += Int(seg.length * model.rules.capture.pointsPerMetre * mult)
@@ -234,6 +268,7 @@ final class RunSession {
             guard !Task.isCancelled, let self, self.phase != .idle else { return }
             Feedback.shared.play(.frenzyEnd)
             self.model?.toast = "Frenzy over"
+            RunVoice.shared.say("Frenzy over.")
             self.pushLiveActivity()
         }
         pushLiveActivity()

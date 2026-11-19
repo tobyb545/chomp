@@ -21,6 +21,9 @@ struct PlayerProfile: Codable, Hashable {
     /// The swipeable "how it works" cards have been shown.
     var seenIntro = false
     var mapLook: MapLook = .dusk
+    /// Spoken updates during runs, and whether they include splits.
+    var voiceOn = false
+    var voiceSplits = true
     /// Invite code typed in (or opened from a link) before signing in.
     var pendingInviteCode: String?
 
@@ -49,7 +52,7 @@ struct PlayerProfile: Codable, Hashable {
         get(.privateMode, &privateMode); get(.soundOn, &soundOn); get(.hapticsOn, &hapticsOn); get(.useMiles, &useMiles)
         get(.trailStyle, &trailStyle); get(.privacyZones, &privacyZones); get(.dismissedZoneSuggestions, &dismissedZoneSuggestions)
         get(.blockedPlayers, &blockedPlayers); get(.mutedPlayers, &mutedPlayers); get(.debugPro, &debugPro)
-        get(.mapLook, &mapLook)
+        get(.mapLook, &mapLook); get(.voiceOn, &voiceOn); get(.voiceSplits, &voiceSplits)
         pendingInviteCode = try? c.decodeIfPresent(String.self, forKey: .pendingInviteCode)
         get(.seenIntro, &seenIntro)  // existing players see the cards once too
     }
@@ -82,6 +85,8 @@ struct RunRecord: Codable, Identifiable, Hashable {
     var simulated: Bool
     /// Untrimmed first/last fix. Stays on this phone; only used to suggest privacy zones.
     var rawEndpoints: [Coordinate]? = nil
+    /// Tokens earned (nil for runs saved before tokens existed).
+    var tokens: Int? = nil
 
     enum Source: String, Codable { case live, healthImport, stravaImport }
 

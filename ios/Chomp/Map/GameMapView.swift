@@ -110,7 +110,7 @@ struct GameMapView: UIViewRepresentable {
         }
 
         static func styleURL(look: PlayerProfile.MapLook, conquered: Bool) -> URL {
-            let name = "chomp-style-\(look.rawValue)\(conquered ? "-conquered" : "")-v2.json"
+            let name = "chomp-style-\(look.rawValue)\(conquered ? "-conquered" : "")-v3.json"
             let url = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent(name)
             let json = MapStyle.json(palette: MapStyle.palette(look, conquered: conquered))
             try? json.write(to: url, atomically: true, encoding: .utf8)
@@ -205,6 +205,8 @@ struct GameMapView: UIViewRepresentable {
 
             var trail = s.trail.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
             set(style, "trail", trail.count > 1 ? MLNPolylineFeature(coordinates: &trail, count: UInt(trail.count)) : MLNShapeCollectionFeature(shapes: []))
+            var route = s.route.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
+            set(style, "route", route.count > 1 ? MLNPolylineFeature(coordinates: &route, count: UInt(route.count)) : MLNShapeCollectionFeature(shapes: []))
 
             let pellets: [MLNPointFeature] = s.pellets.map { p in
                 let f = MLNPointFeature()

@@ -25,6 +25,7 @@ struct RunSummaryView: View {
                     replayMap
                     headline
                     statsGrid
+                    goalsCard
                     if outcome.verdict == .underReview || !outcome.rejected.isEmpty { fairPlayCard }
                     if !outcome.pelletsCollected.isEmpty || outcome.blockBonus > 0 { specialsCard }
                     streetsCard
@@ -121,7 +122,23 @@ struct RunSummaryView: View {
                 tile("\(outcome.stolen.count)", "Won back")
                 tile("\(lost)", "Lost this week")
             }
+            GridRow {
+                tile("\(record.tokens ?? model.tokens(of: outcome, in: model.area))", "Tokens eaten")
+                tile("\(model.state.tokens(of: model.state.me).formatted())", "All-time tokens")
+                tile(model.streak.current > 0 ? "\(model.streak.current) day\(model.streak.current == 1 ? "" : "s")" : "–", "Run streak")
+            }
         }
+    }
+
+    /// This week's goals, so the run's contribution shows.
+    private var goalsCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("THIS WEEK").font(.caption.weight(.heavy)).foregroundStyle(Theme.textSecondary).tracking(1.5)
+            ForEach(model.weeklyGoals) { g in GoalRow(goal: g, colorHex: model.profile.colorHex, dark: false) }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 20))
     }
 
     private func tile(_ v: String, _ l: String) -> some View {

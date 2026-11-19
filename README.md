@@ -5,8 +5,12 @@ Rivals can win them back; streets you don't revisit fade to neutral after 21 day
 An original arcade-styled iOS game: no Pac-Man names, characters, sounds or art.
 
 **Status:** the app is feature-complete and fully playable offline (solo play against
-labelled bots). Online play runs on Supabase. The backend is written and tested, but
-it hasn't been deployed or connected yet: see [docs/SETUP.md](docs/SETUP.md).
+labelled bots). Online play runs on Supabase. The backend is deployed to the live
+project; a real signed-in run on a phone is still to be tried. See [docs/SETUP.md](docs/SETUP.md).
+
+Besides capturing streets: token leaderboards, invites (a free month of Pro), weekly goals
+and a daily run streak, a route planner that draws a loop through streets worth running,
+spoken updates during a run, and Apple Health import.
 
 | | |
 |---|---|

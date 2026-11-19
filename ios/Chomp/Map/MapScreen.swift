@@ -10,7 +10,7 @@ struct MapScreen: View {
     @State private var startConfirm = false
     @State private var seenEvents = 0
 
-    enum Sheet: String, Identifiable { case leaderboard, activity, profile, streets; var id: String { rawValue } }
+    enum Sheet: String, Identifiable { case leaderboard, activity, profile, streets, goals, route; var id: String { rawValue } }
 
     var body: some View {
         let snapshot = model.mapSnapshot()
@@ -29,10 +29,11 @@ struct MapScreen: View {
                 if model.run.isActive {
                     RunHUDView(follow: $follow)
                 } else {
-                    TownHeader()
+                    TownHeader(onGoals: { sheet = .goals })
                     WorldStatusBanner()
                     Spacer()
                     sideButtons
+                    if let r = model.plannedRoute { plannedRouteBar(r) }
                     startButton
                 }
             }
@@ -46,6 +47,8 @@ struct MapScreen: View {
             case .activity: ActivityFeedView().onAppear { seenEvents = model.state.events.count }
             case .profile: ProfileView()
             case .streets: StreetListView()
+            case .goals: GoalsSheet()
+            case .route: RoutePlannerSheet()
             }
         }
         .confirmationDialog("Start a run", isPresented: $startConfirm) {
@@ -70,6 +73,8 @@ struct MapScreen: View {
                 RoundIconButton(symbol: "trophy.fill", label: "Leaderboards") { sheet = .leaderboard }
                 RoundIconButton(symbol: "bell.fill", label: "Activity", badge: max(0, model.state.events.count - seenEvents)) { sheet = .activity }
                 RoundIconButton(symbol: "list.bullet", label: "Streets") { sheet = .streets }
+                RoundIconButton(symbol: "point.topleft.down.to.point.bottomright.curvepath.fill",
+                                label: model.plannedRoute == nil ? "Plan a route" : "Planned route") { sheet = .route }
             }
             Spacer()
             VStack(spacing: 10) {
@@ -87,6 +92,20 @@ struct MapScreen: View {
                 RoundIconButton(symbol: "person.crop.circle.fill", label: "Profile and settings") { sheet = .profile }
             }
         }
+    }
+
+    private func plannedRouteBar(_ r: PlannedRoute) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "point.topleft.down.to.point.bottomright.curvepath.fill").foregroundStyle(Color(hex: "38E8FF"))
+            Text("Route · \(formatDistance(r.distance, miles: model.profile.useMiles)) · \(r.targets) streets · \(r.tokens) tokens")
+                .font(.footnote.weight(.bold)).foregroundStyle(Theme.hudText).lineLimit(1).minimumScaleFactor(0.8)
+            Spacer(minLength: 0)
+            Button { model.plannedRoute = nil } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(Theme.hudSecondary) }
+                .accessibilityLabel("Clear planned route")
+        }
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .background(Color(hex: "11111F").opacity(0.92), in: Capsule())
+        .accessibilityElement(children: .contain)
     }
 
     private var startButton: some View {
@@ -132,6 +151,7 @@ struct MapScreen: View {
 /// Place name, completion ring and today's specials.
 struct TownHeader: View {
     @Environment(AppModel.self) private var model
+    var onGoals: () -> Void = {}
 
     var body: some View {
         let p = model.progress
@@ -155,6 +175,7 @@ struct TownHeader: View {
                         Text("\(p.heldSegments) streets · \(formatDistance(p.heldMetres, miles: model.profile.useMiles)) · \(p.blocksHeld) blocks")
                             .font(.subheadline.weight(.semibold)).foregroundStyle(Theme.hudSecondary)
                         Text("Explored \(p.exploredFraction.percentString)").font(.caption).foregroundStyle(Theme.hudSecondary)
+                        StreakChip(action: onGoals).fixedSize().padding(.top, 2)
                     }
                     Spacer(minLength: 0)
                     VStack(alignment: .trailing, spacing: 0) {

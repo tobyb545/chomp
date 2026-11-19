@@ -186,6 +186,15 @@ struct SettingsView: View {
                 Text("Light is easiest to read in sunshine. Dark is the original arcade look.")
             }
 
+            Section {
+                Toggle("Spoken updates", isOn: $model.profile.voiceOn)
+                if model.profile.voiceOn {
+                    Toggle("Include \(model.profile.useMiles ? "mile" : "kilometre") splits", isOn: $model.profile.voiceSplits)
+                }
+            } header: { Text("During a run") } footer: {
+                Text("Chomp tells you when you capture or steal a street, when a frenzy starts and ends, and your pace each \(model.profile.useMiles ? "mile" : "kilometre"). Music is turned down while it speaks.")
+            }
+
             Section("Feel") {
                 Toggle("Chomp sounds", isOn: $model.profile.soundOn)
                 Toggle("Haptics", isOn: $model.profile.hapticsOn)

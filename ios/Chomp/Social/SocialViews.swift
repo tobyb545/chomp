@@ -142,55 +142,91 @@ struct ActivityFeedView: View {
 struct StreetListView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
-    @State private var filter: Filter = .mine
+    @State private var filter: Filter = .near
     @State private var query = ""
 
-    enum Filter: String, CaseIterable, Identifiable { case mine, rivals, pellets, fading; var id: String { rawValue }
-        var label: String { switch self { case .mine: "Mine"; case .rivals: "Rivals"; case .pellets: "Pellets"; case .fading: "Fading" } } }
+    enum Filter: String, CaseIterable, Identifiable {
+        case near, mine, rivals, fading
+        var id: String { rawValue }
+        var label: String { switch self { case .near: "To grab"; case .mine: "Mine"; case .rivals: "Rivals"; case .fading: "Fading" } }
+        var empty: String {
+            switch self {
+            case .near: "Nothing to grab here. You hold every street nearby!"
+            case .mine: "No streets yet. Run one end to end to make it yours."
+            case .rivals: "No rivals' streets nearby."
+            case .fading: "None of your streets are fading."
+            }
+        }
+    }
 
-    struct Row: Identifiable { let id: String; let name: String; let segments: [Segment]; let metres: Double; let owner: OwnerRef?; let strength: Double }
+    struct Row: Identifiable {
+        let id: String; let name: String; let segments: [Segment]; let metres: Double
+        let owner: OwnerRef?; let strength: Double; let tokens: Int; let away: Double; let nearest: Coordinate
+    }
 
     private var rows: [Row] {
         let now = Date()
         let decay = model.rules.decayInterval
+        let me = model.state.me
+        let here = model.routeStart
         let grouped = Dictionary(grouping: model.area.segments) { "\($0.displayName)|\(model.state.ownership[$0.id]?.owner.id ?? "-")" }
-        return grouped.compactMap { _, segs -> Row? in
+        let out = grouped.compactMap { _, segs -> Row? in
             let o = model.state.ownership[segs[0].id]
             let live = o.flatMap { $0.strength(at: now, decay: decay) > 0 ? $0 : nil }
             let strength = live?.strength(at: now, decay: decay) ?? 0
             switch filter {
-            case .mine: guard live?.owner == model.state.me else { return nil }
-            case .rivals: guard let l = live, l.owner != model.state.me else { return nil }
-            case .pellets: guard live == nil || live?.owner != model.state.me else { return nil }
-            case .fading: guard live?.owner == model.state.me, strength < 0.35 else { return nil }
+            case .near: guard live == nil || live?.owner != me else { return nil }
+            case .mine: guard live?.owner == me else { return nil }
+            case .rivals: guard let l = live, l.owner != me else { return nil }
+            case .fading: guard live?.owner == me, strength < 0.35 else { return nil }
             }
             if !query.isEmpty, !segs[0].displayName.localizedCaseInsensitiveContains(query) { return nil }
-            return Row(id: segs[0].id, name: segs[0].displayName, segments: segs, metres: segs.reduce(0) { $0 + $1.length }, owner: live?.owner, strength: strength)
-        }.sorted { $0.metres > $1.metres }
+            let closest = segs.min { $0.midpoint.distance(to: here) < $1.midpoint.distance(to: here) }!
+            return Row(id: segs[0].id, name: segs[0].displayName, segments: segs, metres: segs.reduce(0) { $0 + $1.length },
+                       owner: live?.owner, strength: strength,
+                       tokens: segs.reduce(0) { $0 + model.rules.tokens(forLength: $1.length) },
+                       away: closest.midpoint.distance(to: here), nearest: closest.midpoint)
+        }
+        switch filter {
+        case .fading: return out.sorted { $0.strength < $1.strength }
+        default: return out.sorted { $0.away < $1.away }
+        }
     }
 
     var body: some View {
+        let list = rows
         NavigationStack {
             List {
                 Picker("Show", selection: $filter) { ForEach(Filter.allCases) { Text($0.label).tag($0) } }
                     .pickerStyle(.segmented).listRowBackground(Color.clear)
-                ForEach(rows.prefix(300)) { r in
+                if list.isEmpty {
+                    Text(query.isEmpty ? filter.empty : "No streets called \u{201C}\(query)\u{201D} here.")
+                        .foregroundStyle(Theme.textSecondary)
+                } else if filter == .near, query.isEmpty {
+                    let tokens = list.prefix(20).reduce(0) { $0 + $1.tokens }
+                    Text("The 20 closest hold \(tokens.formatted()) tokens. Closest first.")
+                        .font(.footnote).foregroundStyle(Theme.textSecondary)
+                }
+                ForEach(list.prefix(300)) { r in
                     Button {
-                        model.focusRequest = r.segments[0].midpoint
+                        model.focusRequest = r.nearest
                         dismiss()
                     } label: {
                         HStack {
                             Circle().fill(r.owner.map { Color(hex: model.ownerColor($0)) } ?? Theme.pellet).frame(width: 12, height: 12)
                             VStack(alignment: .leading) {
                                 Text(r.name).font(.body.weight(.semibold))
-                                Text("\(r.segments.count) section\(r.segments.count == 1 ? "" : "s") · \(formatDistance(r.metres, miles: model.profile.useMiles))"
-                                     + (r.owner.map { " · \(model.ownerName($0))" } ?? " · pellets"))
+                                Text("\(formatDistance(r.away, miles: model.profile.useMiles)) away · \(formatDistance(r.metres, miles: model.profile.useMiles))"
+                                     + (r.owner.map { " · \(model.ownerName($0))" } ?? ""))
                                     .font(.caption).foregroundStyle(Theme.textSecondary)
                             }
                             Spacer()
                             if r.owner == model.state.me {
-                                Text("\(Int(r.strength * 100))%").font(Theme.number(.caption)).foregroundStyle(Theme.textSecondary)
+                                Text("\(Int(r.strength * 100))%").font(Theme.number(.caption)).foregroundStyle(r.strength < 0.35 ? Theme.danger : Theme.textSecondary)
                                     .accessibilityLabel("strength \(Int(r.strength * 100)) percent")
+                            } else {
+                                Text("\(r.tokens)").font(Theme.number(.caption)).foregroundStyle(Theme.pellet)
+                                    .accessibilityLabel("\(r.tokens) tokens")
                             }
                         }
                     }
@@ -199,7 +235,7 @@ struct StreetListView: View {
                 }
             }
             .searchable(text: $query, prompt: "Find a street")
-            .navigationTitle("Streets")
+            .navigationTitle("Streets near you")
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
         }
     }

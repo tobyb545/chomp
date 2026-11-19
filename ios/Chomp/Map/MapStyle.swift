@@ -48,6 +48,7 @@ enum MapStyle {
     }
 
     static let pelletColour = "#FFF1C1"
+    static let routeColour = "#38E8FF"
     static let powerColour = "#FF2BD6"
 
     static func json(palette p: Palette) -> String {
@@ -81,6 +82,13 @@ enum MapStyle {
             ["id": "seg-base", "type": "line", "source": "segments",
              "layout": ["line-cap": "round", "line-join": "round"],
              "paint": ["line-color": p.segmentBase, "line-width": zoomWidth(1.2, 5)]],
+            // A planned loop: cyan dashes under the game layers.
+            ["id": "route-casing", "type": "line", "source": "route",
+             "layout": ["line-cap": "round", "line-join": "round"],
+             "paint": ["line-color": "#0B0B16", "line-width": zoomWidth(5, 14), "line-opacity": 0.35 + p.casingOpacity * 0.6]],
+            ["id": "route", "type": "line", "source": "route",
+             "layout": ["line-cap": "round", "line-join": "round"],
+             "paint": ["line-color": routeColour, "line-width": zoomWidth(3, 9), "line-dasharray": [1.4, 1.1], "line-opacity": 0.95]],
             ["id": "heat", "type": "line", "source": "segments",
              "filter": [">", ["get", "heat"], 0],
              "layout": ["line-cap": "round", "line-join": "round"],
@@ -150,7 +158,7 @@ enum MapStyle {
             "sources": [
                 "ofm": ["type": "vector", "url": "https://tiles.openfreemap.org/planet",
                         "attribution": "<a href=\"https://openfreemap.org\">OpenFreeMap</a> © <a href=\"https://www.openmaptiles.org/\">OpenMapTiles</a> Data from <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a>"],
-                "segments": geo(), "blocks": geo(), "eaten": geo(), "trail": geo(),
+                "segments": geo(), "blocks": geo(), "eaten": geo(), "trail": geo(), "route": geo(),
                 "pellets-power": geo(), "ghosts": geo(), "runner": geo(),
             ],
             "layers": layers,
