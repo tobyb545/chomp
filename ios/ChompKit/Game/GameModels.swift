@@ -96,6 +96,9 @@ public struct GameState: Codable, Sendable {
     public var badges: [String] = []
     /// Power pellet ID → when this player collected it.
     public var collectedPellets: [String: Date] = [:]
+    /// Tokens each owner has captured, all time ("player:<id>" / "ghost:<id>").
+    /// Optional so state saved before tokens existed still decodes.
+    public var tokensCaptured: [String: Int]?
 
     public init(areaSlug: String, playerID: String) {
         self.areaSlug = areaSlug
@@ -103,6 +106,12 @@ public struct GameState: Codable, Sendable {
     }
 
     public var me: OwnerRef { .player(playerID) }
+
+    public func tokens(of o: OwnerRef) -> Int { tokensCaptured?["\(o.kind.rawValue):\(o.id)"] ?? 0 }
+    public mutating func addTokens(_ n: Int, to o: OwnerRef) {
+        tokensCaptured = tokensCaptured ?? [:]
+        tokensCaptured!["\(o.kind.rawValue):\(o.id)", default: 0] += n
+    }
 
     public mutating func log(_ e: GameEvent) {
         events.insert(e, at: 0)
@@ -127,4 +136,6 @@ public struct Standing: Sendable, Hashable, Identifiable {
     public var streets: Int
     public var metres: Double
     public var blocks: Int
+    /// Tokens captured, all time: what leaderboards rank by.
+    public var tokens: Int
 }

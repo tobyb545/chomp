@@ -35,6 +35,11 @@ struct PaywallView: View {
                         }
                         .buttonStyle(ChunkyButtonStyle(colorHex: pkg.packageType == .annual ? model.profile.colorHex : "2A2A4A", height: 64))
                     }
+                    Button {
+                        dismiss()
+                        model.showInvite = true
+                    } label: { Label("Or invite a friend for a free month", systemImage: "gift.fill") }
+                        .font(.subheadline.weight(.semibold))
                     Button("Restore purchases") { Task { await model.pro.restore() } }.font(.footnote)
                     if let e = model.pro.lastError { Text(e).font(.footnote).foregroundStyle(Theme.danger) }
                     Text("Subscriptions renew automatically until cancelled in Settings › Apple ID › Subscriptions.")

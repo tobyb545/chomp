@@ -26,7 +26,7 @@ struct GameMapView: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeUIView(context: Context) -> MLNMapView {
-        let map = MLNMapView(frame: .zero, styleURL: Coordinator.styleURL(conquered: snapshot.conquered))
+        let map = MLNMapView(frame: .zero, styleURL: Coordinator.styleURL(look: snapshot.look, conquered: snapshot.conquered))
         map.delegate = context.coordinator
         map.logoView.isHidden = true
         map.attributionButtonPosition = .topLeft
@@ -60,10 +60,11 @@ struct GameMapView: UIViewRepresentable {
         if authorized, map.locationManager is PassiveLocationManager { map.locationManager = nil } // back to MapLibre's default
         map.showsUserLocation = showsUserLocation && snapshot.runner == nil && authorized
         map.tintColor = UIColor(Color(hex: snapshot.playerColorHex))
-        if c.conquered != snapshot.conquered {
+        if c.conquered != snapshot.conquered || c.look != snapshot.look {
             c.conquered = snapshot.conquered
+            c.look = snapshot.look
             c.styleReady = false
-            map.styleURL = Coordinator.styleURL(conquered: snapshot.conquered)
+            map.styleURL = Coordinator.styleURL(look: snapshot.look, conquered: snapshot.conquered)
             return
         }
         c.apply(snapshot)
@@ -93,6 +94,7 @@ struct GameMapView: UIViewRepresentable {
         weak var map: MLNMapView?
         var styleReady = false
         var conquered: Bool
+        var look: PlayerProfile.MapLook
         var lastVersion = -1
         var lastFocus: Coordinate?
         var lastFit: [Coordinate]?
@@ -104,12 +106,13 @@ struct GameMapView: UIViewRepresentable {
         init(_ p: GameMapView) {
             parent = p
             conquered = p.snapshot.conquered
+            look = p.snapshot.look
         }
 
-        static func styleURL(conquered: Bool) -> URL {
-            let name = conquered ? "chomp-style-conquered-v1.json" : "chomp-style-arcade-v1.json"
+        static func styleURL(look: PlayerProfile.MapLook, conquered: Bool) -> URL {
+            let name = "chomp-style-\(look.rawValue)\(conquered ? "-conquered" : "")-v2.json"
             let url = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent(name)
-            let json = MapStyle.json(palette: conquered ? MapStyle.conquered : MapStyle.arcade)
+            let json = MapStyle.json(palette: MapStyle.palette(look, conquered: conquered))
             try? json.write(to: url, atomically: true, encoding: .utf8)
             return url
         }

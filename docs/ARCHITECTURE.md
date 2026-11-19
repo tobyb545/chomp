@@ -9,6 +9,12 @@
 - **Segment**: a stretch of street between two junctions (or between name changes),
   from OSM. It has a stable ID (a hash of its end nodes). Pavements alongside a road are
   folded into that road, so running the pavement credits the road.
+- **Tokens**: the dots along every street, one per 10 m (`tokens.metresPerToken`, at least one
+  per street). Capturing or stealing a street earns its tokens, and leaderboards (nearby =
+  same ~25 km region, global, friends, club) rank by tokens captured, all time.
+- **Invites**: a friend who joins with your code gets 30 days of Pro at once; you get 30 days
+  when they finish their first live run (max 12). Stored as the `pro_invite` entitlement, next
+  to RevenueCat's `pro`; `has_pro()` and the app accept either.
 - **Capture**: covering at least 80% of a segment's length in one run (`capture.coverageThreshold`).
   A neutral street is *captured*, a rival's street is *stolen*, and your own street is *refreshed*
   (its decay timer resets, but it earns no points).

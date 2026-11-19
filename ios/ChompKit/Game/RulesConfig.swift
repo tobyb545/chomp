@@ -51,6 +51,11 @@ public struct RulesConfig: Codable, Sendable, Hashable {
         public var segmentsPerDayMax: Int
         public var maxTickHours: Double
     }
+    /// The dots drawn along every street. Capturing a street eats its tokens,
+    /// and leaderboards rank by tokens captured.
+    public struct Tokens: Codable, Sendable, Hashable {
+        public var metresPerToken: Double
+    }
     public struct Imports: Codable, Sendable, Hashable {
         /// Runs added after the fact (Health import, late upload) still capture
         /// streets if they ended within this many hours. Older ones only count
@@ -73,6 +78,12 @@ public struct RulesConfig: Codable, Sendable, Hashable {
     public var antiCheat: AntiCheat
     public var ghosts: Ghosts
     public var imports: Imports
+    public var tokens: Tokens
+
+    /// Tokens on a street of this length: one per `metresPerToken`, at least one.
+    public func tokens(forLength metres: Double) -> Int {
+        max(1, Int((metres / tokens.metresPerToken).rounded()))
+    }
     public var privacy: Privacy
 
     public var decayInterval: TimeInterval { decay.days * 86_400 }

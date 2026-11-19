@@ -2,7 +2,7 @@
 -- Run with `supabase test db` against a local stack (`supabase start`).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(19);
+select plan(21);
 
 -- Every public table has RLS on.
 select is(
@@ -32,6 +32,9 @@ insert into public.segment_ownership values
 insert into public.runs (id, user_id, source, started_at, ended_at) values
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '11111111-1111-1111-1111-111111111111', 'live', now() - interval '1 hour', now());
 
+insert into public.captures (run_id, user_id, segment_id, kind, coverage_ratio, at) values
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '11111111-1111-1111-1111-111111111111', 's1', 'captured', 1, now());
+
 -- The feed mirrors public owners only.
 select is((select owner_name from public.segment_ownership_feed where segment_id = 's1'), 'Alice', 'feed mirrors a public owner');
 select is((select count(*)::int from public.segment_ownership_feed where segment_id = 's2'), 0, 'private players stay off the feed');
@@ -57,7 +60,9 @@ select throws_ok($$insert into public.reports (reporter_id, reported_user_id, re
 select lives_ok($$insert into public.reports (reporter_id, reported_user_id, reason) values
   ('22222222-2222-2222-2222-222222222222', '11111111-1111-1111-1111-111111111111', 'gps_spoofing')$$, 'can file a report as yourself');
 select is((select count(*)::int from public.reports), 0, 'reports are not readable by players');
-select is((select streets_held from public.leaderboard('nearby', '14/8192/8191') where display_name = 'Alice'), 1, 'leaderboard counts live streets');
+select is((select tokens from public.leaderboard('nearby', '14/8192/8191') where display_name = 'Alice'), 7, 'leaderboard counts tokens captured (70 m = 7)');
+select ok((public.my_invite()->>'code') ~ '^[A-HJKMNP-Z2-9]{6}$', 'players get an invite code');
+select throws_ok($$select public.redeem_invite(public.my_invite()->>'code')$$, 'P0001', null, 'you cannot use your own invite code');
 select is((select count(*)::int from public.leaderboard('nearby', '14/8192/8191') where display_name = 'Cara'), 0, 'leaderboard hides private players');
 select throws_ok($$select public.create_club('Runners', 'C6FF00')$$, 'P0001', 'Clubs are part of Chomp Pro', 'clubs need Pro');
 

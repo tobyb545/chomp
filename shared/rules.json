@@ -6,6 +6,9 @@
     "pointsPerMetre": 1.0,
     "minimumPointsPerSegment": 1
   },
+  "tokens": {
+    "metresPerToken": 10
+  },
   "decay": {
     "days": 21
   },

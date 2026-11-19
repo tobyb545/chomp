@@ -19,6 +19,7 @@ struct MapSnapshot {
     var eaten: [SegmentID] = []
     var playerColorHex = "C6FF00"
     var conquered = false
+    var look: PlayerProfile.MapLook = .dusk
 }
 
 @MainActor
@@ -53,6 +54,7 @@ final class AppModel {
     var heatmapOn = false { didSet { bumpMap() } }
     var presentedSummary: RunRecord?
     var showPaywall = false
+    var showInvite = false
     var focusRequest: Coordinate?
     var toast: String?
 
@@ -170,6 +172,11 @@ final class AppModel {
         matcher = MapMatcher(area: a, rules: rules.matching)
         refreshDay()
         run.areaDidChange()
+        // State saved before tokens existed: credit the streets each owner holds now.
+        if state.tokensCaptured == nil, !a.segments.isEmpty {
+            state.tokensCaptured = [:]
+            for s in a.segments { if let o = state.ownership[s.id] { state.addTokens(rules.tokens(forLength: s.length), to: o.owner) } }
+        }
         if state.ghosts.isEmpty, !a.segments.isEmpty { tickWorld() }
         bumpMap()
         Task { await subscribeRealtime() }
@@ -241,6 +248,10 @@ final class AppModel {
     /// runs instantly, so screenshots and UI checks have a lived-in town.
     private func seedDemoIfRequested() async {
         let args = ProcessInfo.processInfo.arguments
+        if args.contains("-demo") { profile.seenIntro = !args.contains("-intro") }
+        if let i = args.firstIndex(of: "-mapLook"), i + 1 < args.count, let look = PlayerProfile.MapLook(rawValue: args[i + 1]) {
+            profile.mapLook = look
+        }
         guard args.contains("-demo"), runs.isEmpty else {
             if args.contains("-autorun"), profile.onboarded { run.start(simulated: true) }
             return
@@ -374,6 +385,7 @@ final class AppModel {
         s.version = mapVersion
         s.playerColorHex = profile.colorHex
         s.conquered = isConquered
+        s.look = profile.mapLook
         let now = Date()
         let decay = rules.decayInterval
         let eatenLive = Set(run.tracker?.eaten ?? [])
@@ -491,7 +503,28 @@ final class AppModel {
     }
 
     /// Pulls authoritative ownership for the tiles on screen and listens for changes.
+    // MARK: Invites
+
+    /// A friend's invite link was opened: remember the code until we can redeem it.
+    func openInvite(code: String) {
+        let c = InviteCode.normalise(code)
+        guard InviteCode.isValid(c) else { return }
+        profile.pendingInviteCode = c
+        showInvite = true
+        Task { await refreshInvitePro() }
+    }
+
+    /// Redeems a pending code once signed in, and picks up any free Pro months earned.
+    func refreshInvitePro() async {
+        guard backend.isSignedIn else { return }
+        if let code = profile.pendingInviteCode {
+            if (try? await backend.redeemInvite(code: code)) != nil { profile.pendingInviteCode = nil }
+        }
+        if let until = try? await backend.invitePremiumUntil() { pro.invitePro = until }
+    }
+
     func syncOnline() async {
+        await refreshInvitePro()
         guard backend.isSignedIn, !profile.privateMode, !area.tiles.isEmpty else { return }
         do {
             let rows = try await backend.ownership(tiles: area.tiles.map(\.description))
@@ -592,7 +625,7 @@ final class AppModel {
         guard scope == .nearby else { throw BackendError.notSignedIn }
         return standings.enumerated().map { i, s in
             LeaderboardEntry(id: s.id, rank: i + 1, name: s.name, colorHex: s.colorHex, isBot: s.owner.kind == .ghost,
-                             isMe: s.owner == state.me, streets: s.streets, metres: s.metres, blocks: s.blocks)
+                             isMe: s.owner == state.me, tokens: s.tokens)
         }
     }
 

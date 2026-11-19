@@ -1,8 +1,8 @@
 import Foundation
 
-/// Chomp's own arcade map style: a near-black base from OpenFreeMap vector tiles
-/// (OpenMapTiles schema, free, no key) with our game layers on top. Built in code
-/// so the "conquered" variant and player colour can change it.
+/// Chomp's own map style: a base map from OpenFreeMap vector tiles (OpenMapTiles
+/// schema, free, no key) with our game layers on top. Built in code so the
+/// brightness setting (Light / Dusk / Dark) and the "conquered" variant can change it.
 enum MapStyle {
     struct Palette {
         var background: String
@@ -13,13 +13,39 @@ enum MapStyle {
         var road: String
         var label: String
         var segmentBase: String
+        /// The dots (tokens) on streets you don't own.
+        var pellet = pelletColour
+        /// Your run trail and the flash when a street is eaten.
+        var trail = "#FFFFFF"
+        /// A dark edge under owned streets so pale player colours show on a light map.
+        var casingOpacity = 0.0
     }
 
     static let arcade = Palette(background: "#07070E", land: "#0B0B16", water: "#0A1838", green: "#0A1A14",
                                 building: "#11111F", road: "#191930", label: "#6F6F96", segmentBase: "#2A2A4A")
-    /// Unlocked by owning 100% of a town: warmer, gold-trimmed.
+    /// Unlocked by owning a whole map square: warmer, gold-trimmed.
     static let conquered = Palette(background: "#0E0904", land: "#140E06", water: "#0B1A2E", green: "#141A08",
                                    building: "#1C140A", road: "#2A1F10", label: "#A08A5C", segmentBase: "#4A3A1C")
+    /// Default: a lighter slate night, roads and parks easy to read.
+    static let dusk = Palette(background: "#262B40", land: "#2C3249", water: "#2B4A7A", green: "#2C4A3D",
+                              building: "#383F5C", road: "#4D5679", label: "#BAC1DE", segmentBase: "#5C6690")
+    static let duskConquered = Palette(background: "#362C20", land: "#3E3326", water: "#2D4A6E", green: "#3B482A",
+                                       building: "#4A3E2D", road: "#6A5838", label: "#E2CA92", segmentBase: "#7C6842")
+    /// Daytime: pale ground, white roads, amber tokens.
+    static let light = Palette(background: "#ECEEF3", land: "#E4E7EE", water: "#A8C7EB", green: "#D0E5CB",
+                               building: "#D8DBE4", road: "#FFFFFF", label: "#545A70", segmentBase: "#BFC5D4",
+                               pellet: "#E08600", trail: "#262B40", casingOpacity: 0.55)
+    static let lightConquered = Palette(background: "#F3ECDC", land: "#EEE5D0", water: "#B2CCE6", green: "#D9E4C3",
+                                        building: "#E2D7C0", road: "#FFFDF6", label: "#76603C", segmentBase: "#D4C399",
+                                        pellet: "#C86A00", trail: "#3A2E20", casingOpacity: 0.55)
+
+    static func palette(_ look: PlayerProfile.MapLook, conquered c: Bool) -> Palette {
+        switch look {
+        case .dark: c ? conquered : arcade
+        case .dusk: c ? duskConquered : dusk
+        case .light: c ? lightConquered : light
+        }
+    }
 
     static let pelletColour = "#FFF1C1"
     static let powerColour = "#FF2BD6"
@@ -43,7 +69,7 @@ enum MapStyle {
              "paint": ["fill-color": p.building, "fill-outline-color": p.road]],
             ["id": "rail", "type": "line", "source": "ofm", "source-layer": "transportation",
              "filter": ["==", ["get", "class"], "rail"],
-             "paint": ["line-color": p.road, "line-width": zoomWidth(1, 3), "line-dasharray": [3, 2]]],
+             "paint": ["line-color": p.segmentBase, "line-width": zoomWidth(1, 3), "line-dasharray": [3, 2]]],
             ["id": "roads", "type": "line", "source": "ofm", "source-layer": "transportation",
              "filter": ["!=", ["get", "class"], "rail"],
              "layout": ["line-cap": "round", "line-join": "round"],
@@ -60,6 +86,10 @@ enum MapStyle {
              "layout": ["line-cap": "round", "line-join": "round"],
              "paint": ["line-color": ["interpolate", ["linear"], ["get", "heat"], 1, "#3B2BFF", 3, "#FF2BD6", 8, "#FFE14D"],
                        "line-width": zoomWidth(2.5, 9), "line-opacity": 0.9]],
+            ["id": "seg-casing", "type": "line", "source": "segments",
+             "filter": ["all", ["in", ["get", "state"], ["literal", ["mine", "rival"]]], ["==", ["get", "heat"], 0]],
+             "layout": ["line-cap": "round", "line-join": "round"],
+             "paint": ["line-color": "#14141F", "line-width": zoomWidth(3, 9), "line-opacity": p.casingOpacity]],
             ["id": "seg-glow", "type": "line", "source": "segments",
              "filter": ["all", ["in", ["get", "state"], ["literal", ["mine", "rival"]]], ["==", ["get", "heat"], 0]],
              "layout": ["line-cap": "round", "line-join": "round"],
@@ -78,15 +108,15 @@ enum MapStyle {
             ["id": "pellets", "type": "line", "source": "segments", "minzoom": 13.5,
              "filter": ["all", ["in", ["get", "state"], ["literal", ["neutral", "rival"]]], ["==", ["get", "heat"], 0]],
              "layout": ["line-cap": "round", "line-join": "round"],
-             "paint": ["line-color": ["case", ["==", ["get", "bonus"], 1], powerColour, pelletColour],
+             "paint": ["line-color": ["case", ["==", ["get", "bonus"], 1], powerColour, p.pellet],
                        "line-width": zoomWidth(2, 7), "line-dasharray": [0, 2.4],
                        "line-opacity": ["case", ["==", ["get", "state"], "rival"], 0.75, 1]]],
             ["id": "eaten-flash", "type": "line", "source": "eaten",
              "layout": ["line-cap": "round"],
-             "paint": ["line-color": "#FFFFFF", "line-width": zoomWidth(3, 10), "line-blur": 2, "line-opacity": 0.85]],
+             "paint": ["line-color": p.trail, "line-width": zoomWidth(3, 10), "line-blur": 2, "line-opacity": 0.85]],
             ["id": "trail", "type": "line", "source": "trail",
              "layout": ["line-cap": "round", "line-join": "round"],
-             "paint": ["line-color": "#FFFFFF", "line-width": zoomWidth(1.5, 4), "line-opacity": 0.55]],
+             "paint": ["line-color": p.trail, "line-width": zoomWidth(1.5, 4), "line-opacity": 0.55]],
             ["id": "power-glow", "type": "circle", "source": "pellets-power",
              "paint": ["circle-color": powerColour, "circle-radius": 22, "circle-blur": 1, "circle-opacity": 0.6]],
             ["id": "power", "type": "circle", "source": "pellets-power",

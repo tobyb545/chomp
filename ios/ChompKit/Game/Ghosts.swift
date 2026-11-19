@@ -114,6 +114,7 @@ public struct GhostSimulator: Sendable {
             } else {
                 if prev?.owner == me, prev!.strength(at: t, decay: decay) > 0 { stolen.append(seg.id) }
                 state.ownership[seg.id] = Ownership(owner: ghostRef, capturedAt: t, lastVisitedAt: t)
+                state.addTokens(engine.rules.tokens(forLength: seg.length), to: ghostRef)
                 held += 1
             }
             node = pick.other

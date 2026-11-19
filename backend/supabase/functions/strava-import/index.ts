@@ -30,8 +30,8 @@ Deno.serve(async (req) => {
   if (!userId) return json({ error: "Sign in first" }, 401);
   const { code } = await req.json().catch(() => ({}));
 
-  const { data: pro } = await db.from("entitlements").select("expires_at").eq("user_id", userId).eq("entitlement", "pro").maybeSingle();
-  if (!pro || (pro.expires_at && Date.parse(pro.expires_at) < Date.now())) return json({ error: "Strava import is part of Chomp Pro" }, 403);
+  const { data: pro } = await db.rpc("has_pro", { p_user: userId });
+  if (!pro) return json({ error: "Strava import is part of Chomp Pro" }, 403);
 
 
   try {

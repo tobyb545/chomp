@@ -182,6 +182,7 @@ public struct GameEngine: Sendable {
             let mult = (inFrenzy(at) ? rules.frenzy.multiplier : 1) * bonusMultiplier(seg.id, at)
             let pts = max(rules.capture.minimumPointsPerSegment, Int((seg.length * rules.capture.pointsPerMetre * mult).rounded()))
             state.ownership[seg.id] = Ownership(owner: me, capturedAt: at, lastVisitedAt: at)
+            state.addTokens(rules.tokens(forLength: seg.length), to: me)
             capturesThisRun += 1
             capturesToday += 1
             points += pts
@@ -337,8 +338,9 @@ public struct GameEngine: Sendable {
                             name: o == state.me ? playerName : (ghost?.name ?? "Rival"),
                             colorHex: o == state.me ? playerColorHex : (ghost?.colorHex ?? "8888AA"),
                             streets: by[o]?.0 ?? 0, metres: by[o]?.1 ?? 0,
-                            blocks: completedBlocks(for: o, state: state, now: now).count)
-        }.sorted { ($0.streets, $0.metres) > ($1.streets, $1.metres) }
+                            blocks: completedBlocks(for: o, state: state, now: now).count,
+                            tokens: state.tokens(of: o))
+        }.sorted { ($0.tokens, $0.streets) > ($1.tokens, $1.streets) }
     }
 
     func ownerName(_ o: OwnerRef, state: GameState) -> String {

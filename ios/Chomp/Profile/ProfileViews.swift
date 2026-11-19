@@ -33,6 +33,10 @@ struct ProfileView: View {
                     }
                 }
                 Section {
+                    NavigationLink { InviteView() } label: {
+                        Label("Invite a friend, get a free month of Pro", systemImage: "gift.fill")
+                    }
+                    NavigationLink { IntroCardsView(replay: true) } label: { Label("How Chomp works", systemImage: "questionmark.circle.fill") }
                     NavigationLink { ClubsView() } label: { Label("Clubs & friends", systemImage: "person.3.fill") }
                     NavigationLink { SettingsView() } label: { Label("Settings", systemImage: "gearshape.fill") }
                     if !model.pro.isPro {
@@ -72,6 +76,7 @@ struct StatsSection: View {
         let live = model.runs.filter { $0.source == .live && !$0.simulated }
         let totalKm = live.reduce(0) { $0 + $1.distance } / 1000
         Group {
+            LabeledContent("Tokens captured", value: model.state.tokens(of: model.state.me).formatted())
             LabeledContent("Streets held", value: "\(model.streetsHeldEverywhere)")
             LabeledContent("Held around \(model.placeName)", value: p.heldFraction.percentString)
             LabeledContent("Explored around \(model.placeName)", value: p.exploredFraction.percentString)
@@ -169,6 +174,16 @@ struct SettingsView: View {
                 NavigationLink("Privacy zones (\(model.profile.privacyZones.count))") { PrivacyZonesView() }
             } header: { Text("Privacy") } footer: {
                 Text("Private mode keeps every run on this phone: solo play with bots only, nothing uploaded. Privacy zones hide where your runs start and end, even from you on shared images.")
+            }
+
+            Section {
+                Picker("Map", selection: $model.profile.mapLook) {
+                    ForEach(PlayerProfile.MapLook.allCases) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: model.profile.mapLook) { _, _ in model.bumpMap() }
+            } header: { Text("Map brightness") } footer: {
+                Text("Light is easiest to read in sunshine. Dark is the original arcade look.")
             }
 
             Section("Feel") {

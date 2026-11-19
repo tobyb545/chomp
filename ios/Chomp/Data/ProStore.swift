@@ -41,6 +41,9 @@ final class ProStore {
     /// Debug-only override so every screen can be checked without a sandbox purchase.
     var debugOverride = false { didSet { refreshDerived() } }
     private var purchasedPro = false
+    /// Free Pro earned through invites (granted by the server, not the App Store).
+    var invitePro: Date? { didSet { refreshDerived() } }
+    var invitePremiumActive: Bool { (invitePro ?? .distantPast) > .now }
 
     init() {
         let key = (Bundle.main.infoDictionary?["RevenueCatAPIKey"] as? String) ?? ""
@@ -52,9 +55,9 @@ final class ProStore {
 
     private func refreshDerived() {
         #if DEBUG
-        isPro = purchasedPro || debugOverride
+        isPro = purchasedPro || invitePremiumActive || debugOverride
         #else
-        isPro = purchasedPro
+        isPro = purchasedPro || invitePremiumActive
         #endif
     }
 

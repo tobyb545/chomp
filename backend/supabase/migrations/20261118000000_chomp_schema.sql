@@ -129,6 +129,14 @@ create table public.entitlements (
   primary key (user_id, entitlement)
 );
 
+-- Pro from the App Store (RevenueCat: 'pro') or earned through invites ('pro_invite').
+create or replace function public.has_pro(p_user uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.entitlements e where e.user_id = p_user and e.entitlement in ('pro', 'pro_invite')
+                   and (e.expires_at is null or e.expires_at > now()))
+$$;
+revoke execute on function public.has_pro(uuid) from public, anon, authenticated;
+
 -- ---------------------------------------------------------------------------
 -- Game state
 -- ---------------------------------------------------------------------------
@@ -457,49 +465,43 @@ begin
   delete from public.personal_coverage pc using public.segment_lineage l where pc.segment_id = l.old_id;
 end $$;
 
--- Leaderboards by scope. Strength > 0 only; private and shadow-restricted players excluded.
+-- Leaderboards rank by tokens captured: every street a player captured or
+-- stole earns its tokens (one per metresPerToken of street, at least one),
+-- the same dots the app draws. Private and shadow-restricted players excluded.
+-- 'nearby' = captures on streets in the same zoom-10 region (~25 km) as p_tile.
 create or replace function public.leaderboard(p_scope text, p_tile text)
-returns table (user_id text, display_name text, color_hex text, streets_held int, metres_held double precision, blocks_held int)
+returns table (user_id text, display_name text, color_hex text, tokens int)
 language sql stable security definer set search_path = public, extensions as $$
-  with live as (
-    select so.owner_id, so.segment_id, s.length_m, public.tile_region(so.tile) as region
-      from public.segment_ownership so
-      join public.segments s on s.id = so.segment_id
-     where so.owner_kind = 'player' and public.ownership_strength(so.last_visited_at) > 0
+  with per_token as (
+    select coalesce((select (value->>'metresPerToken')::float8 from public.game_config where key = 'tokens'), 10) as m
+  ),
+  scored as (
+    select c.user_id::text as owner_id, greatest(1, round(s.length_m / pt.m))::int as tokens, public.tile_region(s.tile) as region
+      from public.captures c
+      join public.segments s on s.id = c.segment_id
+      cross join per_token pt
+     where c.kind in ('captured', 'stolen')
   ),
   scoped as (
-    select l.* from live l
+    select x.* from scored x
      where case p_scope
-             when 'nearby' then l.region = public.tile_region(p_tile)
+             when 'nearby' then x.region = public.tile_region(p_tile)
              when 'global' then true
-             when 'friends' then l.owner_id = auth.uid()::text or exists (
+             when 'friends' then x.owner_id = auth.uid()::text or exists (
                select 1 from public.friendships f where f.status = 'accepted'
-                  and ((f.user_a = auth.uid() and f.user_b::text = l.owner_id) or (f.user_b = auth.uid() and f.user_a::text = l.owner_id)))
+                  and ((f.user_a = auth.uid() and f.user_b::text = x.owner_id) or (f.user_b = auth.uid() and f.user_a::text = x.owner_id)))
              when 'club' then exists (
                select 1 from public.memberships m1 join public.memberships m2 on m1.club_id = m2.club_id
-                where m1.user_id = auth.uid() and m2.user_id::text = l.owner_id)
+                where m1.user_id = auth.uid() and m2.user_id::text = x.owner_id)
              else false end
-  ),
-  block_counts as (
-    select so.owner_id, count(distinct bs.block_id)::int as n
-      from public.block_segments bs
-      join public.segment_ownership so on so.segment_id = bs.segment_id
-     where so.owner_kind = 'player' and public.ownership_strength(so.last_visited_at) > 0
-       and not exists (
-         select 1 from public.block_segments bs2
-           left join public.segment_ownership so2 on so2.segment_id = bs2.segment_id
-          where bs2.block_id = bs.block_id
-            and (so2.owner_id is distinct from so.owner_id or public.ownership_strength(so2.last_visited_at) = 0))
-     group by so.owner_id
   )
-  select s.owner_id, p.display_name, p.color_hex, count(*)::int, sum(s.length_m), coalesce(max(b.n), 0)
-    from scoped s
-    join public.profiles p on p.id::text = s.owner_id and not p.is_private
+  select x.owner_id, p.display_name, p.color_hex, sum(x.tokens)::int
+    from scoped x
+    join public.profiles p on p.id::text = x.owner_id and not p.is_private
     left join public.user_trust t on t.user_id = p.id
-    left join block_counts b on b.owner_id = s.owner_id
    where not coalesce(t.shadow_restricted, false)
-   group by s.owner_id, p.display_name, p.color_hex
-   order by count(*) desc
+   group by x.owner_id, p.display_name, p.color_hex
+   order by sum(x.tokens) desc
    limit 100
 $$;
 
@@ -517,8 +519,7 @@ language plpgsql security definer set search_path = public, extensions as $$
 declare v_id uuid;
 begin
   if auth.uid() is null then raise exception 'not signed in'; end if;
-  if not exists (select 1 from public.entitlements e where e.user_id = auth.uid() and e.entitlement = 'pro'
-                 and (e.expires_at is null or e.expires_at > now())) then
+  if not public.has_pro(auth.uid()) then
     raise exception 'Clubs are part of Chomp Pro';
   end if;
   insert into public.clubs (name, color_hex, owner_id) values (p_name, p_color, auth.uid()) returning id into v_id;
@@ -619,7 +620,8 @@ select cron.schedule('chomp-local-boss', '0 0 * * 1', $$select public.crown_loca
 
 insert into public.game_config (key, value) values
   ('decay', '{"days": 21}'),
-  ('capture', '{"coverageThreshold": 0.8, "frenzyRivalCoverageThreshold": 0.4}')
+  ('capture', '{"coverageThreshold": 0.8, "frenzyRivalCoverageThreshold": 0.4}'),
+  ('tokens', '{"metresPerToken": 10}')
 on conflict (key) do nothing;
 
 -- Districts where players hold live streets: where the server runs bots.

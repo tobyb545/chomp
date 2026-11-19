@@ -18,12 +18,40 @@ struct PlayerProfile: Codable, Hashable {
     var blockedPlayers: [String] = []
     var mutedPlayers: [String] = []
     var debugPro = false
+    /// The swipeable "how it works" cards have been shown.
+    var seenIntro = false
+    var mapLook: MapLook = .dusk
+    /// Invite code typed in (or opened from a link) before signing in.
+    var pendingInviteCode: String?
+
+    /// How bright the map underneath the game is.
+    enum MapLook: String, Codable, CaseIterable, Identifiable {
+        case light, dusk, dark
+        var id: String { rawValue }
+        var label: String { rawValue.capitalized }
+    }
 
     enum TrailStyle: String, Codable, CaseIterable, Identifiable {
         case solid, dotted, comet
         var id: String { rawValue }
         var label: String { rawValue.capitalized }
         var isPro: Bool { self != .solid }
+    }
+
+    init() {}
+
+    /// Field by field, so a profile saved by an older build (missing newer
+    /// fields) keeps everything it has instead of resetting.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        func get<T: Decodable>(_ k: CodingKeys, _ into: inout T) { if let v = try? c.decode(T.self, forKey: k) { into = v } }
+        get(.id, &id); get(.name, &name); get(.colorHex, &colorHex); get(.homeArea, &homeArea); get(.onboarded, &onboarded)
+        get(.privateMode, &privateMode); get(.soundOn, &soundOn); get(.hapticsOn, &hapticsOn); get(.useMiles, &useMiles)
+        get(.trailStyle, &trailStyle); get(.privacyZones, &privacyZones); get(.dismissedZoneSuggestions, &dismissedZoneSuggestions)
+        get(.blockedPlayers, &blockedPlayers); get(.mutedPlayers, &mutedPlayers); get(.debugPro, &debugPro)
+        get(.mapLook, &mapLook)
+        pendingInviteCode = try? c.decodeIfPresent(String.self, forKey: .pendingInviteCode)
+        get(.seenIntro, &seenIntro)  // existing players see the cards once too
     }
 
     private static let key = "chomp.profile.v1"

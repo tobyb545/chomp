@@ -9,14 +9,6 @@ enum LeaderboardScope: String, CaseIterable, Identifiable {
     var label: String { rawValue.capitalized }
 }
 
-enum LeaderboardMetric: String, CaseIterable, Identifiable {
-    case streets, km, blocks
-    var id: String { rawValue }
-    var label: String {
-        switch self { case .streets: "Streets"; case .km: "km held"; case .blocks: "Blocks" }
-    }
-}
-
 struct LeaderboardEntry: Identifiable, Hashable {
     var id: String
     var rank: Int
@@ -24,13 +16,27 @@ struct LeaderboardEntry: Identifiable, Hashable {
     var colorHex: String
     var isBot: Bool
     var isMe: Bool
-    var streets: Int
-    var metres: Double
-    var blocks: Int
+    /// Tokens captured (the dots on every street you've taken), all time.
+    var tokens: Int
+}
 
-    func value(_ m: LeaderboardMetric) -> Double {
-        switch m { case .streets: Double(streets); case .km: metres / 1000; case .blocks: Double(blocks) }
-    }
+struct InviteInfo: Hashable {
+    var code: String
+    /// Friends who signed up with your code.
+    var joined: Int
+    /// Of those, how many have finished a run, earning you a month.
+    var rewarded: Int
+    /// Joined but haven't run yet.
+    var pending: Int
+    /// The code you yourself joined with, if any.
+    var redeemedCode: String?
+}
+
+enum InviteCode {
+    /// Codes are 6 letters/digits without look-alikes (no 0/O, 1/I/L).
+    static let alphabet = Set("ABCDEFGHJKMNPQRSTUVWXYZ23456789")
+    static func normalise(_ s: String) -> String { s.uppercased().filter { !$0.isWhitespace && $0 != "-" } }
+    static func isValid(_ s: String) -> Bool { s.count == 6 && s.allSatisfy { alphabet.contains($0) } }
 }
 
 struct RivalInfo: Hashable, Codable {
@@ -183,9 +189,7 @@ final class SupabaseBackend: @unchecked Sendable {
         let user_id: String
         let display_name: String
         let color_hex: String
-        let streets_held: Int
-        let metres_held: Double
-        let blocks_held: Int
+        let tokens: Int
     }
 
     func leaderboard(scope: LeaderboardScope, tile: String) async throws -> [LeaderboardEntry] {
@@ -194,8 +198,37 @@ final class SupabaseBackend: @unchecked Sendable {
         let rows: [LeaderRow] = try await client.rpc("leaderboard", params: Params(p_scope: scope.rawValue, p_tile: tile)).execute().value
         return rows.enumerated().map { i, r in
             LeaderboardEntry(id: r.user_id, rank: i + 1, name: r.display_name, colorHex: r.color_hex, isBot: false,
-                             isMe: r.user_id == userID, streets: r.streets_held, metres: r.metres_held, blocks: r.blocks_held)
+                             isMe: r.user_id == userID, tokens: r.tokens)
         }
+    }
+
+    // MARK: Invites (a free month of Pro for you and your friend)
+
+    func myInvite() async throws -> InviteInfo {
+        guard let client else { throw BackendError.notConfigured }
+        guard userID != nil else { throw BackendError.notSignedIn }
+        struct Row: Decodable { let code: String; let joined: Int; let rewarded: Int; let pending: Int; let redeemed_code: String? }
+        let r: Row = try await client.rpc("my_invite").execute().value
+        return InviteInfo(code: r.code, joined: r.joined, rewarded: r.rewarded, pending: r.pending, redeemedCode: r.redeemed_code)
+    }
+
+    /// Returns when the free Pro month granted to you ends.
+    @discardableResult
+    func redeemInvite(code: String) async throws -> Date {
+        guard let client else { throw BackendError.notConfigured }
+        guard userID != nil else { throw BackendError.notSignedIn }
+        struct Params: Encodable { let p_code: String }
+        let until: Date = try await client.rpc("redeem_invite", params: Params(p_code: code)).execute().value
+        return until
+    }
+
+    /// End of the free Pro earned through invites, if any.
+    func invitePremiumUntil() async throws -> Date? {
+        guard let client, let userID else { return nil }
+        struct Row: Decodable { let expires_at: Date? }
+        let rows: [Row] = try await client.from("entitlements").select("expires_at")
+            .eq("user_id", value: userID).eq("entitlement", value: "pro_invite").execute().value
+        return rows.first?.expires_at
     }
 
     func clubs() async throws -> [Club] {

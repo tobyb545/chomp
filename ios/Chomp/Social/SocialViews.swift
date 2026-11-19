@@ -5,7 +5,6 @@ struct LeaderboardView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @State private var scope: LeaderboardScope = .nearby
-    @State private var metric: LeaderboardMetric = .streets
     @State private var entries: [LeaderboardEntry] = []
     @State private var error: String?
     @State private var selected: LeaderboardEntry?
@@ -16,21 +15,21 @@ struct LeaderboardView: View {
                 Section {
                     Picker("Scope", selection: $scope) { ForEach(LeaderboardScope.allCases) { Text($0.label).tag($0) } }
                         .pickerStyle(.segmented)
-                    Picker("Rank by", selection: $metric) { ForEach(LeaderboardMetric.allCases) { Text($0.label).tag($0) } }
-                        .pickerStyle(.segmented)
+                    Text("Ranked by tokens captured: every dot you eat by taking a street.")
+                        .font(.footnote).foregroundStyle(Theme.textSecondary)
                 }
                 .listRowBackground(Color.clear)
 
                 if let error {
                     Section { Text(error).foregroundStyle(Theme.textSecondary) }
                 }
-                let sorted = entries.sorted { $0.value(metric) > $1.value(metric) }
-                if let boss = sorted.first, scope == .nearby, boss.value(metric) > 0 {
+                let sorted = entries.sorted { $0.tokens > $1.tokens }
+                if let boss = sorted.first, scope == .nearby, boss.tokens > 0 {
                     Section {
                         HStack(spacing: 12) {
                             Image(systemName: "crown.fill").font(.title).foregroundStyle(Color(hex: "FFD600"))
                             VStack(alignment: .leading) {
-                                Text("Local boss this week").font(.caption.weight(.heavy)).textCase(.uppercase).foregroundStyle(Theme.textSecondary)
+                                Text("Top chomper nearby").font(.caption.weight(.heavy)).textCase(.uppercase).foregroundStyle(Theme.textSecondary)
                                 Text(boss.name).font(Theme.display(.title3))
                             }
                             if boss.isBot { Chip(text: "Bot", colorHex: "8888AA") }
@@ -60,10 +59,13 @@ struct LeaderboardView: View {
             if e.isBot { Chip(text: "Bot", colorHex: "8888AA") }
             if e.isMe { Chip(text: "You", colorHex: e.colorHex) }
             Spacer()
-            Text(metric == .km ? String(format: "%.1f", e.value(metric)) : "\(Int(e.value(metric)))").font(Theme.number(.headline))
+            HStack(spacing: 5) {
+                Text(e.tokens.formatted()).font(Theme.number(.headline))
+                Circle().fill(Color(hex: MapStyle.pelletColour)).frame(width: 8, height: 8).accessibilityHidden(true)
+            }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Rank \(rank), \(e.name)\(e.isBot ? ", bot" : ""), \(Int(e.value(metric))) \(metric.label)")
+        .accessibilityLabel("Rank \(rank), \(e.name)\(e.isBot ? ", bot" : ""), \(e.tokens) tokens")
     }
 
     private func load() async {

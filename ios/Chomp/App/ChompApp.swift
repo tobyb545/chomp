@@ -25,6 +25,10 @@ struct ChompApp: App {
                 .onOpenURL { url in
                     // chomp://run/start (from widgets / shortcuts)
                     if url.host == "run", url.path == "/start" { IntentRouter.shared.requestStart() }
+                    // chomp://invite/<code> (a friend's invite link)
+                    if url.host == "invite", let code = url.pathComponents.dropFirst().first {
+                        model.openInvite(code: code)
+                    }
                 }
         }
     }
@@ -60,7 +64,9 @@ struct RootView: View {
     var body: some View {
         @Bindable var model = model
         Group {
-            if model.profile.onboarded {
+            if !model.profile.seenIntro {
+                IntroCardsView()
+            } else if model.profile.onboarded {
                 MapScreen()
             } else {
                 OnboardingView()
@@ -71,6 +77,11 @@ struct RootView: View {
         }
         .sheet(isPresented: $model.showPaywall) {
             PaywallView()
+        }
+        .sheet(isPresented: $model.showInvite) {
+            NavigationStack {
+                InviteView().toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { model.showInvite = false } } }
+            }
         }
         .overlay(alignment: .top) { ToastView() }
         .tint(Color(hex: model.profile.colorHex))

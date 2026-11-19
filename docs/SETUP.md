@@ -32,6 +32,7 @@ near the UK (e.g. London).
 cd backend
 supabase link --project-ref <ref>
 supabase db push                                   # migrations (also creates the public `tiles` bucket)
+# No CLI? Paste the three files in supabase/migrations/ into the SQL editor, oldest first.
 ```
 
 **Secrets for the Edge Functions:**
