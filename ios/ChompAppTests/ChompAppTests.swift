@@ -194,9 +194,15 @@ struct LinkTests {
         #expect(AppModel.parseLink(URL(string: "chomp://run/start")!) == nil)
     }
 
-    @Test func linksUseTheAppSchemeWithoutAWebsite() {
-        // Test builds have no CHOMP_WEB_URL.
-        #expect(AppModel.clubLink("K7Q2") == "chomp://club/K7Q2")
-        #expect(AppModel.inviteLink("ABC123") == "chomp://invite/ABC123")
+    @Test func linksUseTheWebsiteWhenThereIsOne() {
+        if let web = AppModel.webURL {
+            #expect(AppModel.clubLink("K7Q2") == "\(web)/club/?c=K7Q2")
+            #expect(AppModel.inviteLink("ABC123") == "\(web)/invite/?c=ABC123")
+            // And the app opens its own links.
+            #expect(AppModel.parseLink(URL(string: AppModel.inviteLink("ABC123"))!)! == ("invite", "ABC123"))
+        } else {
+            #expect(AppModel.clubLink("K7Q2") == "chomp://club/K7Q2")
+            #expect(AppModel.inviteLink("ABC123") == "chomp://invite/ABC123")
+        }
     }
 }
