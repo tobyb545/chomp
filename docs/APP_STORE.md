@@ -63,6 +63,7 @@ The test launches with `-demo -marketing` (a seeded week of runs, no "Simulated"
 | Health & fitness (workouts, heart rate) | Yes | App functionality, anti-cheat | No |
 | Name (display name) | Yes | App functionality | No |
 | User ID | Yes | App functionality | No |
+| Email address (only for email sign-in) | Yes | App functionality (sign-in codes) | No |
 | Purchases | Yes | App functionality (RevenueCat) | No |
 
 Not collected: contacts, browsing history, advertising data. No third-party advertising or analytics SDKs.

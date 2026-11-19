@@ -27,7 +27,7 @@ struct AccountSignInView: View {
         VStack(spacing: 14) {
             SignInWithAppleButton(.continue) { req in
                 nonce = Nonce.random()
-                req.requestedScopes = [.email]
+                req.requestedScopes = []  // nothing needed from Apple beyond the account ID
                 req.nonce = Nonce.sha256(nonce)
             } onCompletion: { result in
                 switch result {
