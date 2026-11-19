@@ -576,6 +576,8 @@ final class AppModel {
     enum RouteGoal: String, CaseIterable, Identifiable {
         case capture, defend, explore
         var id: String { rawValue }
+        /// "Save fading" only makes sense while streets fade.
+        static var allCases: [RouteGoal] { RulesConfig.bundled.decay.isEnabled ? [.capture, .defend, .explore] : [.capture, .explore] }
         var label: String { switch self { case .capture: "Grab streets"; case .defend: "Save fading"; case .explore: "Explore" } }
         var detail: String {
             switch self {

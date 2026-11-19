@@ -148,6 +148,8 @@ struct StreetListView: View {
     enum Filter: String, CaseIterable, Identifiable {
         case near, mine, rivals, fading
         var id: String { rawValue }
+        /// No "Fading" tab while streets don't fade.
+        static var allCases: [Filter] { RulesConfig.bundled.decay.isEnabled ? [.near, .mine, .rivals, .fading] : [.near, .mine, .rivals] }
         var label: String { switch self { case .near: "To grab"; case .mine: "Mine"; case .rivals: "Rivals"; case .fading: "Fading" } }
         var empty: String {
             switch self {

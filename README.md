@@ -1,7 +1,7 @@
 # Chomp
 
 Run any street, anywhere, to collect the coins (tokens) on it: they turn your colour.
-Rivals can win them back; streets you don't revisit fade to neutral after 21 days.
+They stay yours until someone else runs the street.
 An original arcade-styled iOS game: no Pac-Man names, characters, sounds or art.
 
 **Status:** the app is feature-complete and fully playable offline (solo play against

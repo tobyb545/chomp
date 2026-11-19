@@ -76,7 +76,7 @@ struct StreetsHeldView: View {
                 if family == .systemMedium {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(s.townName).font(.headline).foregroundStyle(.white)
-                        Label("\(s.fadingSoon) fading", systemImage: "hourglass").foregroundStyle(muted)
+                        if s.fadingSoon > 0 { Label("\(s.fadingSoon) fading", systemImage: "hourglass").foregroundStyle(muted) }
                         if let b = s.bonusLabels.first { Label(b, systemImage: "star.fill").foregroundStyle(power).lineLimit(1) }
                     }
                     .font(.caption.weight(.semibold))
@@ -96,7 +96,7 @@ struct UnderAttackWidget: Widget {
             UnderAttackView(s: e.snapshot).containerBackground(ink, for: .widget)
         }
         .configurationDisplayName("Under attack")
-        .description("Streets rivals have eaten and streets about to fade.")
+        .description("Streets rivals have taken from you.")
         .supportedFamilies([.systemSmall, .systemMedium])
     }
 }

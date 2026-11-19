@@ -9,7 +9,12 @@ public struct RulesConfig: Codable, Sendable, Hashable {
         public var pointsPerMetre: Double
         public var minimumPointsPerSegment: Int
     }
-    public struct Decay: Codable, Sendable, Hashable { public var days: Double }
+    public struct Decay: Codable, Sendable, Hashable {
+        /// Off: streets stay yours until someone else runs them.
+        public var enabled: Bool?
+        public var days: Double
+        public var isEnabled: Bool { enabled ?? true }
+    }
     public struct Frenzy: Codable, Sendable, Hashable {
         public var durationSeconds: Double
         public var multiplier: Double
@@ -90,7 +95,8 @@ public struct RulesConfig: Codable, Sendable, Hashable {
     }
     public var privacy: Privacy
 
-    public var decayInterval: TimeInterval { decay.days * 86_400 }
+    /// Infinite when decay is off, so strength stays at 1 forever.
+    public var decayInterval: TimeInterval { decay.isEnabled ? decay.days * 86_400 : .infinity }
 
     /// Rules bundled with ChompKit (a copy of shared/rules.json).
     public static let bundled: RulesConfig = {

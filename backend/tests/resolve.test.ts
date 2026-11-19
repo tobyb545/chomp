@@ -96,3 +96,14 @@ test("driving is sent to review with no captures", () => {
   assert.equal(r.status, "under_review");
   assert.equal(r.payload.ownership.length, 0);
 });
+
+test("streets never fade while decay is off", async () => {
+  const { strength } = await import("../supabase/functions/_shared/chomp/engine.ts");
+  const { rules, decaySeconds } = await import("../supabase/functions/_shared/chomp/rules.ts");
+  assert.equal(rules.decay.enabled, false);
+  assert.equal(decaySeconds(rules), Infinity);
+  const fiveYears = 5 * 365 * 86_400;
+  assert.equal(strength({ owner: { kind: "player", id: "p" }, capturedAt: 0, lastVisitedAt: 0 } as any, fiveYears, decaySeconds(rules)), 1);
+  assert.ok(strength({ owner: { kind: "player", id: "p" }, capturedAt: 0, lastVisitedAt: 0 } as any, 22 * 86_400, 21 * 86_400) === 0,
+    "with decay on, 21 days still fades");
+});

@@ -69,9 +69,10 @@ final class ChompUITests: XCTestCase {
 
         app.buttons["Streets"].tap()
         XCTAssertTrue(app.navigationBars["Streets near you"].waitForExistence(timeout: 5))
-        for f in ["Mine", "Rivals", "Fading", "To grab"] {
+        for f in ["Mine", "Rivals", "To grab"] {
             app.segmentedControls.buttons[f].tap()
         }
+        XCTAssertFalse(app.segmentedControls.buttons["Fading"].exists, "streets don't fade any more")
         shot("streets")
         XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS ' away'")).firstMatch.waitForExistence(timeout: 5),
                       "streets show how far away they are")
@@ -90,6 +91,7 @@ final class ChompUITests: XCTestCase {
         waitForMap()
         app.buttons["Plan a route"].firstMatch.tap()
         XCTAssertTrue(app.navigationBars["Plan a route"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["Save fading"].exists)
         app.buttons["Explore"].tap()
         app.buttons["Grab streets"].tap()
         app.collectionViews.buttons["Plan a route"].tap()

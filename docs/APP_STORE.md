@@ -13,7 +13,7 @@ Chomp turns your runs into a game of territory.
 
 Every street around you is lined with gold coins, at home or on holiday. Run a street and its coins turn your colour. Keep running to collect more tokens than anyone nearby and climb the leaderboard.
 
-But your streets don't stay yours by themselves. Rivals can run them and win them back, and any street you don't revisit fades to neutral after three weeks. So there's always a reason to head out the door, and a new route to try.
+Your streets stay yours until someone else runs them, and rivals will try. Win them back by running them again.
 
 • REAL STREETS, ANYWHERE: built from OpenStreetMap wherever you run. Run the pavement and the road counts.
 • POWER PELLETS: three landmarks light up each day. Reach one to start a 10-minute frenzy and win rival streets twice as fast.

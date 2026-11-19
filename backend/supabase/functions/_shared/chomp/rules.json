@@ -10,6 +10,7 @@
     "metresPerToken": 10
   },
   "decay": {
+    "enabled": false,
     "days": 21
   },
   "frenzy": {

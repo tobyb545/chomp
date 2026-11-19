@@ -211,12 +211,26 @@ struct GameTests {
         #expect(out.stolen.allSatisfy { $0.previousOwner == .ghost("bot-rook") })
     }
 
-    @Test func streetsDecayAfterTheConfiguredDays() {
+    @Test func streetsStayYoursForeverWhileDecayIsOff() {
         var state = GameState(areaSlug: "west-byfleet", playerID: "me")
         let (_, trace) = Fixtures.run(seed: 14)
         let out = resolve(trace, state: &state)
         #expect(!out.gained.isEmpty)
-        let faded = engine.sweepDecay(state: &state, now: Fixtures.t0.addingTimeInterval(Fixtures.rules.decayInterval + 3600))
+        let fiveYears = Fixtures.t0.addingTimeInterval(5 * 365 * 86_400)
+        #expect(engine.sweepDecay(state: &state, now: fiveYears) == 0)
+        #expect(state.ownership.count == out.gained.count)
+        #expect(state.ownership.values.allSatisfy { $0.strength(at: fiveYears, decay: Fixtures.rules.decayInterval) == 1 })
+    }
+
+    @Test func streetsDecayAfterTheConfiguredDaysWhenSwitchedOn() {
+        var rules = Fixtures.rules
+        rules.decay.enabled = true
+        let engine = GameEngine(area: Fixtures.area, rules: rules)
+        var state = GameState(areaSlug: "west-byfleet", playerID: "me")
+        let (_, trace) = Fixtures.run(seed: 14)
+        let out = resolve(trace, state: &state, engine: engine)
+        #expect(!out.gained.isEmpty)
+        let faded = engine.sweepDecay(state: &state, now: Fixtures.t0.addingTimeInterval(rules.decayInterval + 3600))
         #expect(faded == out.gained.count)
         #expect(state.ownership.isEmpty)
         // Personal exploration survives decay.

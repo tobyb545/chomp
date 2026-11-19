@@ -132,6 +132,14 @@ Outcomes:
 All five share the TypeScript port in `functions/_shared/chomp`, and its pure core is
 `_shared/resolve.ts`. Under Node, `backend/tests` checks it against ChompKit's own outputs.
 
+## No fading
+
+Streets stay yours until someone else runs them (`rules.decay.enabled = false`). The
+engines treat the decay interval as infinite, so strength stays at 1. The database mirrors
+this in `game_config` (migration 20261122000000_no_decay.sql): `ownership_strength()`
+returns 1 and the hourly `decay_sweep()` does nothing. The 21-day fade comes back if the
+switch is turned on in both places.
+
 ## Coins, and capture areas (off)
 
 Every street is drawn as a row of coins, one per token (`rules.tokens.metresPerToken`, 10 m),

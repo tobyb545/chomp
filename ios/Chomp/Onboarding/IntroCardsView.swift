@@ -24,7 +24,9 @@ struct IntroCardsView: View {
             IntroCard(scene: .capture, title: "Run it to make it yours",
                       body: "Cover \(pct)% of a street in one run and its coins turn gold: they're yours. Running the pavement counts for the road."),
             IntroCard(scene: .rivals, title: "Defend your streets",
-                      body: "Rivals and bots can take your coins back by running your streets. Streets you don't rerun fade back to white after \(days) days."),
+                      body: r.decay.isEnabled
+                        ? "Rivals and bots can take your coins by running your streets. Streets you don't rerun fade back to white after \(days) days."
+                        : "Your coins stay yours until someone else runs the street. Rivals and bots can take them, so keep an eye on your patch."),
             IntroCard(scene: .power, title: "Power pellets and bonus streets",
                       body: "Run past the glowing pink landmark for a \(frenzyMin)-minute frenzy: double points, and rivals' streets flip more easily. Some streets glow pink for bonus points at certain times."),
             IntroCard(scene: .health, title: "Forgot to press start?",
@@ -220,7 +222,7 @@ private struct IntroScene: View {
 
         case .rivals:
             let y1 = h * 0.32, y2 = h * 0.68
-            let fade = 0.35 + 0.65 * (0.5 + 0.5 * cos(t * 1.4))
+            let fade = RulesConfig.bundled.decay.isEnabled ? 0.35 + 0.65 * (0.5 + 0.5 * cos(t * 1.4)) : 1
             line(&ctx, CGPoint(x: 30, y: y1), CGPoint(x: w - 30, y: y1), street, 10)
             dots(&ctx, CGPoint(x: 30, y: y1), CGPoint(x: w - 30, y: y1), n: 12, taken: 2, takenColor: gold, takenOpacity: fade)
             let a = CGPoint(x: 30, y: y2), b = CGPoint(x: w - 30, y: y2)
@@ -230,7 +232,7 @@ private struct IntroScene: View {
             runner(&ctx, lerp(a, b, f), bot)
             ctx.draw(Text("Bot Dusk").font(.system(size: 13, weight: .heavy, design: .rounded)).foregroundStyle(bot),
                      at: CGPoint(x: lerp(a, b, f).x, y: y2 + 28))
-            ctx.draw(Text("fading…").font(.system(size: 13, weight: .heavy, design: .rounded)).foregroundStyle(gold.opacity(fade)),
+            ctx.draw(Text(RulesConfig.bundled.decay.isEnabled ? "fading…" : "yours until someone runs it").font(.system(size: 13, weight: .heavy, design: .rounded)).foregroundStyle(gold.opacity(fade)),
                      at: CGPoint(x: w / 2, y: y1 - 22))
 
         case .power:
