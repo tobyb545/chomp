@@ -105,7 +105,7 @@ struct RunSummaryView: View {
                 Label("You conquered a whole map square!", systemImage: "crown.fill")
                     .font(.headline).foregroundStyle(Color(hex: "FFD600")).padding(.top, 6)
             }
-            if record.simulated { Chip(text: "Simulated run", colorHex: "8B5CFF").padding(.top, 4) }
+            if record.simulated, !AppModel.marketing { Chip(text: "Simulated run", colorHex: "8B5CFF").padding(.top, 4) }
         }
         .accessibilityElement(children: .combine)
     }

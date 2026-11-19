@@ -257,6 +257,15 @@ final class AppModel {
         await syncOnline()
     }
 
+    /// `-marketing` (debug builds): hides "Simulated" badges for App Store screenshots.
+    static let marketing: Bool = {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("-marketing")
+        #else
+        false
+        #endif
+    }()
+
     #if DEBUG
     /// `-demo` launch argument: skips onboarding and plays a week of simulated
     /// runs instantly, so screenshots and UI checks have a lived-in town.

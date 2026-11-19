@@ -35,15 +35,23 @@ running,run,territory,streets,map,game,conquer,neighbourhood,fitness,jogging,gps
 ## What's new (1.0)
 First release. Go and eat some streets.
 
-## Screenshots (6.9" and 6.5", then 6.1" auto-scaled)
-1. **Home map**, with owned streets glowing and pellet dots. Caption: "Run a street. Eat the pellets. It's yours."
-2. **Mid-run HUD**, with the streets counter and a "just ate" toast. Caption: "Every street you run turns your colour."
-3. **Frenzy**: the power pellet hit, with the frenzy timer. Caption: "Hit a power pellet. Win streets back twice as fast."
-4. **Run summary**: tokens eaten, streets won back, weekly goals. Caption: "Every coin counts."
-5. **Leaderboard** (nearby / friends / club). Caption: "Take your neighbourhood."
-6. **Privacy zones** screen. Caption: "Your routes and home stay private."
+## Screenshots (6.9", 1320x2868; App Store scales them for smaller iPhones)
+Ready to upload in `docs/screenshots/`, in this order:
+1. Map: "Make running fun again"
+2. Mid-run: "Run it. Own it."
+3. Leaderboard: "Compete with the world"
+4. Planned route: "Plan a loop, take the block"
+5. Run summary: "Every run counts"
+6. Goals and streak: "Keep your streak alive"
 
-Capture them with the `-demo` launch argument, which seeds a week of runs (debug builds only).
+To regenerate (debug build, iPhone 16 Pro Max simulator, status bar overridden to 9:41):
+```
+TEST_RUNNER_CHOMP_SCREENSHOTS=1 TEST_RUNNER_CHOMP_SHOTS_DIR=/tmp/chomp-shots \
+  xcodebuild test -project ios/Chomp.xcodeproj -scheme Chomp -destination 'name=<6.9" sim>' \
+  -only-testing:ChompUITests/ScreenshotTests
+swift tools/make-screenshots.swift /tmp/chomp-shots docs/screenshots
+```
+The test launches with `-demo -marketing` (a seeded week of runs, no "Simulated" badges).
 
 ## App Privacy (nutrition label)
 | Data | Linked to you | Used for | Tracking |

@@ -14,7 +14,7 @@ struct RunHUDView: View {
                 HUDPanel {
                     VStack(spacing: 12) {
                         HStack {
-                            if run.simulated { Chip(text: "Simulated", colorHex: "8B5CFF") }
+                            if run.simulated, !AppModel.marketing { Chip(text: "Simulated", colorHex: "8B5CFF") }
                             if run.phase == .paused { Chip(text: "Paused", colorHex: "FFD600") }
                             Spacer()
                             Text(RunMath.formatDuration(run.elapsed))

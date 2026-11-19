@@ -237,6 +237,8 @@ struct WorldStatusBanner: View {
         switch model.worldStatus {
         case .idle:
             EmptyView()
+        case .loading where AppModel.marketing && !model.area.segments.isEmpty:
+            EmptyView()
         case .loading(let n):
             banner(symbol: nil, text: model.area.segments.isEmpty ? "Loading the streets around you…" : "Loading more streets… (\(n))")
         case .needsLocation:
