@@ -165,4 +165,19 @@ final class ChompUITests: XCTestCase {
         done()
         waitForMap()
     }
+
+    func test6_PracticeRunChangesNothing() {
+        app.launch()
+        waitForMap()
+        app.buttons["Profile and settings"].tap()
+        XCTAssertTrue(app.navigationBars["Profile"].waitForExistence(timeout: 5))
+        reveal(app.buttons["Practice run"]).tap()
+        XCTAssertTrue(app.staticTexts["Practice"].waitForExistence(timeout: 30), "practice chip in the HUD")
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS 'Nothing counts'")).firstMatch.waitForExistence(timeout: 5),
+                      "first coaching tip")
+        XCTAssertTrue(app.staticTexts["You've got it"].waitForExistence(timeout: 70), "practice result after 45 s")
+        XCTAssertFalse(app.staticTexts["Tokens eaten"].exists, "no run summary: nothing was saved")
+        app.buttons["Got it"].tap()
+        waitForMap()
+    }
 }

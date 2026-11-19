@@ -25,6 +25,8 @@ final class RunSession {
     private(set) var collectedThisRun: Set<String> = []
     private(set) var tracker: LiveCaptureTracker?
     private(set) var simulated = false
+    /// A guided practice run: simulated, and thrown away at the end (nothing is captured).
+    private(set) var practice = false
     private(set) var pausedDuration: TimeInterval = 0
     private var pausedAt: Date?
     private var runID = UUID()
@@ -50,6 +52,19 @@ final class RunSession {
         guard let a = recent.first, let b = recent.last, b.timestamp > a.timestamp else { return 0 }
         let d = RunMath.distance(Array(recent))
         return d > 20 ? b.timestamp.timeIntervalSince(a.timestamp) / (d / 1000) : 0
+    }
+
+    func startPractice() {
+        start(simulated: true)
+        guard phase == .running else { return }
+        practice = true
+        LiveActivityController.shared.end(liveState)
+        // Short and sweet: it finishes itself after 45 seconds.
+        let id = runID
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(45))
+            if let self, self.practice, self.runID == id, self.phase == .running || self.phase == .paused { await self.finish() }
+        }
     }
 
     func start(simulated: Bool) {
@@ -141,6 +156,15 @@ final class RunSession {
         phase = .finishing
         locationTask?.cancel()
         let end = trace.last?.timestamp ?? .now
+        if practice {
+            locationTask = nil
+            RunVoice.shared.stop()
+            Feedback.shared.play(.finish)
+            model.practiceResult = .init(coins: pelletsEaten, streets: streetsCaptured)
+            reset()
+            model.bumpMap()
+            return
+        }
         var signals = simulated ? RunSignals() : motion.stop(at: end)
         if !simulated { signals.heartRate = await HealthService.shared.heartRate(from: startedAt, to: end) }
         LiveActivityController.shared.end(liveState)
@@ -171,6 +195,7 @@ final class RunSession {
         frenzyEndsAt = nil
         lastEatenName = nil
         collectedThisRun = []
+        practice = false
         coinsTaken = [:]
         streetsStolenSet = []
         tracker = nil

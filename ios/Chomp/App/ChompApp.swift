@@ -15,6 +15,7 @@ struct ChompApp: App {
                     IntentRouter.shared.model = model
                     PushService.shared.model = model
                     await model.bootstrap()
+                    model.checkForAttacks()
                     await model.checkForNewHealthRuns()
                     await PushService.shared.refresh()
                     IntentRouter.shared.flush()
@@ -32,6 +33,10 @@ struct ChompApp: App {
                     // chomp://invite/<code> (a friend's invite link)
                     if url.host == "invite", let code = url.pathComponents.dropFirst().first {
                         model.openInvite(code: code)
+                    }
+                    // chomp://club/<code> (a club's invite link)
+                    if url.host == "club", let code = url.pathComponents.dropFirst().first {
+                        model.openClubInvite(code: code)
                     }
                 }
         }
@@ -97,6 +102,12 @@ struct RootView: View {
         }
         .sheet(isPresented: $model.showPaywall) {
             PaywallView()
+        }
+        .sheet(item: $model.practiceResult) { r in PracticeResultView(result: r) }
+        .sheet(isPresented: $model.showClubs) {
+            NavigationStack {
+                ClubsView().toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { model.showClubs = false } } }
+            }
         }
         .sheet(isPresented: $model.showInvite) {
             NavigationStack {

@@ -207,6 +207,17 @@ These run on the phone only and need no server:
   batched captures with token counts, steals, frenzy, pause/resume and a split each km or mile.
   The `audio` background mode keeps it talking when the phone is locked.
 
+- **Practice run** (Profile → Practice run, or offered at the end of onboarding): a 45-second
+  simulated run with coaching tips. It never calls `completeRun`, so nothing is captured or saved.
+  Simulated runs are otherwise debug-only.
+- **Under attack banner**: on launch and foreground, streets lost to rivals or bots since the
+  banner was last dismissed (`PlayerProfile.attacksSeenAt`), with "Show me" and "Win them back"
+  (plans a capture loop).
+- **Club invite links**: `chomp://club/<code>` opens Clubs with the code filled in and asks to
+  join (or switch). Swap `AppModel.clubLink` for a universal link once there's a website.
+- **Story share card** (run summary): 9:16 image of the run's streets up close, coins and stats.
+  Streets inside privacy zones are never highlighted on it.
+
 ## Not built yet
 
 - **Push delivery** is built but needs setup: run migration `20261124000000_push.sql`, set the

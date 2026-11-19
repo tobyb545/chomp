@@ -28,9 +28,11 @@ struct MapScreen: View {
             VStack(spacing: 10) {
                 if model.run.isActive {
                     RunHUDView(follow: $follow)
+                        .overlay(alignment: .bottom) { if model.run.practice { PracticeCoach().padding(.bottom, 104) } }
                 } else {
                     TownHeader(onGoals: { sheet = .goals })
                     WorldStatusBanner()
+                    if let report = model.attackReport { AttackBanner(report: report) }
                     Spacer()
                     sideButtons
                     if let r = model.plannedRoute { plannedRouteBar(r) }
@@ -58,6 +60,13 @@ struct MapScreen: View {
             Text("Simulated runs replay a believable route through the streets on screen at 8× speed. Handy for trying the game in the simulator.")
         }
         .onAppear { seenEvents = UserDefaults.standard.integer(forKey: "seenEvents") }
+        // Practice run requested (onboarding or Profile): start it once streets are loaded.
+        .task(id: "\(model.wantsPractice)-\(model.area.segments.count)-\(sheet == nil)") {
+            guard model.wantsPractice, !model.area.segments.isEmpty, model.run.phase == .idle, sheet == nil else { return }
+            model.wantsPractice = false
+            try? await Task.sleep(for: .milliseconds(600))
+            model.run.startPractice()
+        }
         .onChange(of: seenEvents) { _, v in UserDefaults.standard.set(v, forKey: "seenEvents") }
     }
 
@@ -122,9 +131,11 @@ struct MapScreen: View {
             }
         }
         .buttonStyle(ChunkyButtonStyle(colorHex: model.profile.colorHex, height: 76))
+        #if DEBUG
         .contextMenu {
             Button("Simulated run (demo)", systemImage: "wand.and.stars") { start(simulated: true) }
         }
+        #endif
         .accessibilityHint("Starts recording. Streets you run turn your colour.")
     }
 
@@ -269,5 +280,99 @@ struct WorldStatusBanner: View {
         .buttonStyle(.plain)
         .disabled(action == nil)
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// "Your streets are under attack": what rivals took while you were away.
+struct AttackBanner: View {
+    @Environment(AppModel.self) private var model
+    let report: AppModel.AttackReport
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Theme.danger).font(.title3)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Your streets are under attack").font(.subheadline.weight(.heavy))
+                    Text(report.message).font(.footnote.weight(.semibold)).foregroundStyle(Theme.hudText.opacity(0.8))
+                }
+                Spacer(minLength: 0)
+                Button { model.dismissAttacks(showMe: false) } label: {
+                    Image(systemName: "xmark").font(.footnote.weight(.bold)).padding(6)
+                }
+                .accessibilityLabel("Dismiss")
+            }
+            HStack(spacing: 8) {
+                if report.focus != nil {
+                    Button("Show me") { model.dismissAttacks(showMe: true) }
+                        .buttonStyle(ChunkyButtonStyle(colorHex: "FF4D6D", height: 38))
+                }
+                Button("Win them back") {
+                    model.dismissAttacks(showMe: report.focus != nil)
+                    Task { model.plannedRoute = await model.planRoute(goal: .capture, distance: 4000, seed: UInt64.random(in: 1...999)) }
+                }
+                .buttonStyle(ChunkyButtonStyle(colorHex: model.profile.colorHex, height: 38))
+            }
+        }
+        .foregroundStyle(Theme.hudText)
+        .padding(12)
+        .background(.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.danger.opacity(0.6), lineWidth: 1))
+        .transition(.move(edge: .top).combined(with: .opacity))
+    }
+}
+
+/// Tips shown during a practice run, timed to what's on screen.
+struct PracticeCoach: View {
+    @Environment(AppModel.self) private var model
+
+    private func tip(_ t: TimeInterval) -> (String, String) {
+        switch t {
+        case ..<7: ("figure.run", "Practice run: we'll run this one for you at 8× speed. Nothing counts.")
+        case ..<16: ("circle.grid.cross.fill", "The silver dots are coins. Run past them and they're yours.")
+        case ..<25: ("paintbrush.fill", "Streets you collect turn your colour. That's your territory.")
+        case ..<35: ("arrow.uturn.backward.circle.fill", "Rivals and bots can steal them back. Run their streets to steal theirs.")
+        default: ("flag.checkered", "That's it! Hold to finish, or let it end on its own.")
+        }
+    }
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { _ in
+            let t = tip(model.run.elapsed)
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: t.0).font(.title3).foregroundStyle(Color(hex: "38E8FF")).frame(width: 28)
+                Text(t.1).font(.subheadline.weight(.semibold)).foregroundStyle(Theme.hudText).fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+            }
+            .padding(14)
+            .background(.black.opacity(0.8), in: RoundedRectangle(cornerRadius: 16))
+            .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color(hex: "38E8FF").opacity(0.5), lineWidth: 1))
+            .animation(.easeInOut, value: t.1)
+            .accessibilityElement(children: .combine)
+        }
+    }
+}
+
+/// After a practice run: what a real one would have earned.
+struct PracticeResultView: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    let result: AppModel.PracticeResult
+
+    var body: some View {
+        VStack(spacing: 18) {
+            Image(systemName: "checkmark.seal.fill").font(.system(size: 52)).foregroundStyle(Color(hex: model.profile.colorHex))
+            Text("You've got it").font(Theme.display(.title)).foregroundStyle(.white)
+            Text(result.coins > 0
+                 ? "On a real run that would have been \(result.coins) coin\(result.coins == 1 ? "" : "s") across \(result.streets) street\(result.streets == 1 ? "" : "s"). Now go and get them for real."
+                 : "Run past the coins on any street to collect them. Now go and get them for real.")
+                .font(.body.weight(.medium)).multilineTextAlignment(.center).foregroundStyle(Theme.hudSecondary)
+            Button("Got it") { dismiss() }
+                .buttonStyle(ChunkyButtonStyle(colorHex: model.profile.colorHex, height: 56))
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(hex: "0C0C1A").ignoresSafeArea())
+        .presentationDetents([.medium])
     }
 }

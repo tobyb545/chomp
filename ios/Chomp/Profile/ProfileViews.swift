@@ -37,6 +37,7 @@ struct ProfileView: View {
                         Label("Invite a friend, get a free month of Pro", systemImage: "gift.fill")
                     }
                     NavigationLink { IntroCardsView(replay: true) } label: { Label("How Chomp works", systemImage: "questionmark.circle.fill") }
+                    Button { model.wantsPractice = true; dismiss() } label: { Label("Practice run", systemImage: "figure.run.circle.fill") }
                     NavigationLink { ClubsView() } label: { Label("Clubs & friends", systemImage: "person.3.fill") }
                     NavigationLink { SettingsView() } label: { Label("Settings", systemImage: "gearshape.fill") }
                     if !model.pro.isPro {

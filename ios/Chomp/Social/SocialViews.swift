@@ -85,8 +85,8 @@ struct LeaderboardView: View {
         Section {
             ForEach(Array(clubs.enumerated()), id: \.element.id) { i, c in
                 HStack(spacing: 12) {
-                    Text("\(i + 1)").font(Theme.number(.headline)).frame(width: 28).foregroundStyle(Theme.textSecondary)
-                    RoundedRectangle(cornerRadius: 4).fill(Color(hex: c.color_hex)).frame(width: 14, height: 14)
+                    Text("\(i + 1)").font(Theme.number(.headline)).frame(minWidth: 28).foregroundStyle(Theme.textSecondary)
+                    RoundedRectangle(cornerRadius: 4).fill(Color(hex: c.color_hex)).frame(width: 14, height: 14).accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(c.name).font(.body.weight(c.is_mine ? .heavy : .semibold))
                         Text("\(c.members) member\(c.members == 1 ? "" : "s")").font(.caption).foregroundStyle(Theme.textSecondary)
@@ -99,15 +99,15 @@ struct LeaderboardView: View {
                     }
                 }
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel("Rank \(i + 1), \(c.name), \(c.members) members, \(c.tokens) tokens\(c.is_mine ? ", your club" : "")")
+                .accessibilityLabel("Rank \(i + 1), \(c.name), \(c.members) members, \(c.tokens) coins\(c.is_mine ? ", your club" : "")")
             }
         }
     }
 
     private func row(rank: Int, _ e: LeaderboardEntry) -> some View {
         HStack(spacing: 12) {
-            Text("\(rank)").font(Theme.number(.headline)).frame(width: 28).foregroundStyle(Theme.textSecondary)
-            Circle().fill(Color(hex: e.colorHex)).frame(width: 14, height: 14)
+            Text("\(rank)").font(Theme.number(.headline)).frame(minWidth: 28).foregroundStyle(Theme.textSecondary)
+            Circle().fill(Color(hex: e.colorHex)).frame(width: 14, height: 14).accessibilityHidden(true)
             Text(e.name).font(.body.weight(e.isMe ? .heavy : .semibold))
             if e.isBot { Chip(text: "Bot", colorHex: "8888AA") }
             if e.isMe { Chip(text: "You", colorHex: e.colorHex) }
@@ -118,7 +118,7 @@ struct LeaderboardView: View {
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Rank \(rank), \(e.name)\(e.isBot ? ", bot" : ""), \(e.tokens) tokens")
+        .accessibilityLabel("Rank \(rank), \(e.name)\(e.isMe ? ", you" : "")\(e.isBot ? ", bot" : ""), \(e.tokens) coins")
     }
 
     /// Made-up rivals for App Store screenshots only (`-marketing`, debug builds).
@@ -412,6 +412,7 @@ struct ClubsView: View {
     @State private var error: String?
     @State private var confirmLeave = false
     @State private var confirmSwitch = false
+    @State private var confirmJoin = false
     @State private var showPaywall = false
 
     var body: some View {
@@ -434,7 +435,8 @@ struct ClubsView: View {
                             Spacer()
                             Text(m.tokens.formatted()).font(Theme.number(.subheadline))
                         }
-                        .accessibilityElement(children: .combine)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("\(i + 1). \(m.name)\(m.id == model.backend.userID ? ", you" : "")\(m.role == "owner" ? ", captain" : ""), \(m.tokens) coins")
                     }
                 } header: { Text("Members") } footer: {
                     Text("Coins each member has collected for the club since joining.")
@@ -480,8 +482,22 @@ struct ClubsView: View {
             if let error { Section { Text(error).foregroundStyle(Theme.danger) } }
         }
         .navigationTitle("Clubs & friends")
-        .task { await reload() }
+        .task {
+            await reload()
+            // Opened from a club invite link: fill in the code and ask.
+            if let c = model.pendingClubCode {
+                model.pendingClubCode = nil
+                code = c
+                guard model.backend.isSignedIn, club?.invite_code != c else { return }
+                if club == nil { confirmJoin = true } else { confirmSwitch = true }
+            }
+        }
         .refreshable { await reload() }
+        .confirmationDialog("Join this club?", isPresented: $confirmJoin, titleVisibility: .visible) {
+            Button("Join club \(code)") { Task { await run { try await model.backend.joinClub(code: code) } } }
+        } message: {
+            Text("Every coin you collect will count towards the club's tally.")
+        }
         .confirmationDialog("Leave \(club?.name ?? "your club")?", isPresented: $confirmLeave, titleVisibility: .visible) {
             Button("Leave club", role: .destructive) { Task { await run { try await model.backend.leaveClub() } } }
         } message: {
@@ -495,33 +511,44 @@ struct ClubsView: View {
         .sheet(isPresented: $showPaywall) { PaywallView() }
     }
 
+    private func tally(_ c: MyClub) -> some View {
+        VStack(alignment: .leading) {
+            Text(c.tokens.formatted()).font(Theme.number(.title2))
+            Text("club coins").font(.caption).foregroundStyle(Theme.textSecondary)
+        }
+    }
+
+    private func rank(_ c: MyClub) -> some View {
+        VStack(alignment: .leading) {
+            Text("#\(c.rank)").font(Theme.number(.title2))
+            Text("of \(c.clubs) clubs").font(.caption).foregroundStyle(Theme.textSecondary)
+        }
+    }
+
     private func clubCard(_ c: MyClub) -> some View {
         Section {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 12) {
                     RoundedRectangle(cornerRadius: 10).fill(Color(hex: c.color_hex)).frame(width: 44, height: 44)
                         .overlay(Image(systemName: "person.3.fill").foregroundStyle(.black.opacity(0.6)))
+                        .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(c.name).font(Theme.display(.title3))
                         Text("\(c.members.count) member\(c.members.count == 1 ? "" : "s")").font(.caption).foregroundStyle(Theme.textSecondary)
                     }
                 }
-                HStack {
-                    VStack(alignment: .leading) {
-                        Text(c.tokens.formatted()).font(Theme.number(.title2))
-                        Text("club tokens").font(.caption).foregroundStyle(Theme.textSecondary)
-                    }
-                    Spacer()
-                    VStack(alignment: .trailing) {
-                        Text("#\(c.rank)").font(Theme.number(.title2))
-                        Text("of \(c.clubs) clubs").font(.caption).foregroundStyle(Theme.textSecondary)
-                    }
+                ViewThatFits(in: .horizontal) {
+                    HStack { tally(c); Spacer(); rank(c) }
+                    VStack(alignment: .leading, spacing: 8) { tally(c); rank(c) }   // very large text
                 }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(c.tokens) club coins. Ranked \(c.rank) of \(c.clubs) clubs.")
                 HStack {
                     Text("Invite code").font(.caption).foregroundStyle(Theme.textSecondary)
                     Text(c.invite_code).font(.body.monospaced().weight(.bold)).textSelection(.enabled)
+                        .speechSpellsOutCharacters()
                     Spacer()
-                    ShareLink(item: "Join my Chomp club \(c.name) with code \(c.invite_code)") {
+                    ShareLink(item: "Join my Chomp club \(c.name): every coin we collect counts for the club. Code \(c.invite_code) or tap \(AppModel.clubLink(c.invite_code))") {
                         Label("Share", systemImage: "square.and.arrow.up").font(.caption.weight(.semibold))
                     }
                 }

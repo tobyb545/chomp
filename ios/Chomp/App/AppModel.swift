@@ -63,6 +63,11 @@ final class AppModel {
     var presentedSummary: RunRecord?
     var showPaywall = false
     var showInvite = false
+    /// Set when a practice run ends, to show what would have happened.
+    var practiceResult: PracticeResult?
+    struct PracticeResult: Identifiable { let id = UUID(); let coins: Int; let streets: Int }
+    /// Onboarding asked for a practice run once the map is ready.
+    var wantsPractice = false
     /// New runs found in Apple Health on launch, waiting for the player to say yes or no.
     var healthPrompt: HealthPrompt?
     private var lastHealthCheck: Date?
@@ -314,6 +319,7 @@ final class AppModel {
 
     func onForeground() {
         NotificationService.cancelRaid()
+        checkForAttacks()
         Task { await checkForNewHealthRuns() }
         if case .failed = worldStatus, let f = savedFocus { focusWorld(on: f, force: true) }
         refreshDay()
@@ -641,6 +647,20 @@ final class AppModel {
 
     // MARK: Invites
 
+    /// A club invite link (chomp://club/<code>) waiting to be shown on the Clubs screen.
+    var pendingClubCode: String?
+    var showClubs = false
+
+    func openClubInvite(code: String) {
+        let c = code.uppercased().filter { $0.isLetter || $0.isNumber }
+        guard (4...12).contains(c.count) else { return }
+        pendingClubCode = c
+        showClubs = true
+    }
+
+    /// The link a club shares. Custom scheme for now; swap for a universal link once there's a website.
+    static func clubLink(_ code: String) -> String { "chomp://club/\(code)" }
+
     /// A friend's invite link was opened: remember the code until we can redeem it.
     func openInvite(code: String) {
         let c = InviteCode.normalise(code)
@@ -713,6 +733,44 @@ final class AppModel {
     }
 
     // MARK: Apple Health
+
+    /// Streets rivals or bots took while you were away.
+    struct AttackReport: Equatable {
+        let streets: Int
+        let by: [String]
+        let focus: Coordinate?
+        var message: String {
+            let who = by.count == 1 ? by[0] : by.count == 2 ? "\(by[0]) and \(by[1])" : "\(by[0]) and \(by.count - 1) others"
+            return "\(who) took \(streets) of your street\(streets == 1 ? "" : "s") while you were away"
+        }
+    }
+    var attackReport: AttackReport?
+
+    /// Builds the banner from losses since it was last dismissed (none on a first launch).
+    func checkForAttacks() {
+        guard profile.onboarded, run.phase == .idle else { return }
+        guard let since = profile.attacksSeenAt else { profile.attacksSeenAt = .now; return }
+        let hits = state.events.filter { ($0.kind == .lost || $0.kind == .ghostRaid) && $0.date > since
+            && !($0.actor.map { profile.mutedPlayers.contains($0.id) } ?? false) }
+        let streets = Set(hits.flatMap(\.segmentIDs)).count
+        guard streets > 0 else { attackReport = nil; return }
+        var names: [String] = []
+        for e in hits.sorted(by: { $0.date > $1.date }) {
+            if let a = e.actor { let n = ownerName(a); if !names.contains(n) { names.append(n) } }
+        }
+        let focus = hits.max { $0.date < $1.date }?.segmentIDs.first.flatMap { area.segment($0)?.midpoint }
+        attackReport = AttackReport(streets: streets, by: names.isEmpty ? ["Rivals"] : names, focus: focus)
+    }
+
+    #if DEBUG
+    func replaceEventsForTesting(_ events: [GameEvent]) { state.events = events }
+    #endif
+
+    func dismissAttacks(showMe: Bool) {
+        if showMe, let f = attackReport?.focus { focusRequest = f }
+        attackReport = nil
+        profile.attacksSeenAt = .now
+    }
 
     struct HealthPrompt: Identifiable {
         let id = UUID()

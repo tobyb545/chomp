@@ -29,6 +29,8 @@ struct PlayerProfile: Codable, Hashable {
     var pushRaids = true
     /// Health workouts already offered for import (so declined runs aren't offered again).
     var healthOffered: [UUID] = []
+    /// Losses before this have been shown in the "under attack" banner.
+    var attacksSeenAt: Date?
     /// Invite code typed in (or opened from a link) before signing in.
     var pendingInviteCode: String?
 
@@ -59,6 +61,7 @@ struct PlayerProfile: Codable, Hashable {
         get(.blockedPlayers, &blockedPlayers); get(.mutedPlayers, &mutedPlayers); get(.debugPro, &debugPro)
         get(.mapLook, &mapLook); get(.voiceOn, &voiceOn); get(.voiceSplits, &voiceSplits)
         get(.pushLost, &pushLost); get(.pushRaids, &pushRaids); get(.healthOffered, &healthOffered)
+        attacksSeenAt = try? c.decodeIfPresent(Date.self, forKey: .attacksSeenAt)
         pendingInviteCode = try? c.decodeIfPresent(String.self, forKey: .pendingInviteCode)
         get(.seenIntro, &seenIntro)  // existing players see the cards once too
     }

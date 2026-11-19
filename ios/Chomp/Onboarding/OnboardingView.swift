@@ -100,7 +100,9 @@ struct OnboardingView: View {
             Text("Ready, \(name.trimmingCharacters(in: .whitespaces))").font(Theme.display(.title)).foregroundStyle(.white)
             Text("Every street near you is covered in coins. A few bots are already out there. Go eat some streets.")
                 .font(.title3.weight(.semibold)).multilineTextAlignment(.center).foregroundStyle(Theme.hudSecondary)
-            next("Show me the map") { finish() }
+            next("Try a practice run") { model.wantsPractice = true; finish() }
+            Button("Skip, show me the map") { finish() }
+                .font(.body.weight(.semibold)).foregroundStyle(Theme.hudSecondary)
         }
     }
 
