@@ -64,7 +64,7 @@ struct InviteView: View {
         if !model.backend.isConfigured {
             Text("Invites need online play, which isn't connected in this build yet.").foregroundStyle(Theme.textSecondary)
         } else if !model.backend.isSignedIn {
-            Text("Sign in with Apple (Profile → Settings → Online play) to get your invite code.").foregroundStyle(Theme.textSecondary)
+            Text("Sign in (Profile → Settings → Online play) to get your invite code.").foregroundStyle(Theme.textSecondary)
         } else if let info {
             VStack(spacing: 16) {
                 Text(info.code)

@@ -39,6 +39,13 @@ in [SETUP.md](SETUP.md).
   Without them, bots never move online. See SETUP.md §3, "Cron".
 - [ ] **Sign in with Apple provider**: Authentication → Providers → Apple, enabled, with client ID
   `com.tobyb545.chomp`. Then test it once on your phone: Settings → Sign in with Apple.
+- [ ] **Email sign-in**: Authentication → Providers → Email, enabled. Then Authentication →
+  Emails → **Magic Link** template: replace the link with the code, e.g.
+  `<h2>Your Chomp code</h2><p>Enter this code in the app: <strong>{{ .Token }}</strong></p>`.
+  The app asks for the code; a link won't open it.
+- [ ] **Custom SMTP for email** (Authentication → Emails → SMTP settings, e.g. Resend or
+  Postmark). Supabase's built-in sender only allows a few emails an hour, which is fine for
+  testing but not for launch.
 - [ ] **Add yourself as an admin**: `insert into admins values ('<your auth user id>');`
 
 ## Push notifications

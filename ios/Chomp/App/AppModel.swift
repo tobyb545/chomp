@@ -762,6 +762,23 @@ final class AppModel {
         if let until = try? await backend.invitePremiumUntil() { pro.invitePro = until }
     }
 
+    /// Bumped on sign-in and sign-out so views that show the account redraw
+    /// (the backend itself isn't observable).
+    var accountRevision = 0
+
+    /// After any sign-in: link purchases to the account and sync streets and profile.
+    func didSignIn() async {
+        accountRevision += 1
+        if let id = backend.userID { await pro.identify(userID: id) }
+        await syncOnline()
+    }
+
+    func signOut() async {
+        await PushService.shared.unregister()
+        await backend.signOut()
+        accountRevision += 1
+    }
+
     func syncOnline() async {
         await refreshInvitePro()
         await syncProfileToServer()
@@ -923,7 +940,7 @@ final class AppModel {
         let since = Date().addingTimeInterval(-rules.imports.captureWindowHours * 3600)
         let offered = Set(profile.healthOffered)
         let fresh = await HealthService.shared.recentRuns(since: since).filter { w in
-            !offered.contains(w.id) && !runs.contains { abs($0.startedAt.timeIntervalSince(w.start)) < 120 }
+            w.hasRoute && !offered.contains(w.id) && !runs.contains { abs($0.startedAt.timeIntervalSince(w.start)) < 120 }
         }
         guard !fresh.isEmpty else { return }
         healthPrompt = HealthPrompt(runs: fresh.sorted { $0.start < $1.start })
@@ -957,6 +974,12 @@ final class AppModel {
         }
     }
 
+    /// Why a Health run can't be added. Garmin Connect and Strava usually save
+    /// runs to Health without the GPS route.
+    static func noRouteMessage(source: String) -> String {
+        "\(source) saved that run to Apple Health without its GPS route, so there are no streets to add. Record runs with Chomp, or import them with Strava instead."
+    }
+
     /// Whether an imported run this old still captures streets.
     func importCaptures(endedAt: Date) -> Bool {
         Date().timeIntervalSince(endedAt) <= rules.imports.captureWindowHours * 3600
@@ -966,7 +989,7 @@ final class AppModel {
     /// capture streets (within the import window); older ones count as exploration.
     func importHealthRun(_ w: HealthService.WorkoutSummary) async -> String {
         let raw = await HealthService.shared.trace(for: w.id)
-        guard raw.count > 10 else { return "That run has no GPS route in Health, so there are no streets to add." }
+        guard raw.count > 10 else { return Self.noRouteMessage(source: w.source) }
         var signals = RunSignals()
         signals.heartRate = await HealthService.shared.heartRate(from: w.start, to: w.end)
         let counts = importCaptures(endedAt: w.end)

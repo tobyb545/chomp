@@ -1,7 +1,7 @@
 import CoreLocation
 import SwiftUI
 
-/// Four quick steps: colour → name → location → first run.
+/// Quick steps: colour → name → location → account → first run.
 struct OnboardingView: View {
     @Environment(AppModel.self) private var model
     @State private var step = 0
@@ -16,13 +16,14 @@ struct OnboardingView: View {
             Color(hex: "07070E").ignoresSafeArea()
             PelletField(colorHex: colorHex).ignoresSafeArea().opacity(0.6).accessibilityHidden(true)
             VStack(spacing: 24) {
-                ProgressDots(step: step, count: 4, colorHex: colorHex)
+                ProgressDots(step: step, count: 5, colorHex: colorHex)
                 Spacer()
                 Group {
                     switch step {
                     case 0: colourStep
                     case 1: nameStep
                     case 2: locationStep
+                    case 3: accountStep
                     default: readyStep
                     }
                 }
@@ -111,12 +112,34 @@ struct OnboardingView: View {
             next("Allow while using") {
                 Task {
                     _ = await LocationPermission.shared.requestWhenInUse()
-                    step = 3
+                    toAccount()
                     // Start on the streets now: a new area can take a minute to download.
                     await model.locateAndLoad()
                 }
             }
-            Button("Not now") { step = 3 }.foregroundStyle(Theme.hudSecondary)
+            Button("Not now") { toAccount() }.foregroundStyle(Theme.hudSecondary)
+        }
+    }
+
+    /// The account step, unless online play isn't set up in this build or the
+    /// player is already signed in.
+    private func toAccount() {
+        // Sign-in syncs the profile, so it needs the name and colour now.
+        model.profile.name = name.trimmingCharacters(in: .whitespaces)
+        model.profile.colorHex = colorHex
+        step = model.backend.isConfigured && !model.backend.isSignedIn ? 3 : 4
+    }
+
+    private var accountStep: some View {
+        VStack(spacing: 18) {
+            Text("Save your streets").font(Theme.display(.title)).foregroundStyle(.white)
+            Text("Create an account to appear on leaderboards, steal rivals' streets and join clubs. Your runs stay safe if you change phone.")
+                .font(.body.weight(.medium)).multilineTextAlignment(.center).foregroundStyle(Theme.hudSecondary)
+            AccountSignInView(name: name.trimmingCharacters(in: .whitespaces), colorHex: colorHex, prominent: true,
+                              onSignedIn: { step = 4 },
+                              onNameTaken: { nameTaken = true; step = 1; nameFocused = true })
+            Button("Not now") { step = 4 }
+                .font(.body.weight(.semibold)).foregroundStyle(Theme.hudSecondary)
         }
     }
 

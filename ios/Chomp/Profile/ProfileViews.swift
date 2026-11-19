@@ -120,7 +120,6 @@ struct SettingsView: View {
     @State private var importResult: String?
     @State private var confirmReset = false
     @State private var customColour = Color.white
-    @State private var nonce = ""
     @State private var accountError: String?
     @State private var nameError: String?
     @State private var confirmDelete = false
@@ -247,14 +246,14 @@ struct SettingsView: View {
             Section {
                 if !model.backend.isConfigured {
                     Text("Online play isn't connected in this build. Everything else works offline.").foregroundStyle(Theme.textSecondary)
-                } else if model.backend.isSignedIn {
-                    LabeledContent("Signed in", value: "Apple")
-                    Button("Sign out") { Task { await PushService.shared.unregister(); await model.backend.signOut() } }
+                } else if model.accountRevision >= 0, model.backend.isSignedIn {
+                    LabeledContent("Signed in", value: model.backend.accountLabel)
+                    Button("Sign out") { Task { await model.signOut() } }
                     Button("Delete online account", role: .destructive) { confirmDelete = true }
                         .confirmationDialog("Delete your online account?", isPresented: $confirmDelete, titleVisibility: .visible) {
                             Button("Delete account", role: .destructive) {
                                 Task {
-                                    do { try await model.backend.deleteAccount(); accountError = nil }
+                                    do { try await model.backend.deleteAccount(); accountError = nil; model.accountRevision += 1 }
                                     catch { accountError = "Couldn't delete your account: \(error.localizedDescription)" }
                                 }
                             }
@@ -262,22 +261,8 @@ struct SettingsView: View {
                             Text("Your runner name, runs, streets and club memberships are removed from our servers. Runs on this phone stay. This can't be undone.")
                         }
                 } else {
-                    SignInWithAppleButton(.signIn) { req in
-                        nonce = Nonce.random()
-                        req.requestedScopes = [.fullName]
-                        req.nonce = Nonce.sha256(nonce)
-                    } onCompletion: { result in
-                        guard case .success(let auth) = result, let cred = auth.credential as? ASAuthorizationAppleIDCredential,
-                              let tokenData = cred.identityToken, let token = String(data: tokenData, encoding: .utf8) else { return }
-                        Task {
-                            do {
-                                try await model.backend.signInWithApple(idToken: token, nonce: nonce, displayName: model.displayName, colorHex: model.profile.colorHex)
-                                if let id = model.backend.userID { await model.pro.identify(userID: id) }
-                                await model.syncOnline()
-                            } catch { accountError = error.localizedDescription }
-                        }
-                    }
-                    .frame(height: 48)
+                    AccountSignInView(name: model.displayName, colorHex: model.profile.colorHex)
+                        .padding(.vertical, 6)
                 }
                 if let accountError { Text(accountError).font(.footnote).foregroundStyle(Theme.danger) }
             } header: { Text("Online play") }

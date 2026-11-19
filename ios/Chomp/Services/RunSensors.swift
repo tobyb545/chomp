@@ -278,6 +278,9 @@ final class HealthService {
         let end: Date
         let distance: Double?
         let source: String
+        /// Whether Health has a GPS route for it. Garmin Connect and Strava often
+        /// save runs without one, and there's nothing to import then.
+        var hasRoute = true
     }
 
     private func runningWorkouts(since: Date, limit: Int) async -> [HKWorkout] {
@@ -294,12 +297,15 @@ final class HealthService {
     /// Connect...), so a run Chomp didn't record can be added afterwards.
     func recentRuns(since: Date) async -> [WorkoutSummary] {
         let mine = Bundle.main.bundleIdentifier ?? ""
-        return await runningWorkouts(since: since, limit: 100).compactMap { w in
-            if w.sourceRevision.source.bundleIdentifier == mine { return nil }
-            if (w.metadata?[HKMetadataKeyWasUserEntered] as? Bool) == true { return nil }  // typed in: no route
+        var out: [WorkoutSummary] = []
+        for w in await runningWorkouts(since: since, limit: 100) {
+            if w.sourceRevision.source.bundleIdentifier == mine { continue }
+            if (w.metadata?[HKMetadataKeyWasUserEntered] as? Bool) == true { continue }  // typed in: no route
             let d = w.statistics(for: HKQuantityType(.distanceWalkingRunning))?.sumQuantity()?.doubleValue(for: .meter())
-            return WorkoutSummary(id: w.uuid, start: w.startDate, end: w.endDate, distance: d, source: w.sourceRevision.source.name)
+            out.append(WorkoutSummary(id: w.uuid, start: w.startDate, end: w.endDate, distance: d, source: w.sourceRevision.source.name,
+                                      hasRoute: await hasRoute(w)))
         }
+        return out
     }
 
     /// GPS route of one workout, or empty if it has none.
@@ -322,6 +328,11 @@ final class HealthService {
             if trace.count > 10 { out.append(ImportedRun(start: w.startDate, end: w.endDate, trace: trace)) }
         }
         return out
+    }
+
+    private func hasRoute(_ workout: HKWorkout) async -> Bool {
+        let d = HKSampleQueryDescriptor(predicates: [.workoutRoute(HKQuery.predicateForObjects(from: workout))], sortDescriptors: [], limit: 1)
+        return !((try? await d.result(for: store)) ?? []).isEmpty
     }
 
     private func routes(for workout: HKWorkout) async -> [HKWorkoutRoute] {

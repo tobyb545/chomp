@@ -172,15 +172,39 @@ final class SupabaseBackend: @unchecked Sendable {
     func signInWithApple(idToken: String, nonce: String, displayName: String, colorHex: String) async throws {
         guard let client else { throw BackendError.notConfigured }
         let session = try await client.auth.signInWithIdToken(credentials: .init(provider: .apple, idToken: idToken, nonce: nonce))
+        try await finishSignIn(client, userID: session.user.id, displayName: displayName, colorHex: colorHex)
+    }
+
+    /// Emails a one-time sign-in code. Creates the account if the address is new.
+    func sendEmailCode(to email: String) async throws {
+        guard let client else { throw BackendError.notConfigured }
+        try await client.auth.signInWithOTP(email: email, shouldCreateUser: true)
+    }
+
+    /// Signs in with the code from the email.
+    func verifyEmailCode(email: String, code: String, displayName: String, colorHex: String) async throws {
+        guard let client else { throw BackendError.notConfigured }
+        let res = try await client.auth.verifyOTP(email: email, token: code, type: .email)
+        try await finishSignIn(client, userID: res.user.id, displayName: displayName, colorHex: colorHex)
+    }
+
+    private func finishSignIn(_ client: SupabaseClient, userID id: UUID, displayName: String, colorHex: String) async throws {
         struct Upsert: Encodable { let id: String; let display_name: String; let color_hex: String }
         do {
-            try await client.from("profiles").upsert(Upsert(id: session.user.id.uuidString, display_name: displayName, color_hex: colorHex)).execute()
+            try await client.from("profiles").upsert(Upsert(id: id.uuidString, display_name: displayName, color_hex: colorHex)).execute()
         } catch {
             // No profile means no online play: don't leave a half-signed-in session behind.
             try? await client.auth.signOut()
             throw Self.isNameTaken(error) ? BackendError.nameTaken : error
         }
-        userID = session.user.id.uuidString.lowercased()
+        userID = id.uuidString.lowercased()
+    }
+
+    /// How the player signed in, for Settings ("Apple" or their email address).
+    var accountLabel: String {
+        guard let user = client?.auth.currentUser else { return "Signed in" }
+        if user.appMetadata["provider"]?.stringValue == "apple" { return "Apple" }
+        return user.email ?? "Email"
     }
 
     /// Runner names are unique (ignoring case). nil when it can't be checked (offline, not set up).
@@ -420,7 +444,7 @@ enum BackendError: LocalizedError {
         switch self {
         case .nameTaken: "Someone already uses that runner name. Pick another one."
         case .notConfigured: "Online play isn't set up in this build yet. Solo play works fully offline."
-        case .notSignedIn: "Sign in with Apple to play online."
+        case .notSignedIn: "Sign in to play online."
         }
     }
 }

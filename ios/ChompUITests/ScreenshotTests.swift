@@ -157,6 +157,12 @@ final class ScreenshotTests: XCTestCase {
         shot("t01-onboard-2")
         tap(app.buttons["Next"]); shot("t01-onboard-3")
         tap(app.buttons["Not now"]); shot("t01-onboard-4")
+        // Account step (only when online play is set up in this build).
+        let email = app.textFields["Email address"]
+        if email.waitForExistence(timeout: 3) {
+            tap(email); email.typeText("sam@example.com"); shot("t01-onboard-5")
+            tap(app.buttons["Not now"]); shot("t01-onboard-6")
+        }
     }
 
     func testTourMainScreens() {

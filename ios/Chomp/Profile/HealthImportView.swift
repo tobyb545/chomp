@@ -20,9 +20,12 @@ struct HealthImportView: View {
             Section("Runs in Apple Health") {
                 if let runs {
                     if runs.isEmpty {
-                        Text("No new runs with a GPS route in the last 60 days.").foregroundStyle(Theme.textSecondary)
+                        Text("No new runs in the last 60 days.").foregroundStyle(Theme.textSecondary)
                     }
                     ForEach(runs) { r in row(r) }
+                    if runs.contains(where: { !$0.hasRoute }) {
+                        Text(routeHelp).font(.footnote).foregroundStyle(Theme.textSecondary)
+                    }
                 } else {
                     HStack { ProgressView(); Text("Reading Health…").foregroundStyle(Theme.textSecondary) }
                 }
@@ -32,15 +35,26 @@ struct HealthImportView: View {
         .task { runs = await model.healthRunsToImport() }
     }
 
+    /// Shown when some runs have no route in Health.
+    private var routeHelp: String {
+        let none = runs?.allSatisfy { !$0.hasRoute } ?? false
+        return "Runs marked No route were saved to Health without GPS, which Garmin Connect and Strava often do."
+            + (none ? " If your Apple Watch runs show No route too, open the Settings app → Health → Data Access & Devices → Chomp and turn on Workout Routes." : "")
+    }
+
     private var days: Int { Int(model.rules.imports.captureWindowHours / 24) }
 
     private func row(_ r: HealthService.WorkoutSummary) -> some View {
         let counts = model.importCaptures(endedAt: r.end)
         return Button {
+            guard r.hasRoute else { message = AppModel.noRouteMessage(source: r.source); return }
             Task {
                 working = r.id
                 message = await model.importHealthRun(r)
-                runs?.removeAll { $0.id == r.id }
+                // Gone from the list once it's one of your runs.
+                if model.runs.contains(where: { abs($0.startedAt.timeIntervalSince(r.start)) < 120 }) {
+                    runs?.removeAll { $0.id == r.id }
+                }
                 working = nil
                 if model.presentedSummary != nil { dismiss() }
             }
@@ -56,12 +70,15 @@ struct HealthImportView: View {
                 Spacer()
                 if working == r.id {
                     ProgressView()
+                } else if !r.hasRoute {
+                    Chip(text: "No route", colorHex: "555566")
                 } else {
                     Chip(text: counts ? "Captures" : "Explore only", colorHex: counts ? model.profile.colorHex : "8888AA")
                 }
             }
         }
         .disabled(working != nil)
-        .accessibilityHint(counts ? "Adds this run. Streets you ran turn your colour." : "Adds this run as exploration only.")
+        .accessibilityHint(!r.hasRoute ? "This run has no GPS route in Health, so it can't be added."
+                           : counts ? "Adds this run. Streets you ran turn your colour." : "Adds this run as exploration only.")
     }
 }
