@@ -125,7 +125,7 @@ targets:
         NSLocationWhenInUseUsageDescription: "Chomp uses your location during a run to work out which streets you've run, so it can collect the coins on them and claim them in your colour. Your exact position is never shown to other players."
         NSLocationAlwaysAndWhenInUseUsageDescription: "Chomp only needs \"While Using\". A run keeps recording in the background via its Live Activity. Your exact position is never shown to other players."
         NSMotionUsageDescription: "Chomp checks you're running or walking (not cycling or driving) so street captures stay fair for everyone."
-        NSHealthShareUsageDescription: "Chomp reads heart rate during runs as a fair-play check, and can import your past runs to show which streets you've already explored."
+        NSHealthShareUsageDescription: "Chomp reads heart rate recorded during your runs as a fair-play check."
         NSHealthUpdateUsageDescription: "Chomp saves your runs to Health as running workouts with their routes."
         ITSAppUsesNonExemptEncryption: false
         CFBundleURLTypes:

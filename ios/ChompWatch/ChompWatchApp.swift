@@ -17,6 +17,7 @@ struct ChompWatchApp: App {
 final class WatchModel: NSObject, WCSessionDelegate {
     var running = false
     var startedAt: Date?
+    /// While running: coins stolen this run. Otherwise: all-time coins.
     var streets = 0
     var pellets = 0
     var distance = 0.0
@@ -98,8 +99,12 @@ struct WatchRunView: View {
                     Text("CHOMP").font(.system(size: 26, weight: .black, design: .rounded)).foregroundStyle(c)
                 }
                 HStack {
-                    stat("\(model.streets)", model.running ? "streets" : "held", c)
-                    stat("\(model.pellets)", "coins", Color(hex: "FFF1C1"))
+                    if model.running {
+                        stat("\(model.pellets)", "coins", Color(hex: "FFF1C1"))
+                        stat("\(model.streets)", "stolen", c)
+                    } else {
+                        stat("\(model.streets)", "coins", Color(hex: "FFF1C1"))
+                    }
                 }
                 if let f = model.frenzyEndsAt, f > .now {
                     HStack { Image(systemName: "bolt.fill"); Text(timerInterval: Date.now...f, countsDown: true).monospacedDigit() }

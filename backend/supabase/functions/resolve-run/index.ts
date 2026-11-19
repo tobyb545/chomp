@@ -27,7 +27,7 @@ Deno.serve(async (req) => {
 
   // The streets around the trace, built from OpenStreetMap on first use.
   const { area, keys } = await areaForTrace(db, v.trace.map((p) => p.coordinate));
-  if (!area.segments.length) return json({ error: "Couldn't load the streets for this run, try again shortly" }, 503);
+  if (!area.segments.length) return json({ error: "Couldn't load the map for this run, try again shortly" }, 503);
   const [dayStart, dayEnd] = dayWindow(v.endedAt);
   const { data: w, error: werr } = await db.rpc("run_world", { p_tiles: keys.map(String), p_user: userId, p_day_start: dayStart, p_day_end: dayEnd });
   if (werr || !w) return json({ error: "Couldn't load the map state" }, 500);

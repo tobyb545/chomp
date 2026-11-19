@@ -41,7 +41,7 @@ struct OnboardingView: View {
             Text("CHOMP").font(.system(size: 54, weight: .black, design: .rounded)).foregroundStyle(Color(hex: colorHex))
                 .shadow(color: Color(hex: colorHex).opacity(0.7), radius: 14)
                 .accessibilityAddTraits(.isHeader)
-            Text("Run a street to collect its coins and paint it your colour.\nPick yours.")
+            Text("Run past coins to collect them and they turn your colour.\nPick yours.")
                 .font(.title3.weight(.semibold)).multilineTextAlignment(.center).foregroundStyle(Theme.hudSecondary)
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14), count: 4), spacing: 14) {
                 ForEach(PlayerPalette.swatches) { s in
@@ -104,9 +104,9 @@ struct OnboardingView: View {
                 .accessibilityHidden(true)
             Text("Location while you run").font(Theme.display(.title)).foregroundStyle(.white)
             VStack(alignment: .leading, spacing: 10) {
-                bullet("map.fill", "To load the streets around you. Chomp works anywhere in the world.")
-                bullet("figure.run", "While a run is recording, to see which streets you cover.")
-                bullet("eye.slash.fill", "Rivals never see where you are. They only see which streets you own.")
+                bullet("map.fill", "To load the coins around you. Chomp works anywhere in the world.")
+                bullet("figure.run", "While a run is recording, to see which coins you pass.")
+                bullet("eye.slash.fill", "Rivals never see where you are. They only see which coins you hold.")
                 bullet("house.fill", "Add privacy zones to hide where your runs start and end.")
             }
             next("Allow while using") {
@@ -132,8 +132,8 @@ struct OnboardingView: View {
 
     private var accountStep: some View {
         VStack(spacing: 18) {
-            Text("Save your streets").font(Theme.display(.title)).foregroundStyle(.white)
-            Text("Create an account to appear on leaderboards, steal rivals' streets and join clubs. Your runs stay safe if you change phone.")
+            Text("Save your coins").font(Theme.display(.title)).foregroundStyle(.white)
+            Text("Create an account to appear on leaderboards, steal rivals' coins and join clubs. Your runs stay safe if you change phone.")
                 .font(.body.weight(.medium)).multilineTextAlignment(.center).foregroundStyle(Theme.hudSecondary)
             AccountSignInView(name: name.trimmingCharacters(in: .whitespaces), colorHex: colorHex, prominent: true,
                               onSignedIn: { step = 4 },
@@ -146,7 +146,7 @@ struct OnboardingView: View {
     private var readyStep: some View {
         VStack(spacing: 18) {
             Text("Ready, \(name.trimmingCharacters(in: .whitespaces))").font(Theme.display(.title)).foregroundStyle(.white)
-            Text("Every street is covered in coins, and rivals are already out there. Go and grab some streets.")
+            Text("The map is covered in coins, and rivals are already out there. Go and grab some.")
                 .font(.title3.weight(.semibold)).multilineTextAlignment(.center).foregroundStyle(Theme.hudSecondary)
             next("Try a practice run") { model.wantsPractice = true; finish() }
             Button("Skip, show me the map") { finish() }

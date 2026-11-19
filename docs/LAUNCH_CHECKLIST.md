@@ -21,13 +21,14 @@ in [SETUP.md](SETUP.md).
 
 ## Supabase: needed for online play
 
-- [ ] **Run four migrations** in the SQL editor, in this order:
+- [ ] **Run five migrations** in the SQL editor, in this order:
   1. `backend/supabase/migrations/20261124000000_push.sql`: push tokens
   2. `backend/supabase/migrations/20261125000000_club_battles.sql`: club battles
   3. `backend/supabase/migrations/20261126000000_quiet_bots.sql`: bot names, retiring bots,
      the name check and the new leaderboard
   4. `backend/supabase/migrations/20261127000000_delete_traces.sql`: lets account deletion
      remove stored run traces
+  5. `backend/supabase/migrations/20261128000000_coins_only.sql`: friends show coins held
 
   The earlier migrations, up to `20261123000000_coins.sql`, are already live.
 - [ ] **Redeploy the Edge Functions** that changed, plus the new `warm-tiles` (it fills the
@@ -47,6 +48,12 @@ in [SETUP.md](SETUP.md).
   Postmark). Supabase's built-in sender only allows a few emails an hour, which is fine for
   testing but not for launch.
 - [ ] **Add yourself as an admin**: `insert into admins values ('<your auth user id>');`
+
+## Strava import
+
+- [ ] **Strava API app** (free import; the only way to add runs recorded elsewhere, since Garmin and Strava save runs to Apple Health without GPS): create a Strava API app with the callback domain `strava`. Set
+  `STRAVA_CLIENT_ID` in the xcconfig and the function secrets, and `STRAVA_CLIENT_SECRET` in
+  the function secrets only.
 
 ## Push notifications
 
@@ -79,8 +86,5 @@ in [SETUP.md](SETUP.md).
 
 ## Optional
 
-- [ ] **Strava import (Pro)**: create a Strava API app with the callback domain `strava`. Set
-  `STRAVA_CLIENT_ID` in the xcconfig and the function secrets, and `STRAVA_CLIENT_SECRET` in
-  the function secrets only.
 - [ ] **Watch app**: `CHOMP_EMBED_WATCH=true xcodegen generate`.
 - [ ] **Push the repo to GitHub.** Commits are local on `main`.

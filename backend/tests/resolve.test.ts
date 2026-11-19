@@ -64,14 +64,13 @@ test("every ownership write carries its tile", () => {
   for (const w of r.payload.ownership) assert.match(w.t ?? "", /^14\/\d+\/\d+$/);
 });
 
-test("a Health import within the window captures; Strava history never does", () => {
-  const later = now + 3 * 86_400;
-  const h = upload({ source: "health_import" }), hv = validate(h, later);
-  assert.ok(hv.ok);
-  assert.ok(resolveUpload(area, h, hv, "user-1", toWorld("user-1", emptyWorld), { now: later, shadowRestricted: false, tracePath: "x" }).payload.ownership.length > 0);
+test("a recent Strava run collects coins; an old one doesn't", () => {
   const st = upload({ source: "strava_import" }), sv = validate(st, now);
   assert.ok(sv.ok);
-  assert.equal(resolveUpload(area, st, sv, "user-1", toWorld("user-1", emptyWorld), { now, shadowRestricted: false, tracePath: "x" }).payload.ownership.length, 0);
+  assert.ok(resolveUpload(area, st, sv, "user-1", toWorld("user-1", emptyWorld), { now, shadowRestricted: false, tracePath: "x" }).payload.ownership.length > 0);
+  const later = now + 8 * 86_400, lv = validate(st, later);
+  assert.ok(lv.ok);
+  assert.equal(resolveUpload(area, st, lv, "user-1", toWorld("user-1", emptyWorld), { now: later, shadowRestricted: false, tracePath: "x" }).payload.ownership.length, 0);
 });
 
 test("late uploads count for exploration only", () => {

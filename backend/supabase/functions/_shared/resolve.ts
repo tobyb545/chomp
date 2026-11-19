@@ -82,9 +82,9 @@ export function toWorld(userId: string, w: WorldRow): World {
 /** Resolves a validated upload against a world snapshot. Returns the response and the apply_run_result payload. */
 export function resolveUpload(area: Area, u: Upload, v: Extract<Validated, { ok: true }>, userId: string, world: World,
   opts: { now: number; shadowRestricted: boolean; tracePath: string }) {
-  // Strava history is exploration only; live runs and single Health imports
-  // capture streets if they ended recently enough.
-  const isImport = u.source === "strava_import" || opts.now - v.endedAt > LATE_UPLOAD_S;
+  // Any run collects coins if it ended recently enough (live, or a recent
+  // Strava run the app added). Strava history never comes through here.
+  const isImport = opts.now - v.endedAt > LATE_UPLOAD_S;
   const report = evaluate(v.trace, v.signals, rules.antiCheat, rules.matching);
   const match = new MapMatcher(area, rules.matching).match(v.trace);
   const { outcome, writes } = new GameEngine(area, rules).resolve({ runID: v.runId, startedAt: v.startedAt, endedAt: v.endedAt, isImport }, v.trace, match, report, world);
@@ -104,7 +104,7 @@ export function resolveUpload(area: Area, u: Upload, v: Extract<Validated, { ok:
     source: u.source === "live" ? "live" : u.source === "strava_import" ? "strava_import" : "health_import",
     startedAt: v.startedAt, endedAt: v.endedAt, distance: dist, status, clientVersion: u.clientVersion ?? null,
     matchedPolyline: encodePolyline(match.path.map((m) => m.snapped)),
-    stats: { outcome: clientOutcome, matchedChunks: match.chunks, unmatchedPoints: match.unmatchedPoints, late: isImport && u.source !== "strava_import" },
+    stats: { outcome: clientOutcome, matchedChunks: match.chunks, unmatchedPoints: match.unmatchedPoints, late: isImport },
     points: outcome.points + outcome.blockBonus, tracePath: opts.tracePath, pointCount: v.trace.length,
     captures: outcome.captures, flags: outcome.flags, frenzy: outcome.frenzyWindows.length > 0,
     // Each write carries its segment's tile, which the database keys ownership by.

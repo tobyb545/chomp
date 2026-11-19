@@ -209,8 +209,10 @@ final class HealthService {
     private var share: Set<HKSampleType> {
         [HKObjectType.workoutType(), HKSeriesType.workoutRoute(), HKQuantityType(.distanceWalkingRunning)]
     }
+    /// Heart rate only, as a fair-play check. (Runs aren't imported from Health:
+    /// Garmin and Strava save them there without GPS.)
     private var read: Set<HKObjectType> {
-        [HKObjectType.workoutType(), HKSeriesType.workoutRoute(), HKQuantityType(.heartRate)]
+        [HKQuantityType(.heartRate)]
     }
 
     /// True once the player has answered the Health permission sheet (so checking
@@ -265,93 +267,4 @@ final class HealthService {
         return samples.map { HeartRateSample(timestamp: $0.startDate, bpm: $0.quantity.doubleValue(for: unit)) }
     }
 
-    struct ImportedRun: Sendable {
-        let start: Date
-        let end: Date
-        let trace: [TracePoint]
-    }
-
-    /// A running workout in Health, without its route (cheap to list).
-    struct WorkoutSummary: Identifiable, Sendable, Hashable {
-        let id: UUID
-        let start: Date
-        let end: Date
-        let distance: Double?
-        let source: String
-        /// Whether Health has a GPS route for it. Garmin Connect and Strava often
-        /// save runs without one, and there's nothing to import then.
-        var hasRoute = true
-    }
-
-    private func runningWorkouts(since: Date, limit: Int) async -> [HKWorkout] {
-        guard isAvailable else { return [] }
-        let predicate = HKQuery.predicateForWorkouts(with: .running)
-        let dates = HKQuery.predicateForSamples(withStart: since, end: .now)
-        let descriptor = HKSampleQueryDescriptor(
-            predicates: [.workout(NSCompoundPredicate(andPredicateWithSubpredicates: [predicate, dates]))],
-            sortDescriptors: [SortDescriptor(\.startDate, order: .reverse)], limit: limit)
-        return (try? await descriptor.result(for: store)) ?? []
-    }
-
-    /// Recent runs recorded by other apps (Apple Watch Workout, Strava, Garmin
-    /// Connect...), so a run Chomp didn't record can be added afterwards.
-    func recentRuns(since: Date) async -> [WorkoutSummary] {
-        let mine = Bundle.main.bundleIdentifier ?? ""
-        var out: [WorkoutSummary] = []
-        for w in await runningWorkouts(since: since, limit: 100) {
-            if w.sourceRevision.source.bundleIdentifier == mine { continue }
-            if (w.metadata?[HKMetadataKeyWasUserEntered] as? Bool) == true { continue }  // typed in: no route
-            let d = w.statistics(for: HKQuantityType(.distanceWalkingRunning))?.sumQuantity()?.doubleValue(for: .meter())
-            out.append(WorkoutSummary(id: w.uuid, start: w.startDate, end: w.endDate, distance: d, source: w.sourceRevision.source.name,
-                                      hasRoute: await hasRoute(w)))
-        }
-        return out
-    }
-
-    /// GPS route of one workout, or empty if it has none.
-    func trace(for id: UUID) async -> [TracePoint] {
-        guard isAvailable else { return [] }
-        let d = HKSampleQueryDescriptor(predicates: [.workout(HKQuery.predicateForObject(with: id))], sortDescriptors: [])
-        guard let w = (try? await d.result(for: store))?.first else { return [] }
-        var trace: [TracePoint] = []
-        for r in await routes(for: w) { trace += await locations(for: r) }
-        return trace.sorted { $0.timestamp < $1.timestamp }
-    }
-
-    /// Past running workouts with routes, for seeding personal exploration.
-    func pastRuns(since: Date, limit: Int = 200) async -> [ImportedRun] {
-        var out: [ImportedRun] = []
-        for w in await runningWorkouts(since: since, limit: limit) {
-            let routes = await routes(for: w)
-            var trace: [TracePoint] = []
-            for r in routes { trace += await locations(for: r) }
-            if trace.count > 10 { out.append(ImportedRun(start: w.startDate, end: w.endDate, trace: trace)) }
-        }
-        return out
-    }
-
-    private func hasRoute(_ workout: HKWorkout) async -> Bool {
-        let d = HKSampleQueryDescriptor(predicates: [.workoutRoute(HKQuery.predicateForObjects(from: workout))], sortDescriptors: [], limit: 1)
-        return !((try? await d.result(for: store)) ?? []).isEmpty
-    }
-
-    private func routes(for workout: HKWorkout) async -> [HKWorkoutRoute] {
-        let d = HKSampleQueryDescriptor(predicates: [.workoutRoute(HKQuery.predicateForObjects(from: workout))], sortDescriptors: [])
-        return (try? await d.result(for: store)) ?? []
-    }
-
-    private func locations(for route: HKWorkoutRoute) async -> [TracePoint] {
-        await withCheckedContinuation { (c: CheckedContinuation<[TracePoint], Never>) in
-            final class Box: @unchecked Sendable { var pts: [TracePoint] = []; var done = false }
-            let box = Box()
-            let q = HKWorkoutRouteQuery(route: route) { _, locs, finished, error in
-                for l in locs ?? [] {
-                    box.pts.append(TracePoint(coordinate: Coordinate(latitude: l.coordinate.latitude, longitude: l.coordinate.longitude),
-                                              timestamp: l.timestamp, horizontalAccuracy: l.horizontalAccuracy, speed: l.speed, altitude: l.altitude))
-                }
-                if (finished || error != nil) && !box.done { box.done = true; c.resume(returning: box.pts) }
-            }
-            store.execute(q)
-        }
-    }
 }

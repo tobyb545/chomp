@@ -18,18 +18,18 @@ struct IntroCardsView: View {
         let frenzyMin = Int(r.frenzy.durationSeconds / 60)
         let importDays = Int(r.imports.captureWindowHours / 24)
         return [
-            IntroCard(scene: .tokens, title: "Every street is full of coins",
-                      body: "Wherever you are, the streets on the map are lined with silver coins. Run along a street to collect them."),
+            IntroCard(scene: .tokens, title: "The map is full of coins",
+                      body: "Wherever you are, the roads and paths around you are lined with silver coins. Run past them to collect them."),
             IntroCard(scene: .capture, title: "Run past coins to make them yours",
-                      body: "Every coin you run past turns gold: it's yours. You don't need to finish the street, and running the pavement counts for the road."),
-            IntroCard(scene: .rivals, title: "Defend your streets",
+                      body: "Every coin you run past turns gold: it's yours. Running the pavement counts for the road beside it."),
+            IntroCard(scene: .rivals, title: "Defend your coins",
                       body: r.decay.isEnabled
-                        ? "Rivals can take your coins by running past them. Streets you don't rerun fade back to white after \(days) days."
+                        ? "Rivals can take your coins by running past them. Coins you don't run past again fade back to silver after \(days) days."
                         : "Your coins stay yours until someone else runs past them. Rivals can take them, so keep an eye on your patch."),
-            IntroCard(scene: .power, title: "Power-ups and bonus streets",
-                      body: "Run past the glowing pink landmark for a \(frenzyMin)-minute frenzy: double points, and rivals' streets flip more easily. Some streets glow pink for bonus points at certain times."),
+            IntroCard(scene: .power, title: "Power-ups and bonus coins",
+                      body: "Run past the glowing pink landmark for a \(frenzyMin)-minute frenzy: double points, and rivals' coins are easier to steal. Some coins glow pink for bonus points at certain times."),
             IntroCard(scene: .health, title: "Forgot to press start?",
-                      body: "Add the run from Apple Health afterwards. Runs from the last \(importDays) days still capture streets."),
+                      body: "Import it from Strava afterwards (Settings → History). Runs from the last \(importDays) days still collect coins."),
             IntroCard(scene: .leaderboard, title: "Climb the leaderboard",
                       body: "Rankings count the coins you've collected: nearby, worldwide, with friends and in your club. Invite a friend and you both get a month of Pro."),
         ]
@@ -267,7 +267,7 @@ private struct IntroScene: View {
 
         case .health:
             let pulse = 1 + 0.08 * sin(t * 5)
-            ctx.draw(Text(Image(systemName: "heart.fill")).font(.system(size: 64 * pulse)).foregroundStyle(Color(hex: "FF375F")),
+            ctx.draw(Text(Image(systemName: "arrow.down.circle.fill")).font(.system(size: 64 * pulse)).foregroundStyle(Color(hex: "FF8A3D")),
                      at: CGPoint(x: w * 0.28, y: h * 0.5))
             let f = phase(t, 2.4)
             for i in 0..<3 {

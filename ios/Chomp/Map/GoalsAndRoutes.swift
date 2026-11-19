@@ -67,7 +67,7 @@ struct GoalsSheet: View {
                     }
                     .padding(.vertical, 6)
                 } header: { Text("Run streak") } footer: {
-                    Text("Any run counts, live or imported from Apple Health. If your streak would end tonight, Chomp reminds you at 7pm.")
+                    Text("Any run counts, recorded in Chomp or imported from Strava. If your streak would end tonight, Chomp reminds you at 7pm.")
                 }
 
                 Section {
@@ -171,12 +171,12 @@ struct RoutePlannerSheet: View {
                 if let r = result {
                     Section("Route") {
                         LabeledContent("Distance", value: formatDistance(r.distance, miles: miles))
-                        LabeledContent("Streets to chomp", value: "\(r.targets)")
+                        LabeledContent("Coins to collect", value: "\(r.tokens)")
                         LabeledContent("Coins on them", value: r.tokens.formatted())
                     }
                 } else if failed {
                     Section {
-                        Text("Couldn't find a loop here. Try a shorter distance, or move the map onto some streets.")
+                        Text("Couldn't find a loop here. Try a shorter distance, or move the map somewhere with more coins.")
                             .foregroundStyle(Theme.textSecondary)
                     }
                 }

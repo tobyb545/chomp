@@ -67,8 +67,8 @@ final class ChompUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Activity"].waitForExistence(timeout: 5))
         done()
 
-        app.buttons["Streets"].tap()
-        XCTAssertTrue(app.navigationBars["Streets near you"].waitForExistence(timeout: 5))
+        app.buttons["Coins nearby"].tap()
+        XCTAssertTrue(app.navigationBars["Coins near you"].waitForExistence(timeout: 5))
         for f in ["Mine", "Rivals", "To grab"] {
             app.segmentedControls.buttons[f].tap()
         }
@@ -93,11 +93,11 @@ final class ChompUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Plan a route"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["Save fading"].exists)
         app.buttons["Explore"].tap()
-        app.buttons["Grab streets"].tap()
+        app.buttons["Grab coins"].tap()
         app.collectionViews.buttons["Plan a route"].tap()
         let show = app.buttons["Show it on the map"]
         XCTAssertTrue(show.waitForExistence(timeout: 30), "a route was planned")
-        XCTAssertTrue(app.staticTexts["Streets to chomp"].exists)
+        XCTAssertTrue(app.staticTexts["Coins to collect"].exists)
         app.buttons["Try another"].tap()
         XCTAssertTrue(show.waitForExistence(timeout: 30))
         shot("route-planned")

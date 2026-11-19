@@ -24,7 +24,7 @@ struct MapScreen: View {
                 .ignoresSafeArea()
                 .accessibilityElement()
                 .accessibilityLabel(mapAccessibilityLabel)
-                .accessibilityHint("Use the Streets button for a list of streets and who owns them.")
+                .accessibilityHint("Use the Coins nearby button for a list of where the coins are and who holds them.")
 
             VStack(spacing: 10) {
                 if model.run.isActive {
@@ -67,14 +67,14 @@ struct MapScreen: View {
             Button("Cancel", role: .cancel) { locationProblem = nil }
         } message: {
             Text(locationProblem == .off
-                 ? "Chomp needs your location during a run to see which streets you've run. In Settings, tap Location and choose While Using the App."
-                 : "With approximate location, Chomp can't tell which street you're on, so you won't collect any coins. In Settings, tap Location and turn on Precise Location.")
+                 ? "Chomp needs your location during a run to see which coins you pass. In Settings, tap Location and choose While Using the App."
+                 : "With approximate location, Chomp can't tell which coins you pass, so you won't collect any. In Settings, tap Location and turn on Precise Location.")
         }
         .confirmationDialog("Start a run", isPresented: $startConfirm) {
             Button("Run for real") { start(simulated: false) }
             Button("Simulated run (demo)") { start(simulated: true) }
         } message: {
-            Text("Simulated runs replay a believable route through the streets on screen at 8× speed. Handy for trying the game in the simulator.")
+            Text("Simulated runs replay a believable route through the map on screen at 8× speed. Handy for trying the game in the simulator.")
         }
         .onAppear { seenEvents = UserDefaults.standard.integer(forKey: "seenEvents") }
         // Practice run requested (onboarding or Profile): start it once streets are loaded.
@@ -89,7 +89,7 @@ struct MapScreen: View {
 
     private var mapAccessibilityLabel: String {
         let p = model.progress
-        return "Map of \(model.placeName). You hold \(p.heldSegments) streets here, \(p.heldFraction.percentString) of the streets nearby. "
+        return "Map of \(model.placeName). You hold \(coinCount(p.coinsHeld)) here, \(p.heldFraction.percentString) of the coins nearby. "
             + "\(model.uncollectedPellets.count) power-ups on the map today."
     }
 
@@ -98,7 +98,7 @@ struct MapScreen: View {
             VStack(spacing: 10) {
                 RoundIconButton(symbol: "trophy.fill", label: "Leaderboards") { sheet = .leaderboard }
                 RoundIconButton(symbol: "bell.fill", label: "Activity", badge: max(0, model.state.events.count - seenEvents)) { sheet = .activity }
-                RoundIconButton(symbol: "list.bullet", label: "Streets") { sheet = .streets }
+                RoundIconButton(symbol: "list.bullet", label: "Coins nearby") { sheet = .streets }
                 RoundIconButton(symbol: "point.topleft.down.to.point.bottomright.curvepath.fill",
                                 label: model.plannedRoute == nil ? "Plan a route" : "Planned route") { sheet = .route }
             }
@@ -123,7 +123,7 @@ struct MapScreen: View {
     private func plannedRouteBar(_ r: PlannedRoute) -> some View {
         HStack(spacing: 10) {
             Image(systemName: "point.topleft.down.to.point.bottomright.curvepath.fill").foregroundStyle(Color(hex: "38E8FF"))
-            Text("Route · \(formatDistance(r.distance, miles: model.profile.useMiles)) · \(r.targets) streets · \(r.tokens) coins")
+            Text("Route · \(formatDistance(r.distance, miles: model.profile.useMiles)) · \(coinCount(r.tokens))")
                 .font(.footnote.weight(.bold)).foregroundStyle(Theme.hudText).lineLimit(1).minimumScaleFactor(0.8)
             Spacer(minLength: 0)
             Button { model.plannedRoute = nil } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(Theme.hudSecondary) }
@@ -153,13 +153,13 @@ struct MapScreen: View {
             Button("Simulated run (demo)", systemImage: "wand.and.stars") { start(simulated: true) }
         }
         #endif
-        .accessibilityHint("Starts recording. Streets you run turn your colour.")
+        .accessibilityHint("Starts recording. Coins you run past become yours.")
     }
 
     private func start(simulated: Bool) {
         follow = true
         guard !model.area.segments.isEmpty else {
-            model.toast = "Streets are still loading. Give it a moment."
+            model.toast = "The coins are still loading. Give it a moment."
             return
         }
         Task {
@@ -194,16 +194,16 @@ struct TownHeader: View {
                     }
                     .frame(width: 58, height: 58)
                     .accessibilityElement()
-                    .accessibilityLabel("\(p.heldFraction.percentString) of the streets around \(model.placeName) held")
+                    .accessibilityLabel("You hold \(p.heldFraction.percentString) of the coins around \(model.placeName)")
 
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 6) {
                             Text(model.placeName).font(Theme.display(.title3)).foregroundStyle(Theme.hudText).lineLimit(1)
                             if model.isConquered { Chip(text: "Conquered", colorHex: "FFD600") }
                         }
-                        Text("\(p.heldSegments) streets · \(formatDistance(p.heldMetres, miles: model.profile.useMiles)) · \(model.state.tokens(of: model.state.me).formatted()) coins")
+                        Text("\(p.coinsHeld.formatted()) coins held")
                             .font(.subheadline.weight(.semibold)).foregroundStyle(Theme.hudSecondary)
-                        Text("Explored \(p.exploredFraction.percentString)").font(.caption).foregroundStyle(Theme.hudSecondary)
+                        Text("\(model.state.tokens(of: model.state.me).formatted()) collected in total").font(.caption).foregroundStyle(Theme.hudSecondary)
                         StreakChip(action: onGoals).fixedSize().padding(.top, 2)
                     }
                     Spacer(minLength: 0)
@@ -250,7 +250,7 @@ struct TownHeader: View {
                                 .background(Theme.pellet.opacity(0.16), in: Capsule())
                                 .foregroundStyle(Theme.hudText)
                         }
-                        .accessibilityLabel("Bonus street. \(b.label(calendar: DailySpawns.townCalendar))")
+                        .accessibilityLabel("Bonus coins. \(b.label(calendar: DailySpawns.townCalendar))")
                     }
                 }
             }
@@ -270,10 +270,10 @@ struct WorldStatusBanner: View {
             EmptyView()
         case .loading(let n):
             banner(symbol: nil, text: model.area.segments.isEmpty
-                   ? "Loading the streets around you… The first time in a new area can take a minute."
-                   : "Loading more streets… (\(n))")
+                   ? "Loading the coins around you… The first time in a new area can take a minute."
+                   : "Loading more of the map… (\(n))")
         case .needsLocation:
-            banner(symbol: "location.slash", text: "Allow location, or pan the map to any town, to load its streets.") {
+            banner(symbol: "location.slash", text: "Allow location, or pan the map to any town, to load its coins.") {
                 Task {
                     _ = await LocationPermission.shared.requestWhenInUse()
                     await model.locateAndLoad()
@@ -303,7 +303,7 @@ struct WorldStatusBanner: View {
     }
 }
 
-/// "Your streets are under attack": what rivals took while you were away.
+/// "Coins lost": what rivals took while you were away.
 struct AttackBanner: View {
     @Environment(AppModel.self) private var model
     let report: AppModel.AttackReport
@@ -313,7 +313,7 @@ struct AttackBanner: View {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Theme.danger).font(.title3)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Your streets are under attack").font(.subheadline.weight(.heavy))
+                    Text("Coins lost").font(.subheadline.weight(.heavy))
                     Text(report.message).font(.footnote.weight(.semibold)).foregroundStyle(Theme.hudText.opacity(0.8))
                 }
                 Spacer(minLength: 0)
@@ -350,8 +350,8 @@ struct PracticeCoach: View {
         switch t {
         case ..<7: ("figure.run", "Practice run: we'll run this one for you at 8× speed. Nothing counts.")
         case ..<16: ("circle.grid.cross.fill", "The silver dots are coins. Run past them and they're yours.")
-        case ..<25: ("paintbrush.fill", "Streets you collect turn your colour. That's your territory.")
-        case ..<35: ("arrow.uturn.backward.circle.fill", "Rivals can steal them back. Run their streets to steal theirs.")
+        case ..<25: ("paintbrush.fill", "Coins you collect turn gold. They're yours until someone runs past them.")
+        case ..<35: ("arrow.uturn.backward.circle.fill", "Rivals can steal them back. Run past their coins to steal theirs.")
         default: ("flag.checkered", "That's it! Hold to finish, or let it end on its own.")
         }
     }
@@ -384,8 +384,8 @@ struct PracticeResultView: View {
             Image(systemName: "checkmark.seal.fill").font(.system(size: 52)).foregroundStyle(Color(hex: model.profile.colorHex))
             Text("You've got it").font(Theme.display(.title)).foregroundStyle(.white)
             Text(result.coins > 0
-                 ? "On a real run that would have been \(result.coins) coin\(result.coins == 1 ? "" : "s") across \(result.streets) street\(result.streets == 1 ? "" : "s"). Now go and get them for real."
-                 : "Run past the coins on any street to collect them. Now go and get them for real.")
+                 ? "On a real run that would have been \(coinCount(result.coins)). Now go and get them for real."
+                 : "Run past coins to collect them. Now go and get them for real.")
                 .font(.body.weight(.medium)).multilineTextAlignment(.center).foregroundStyle(Theme.hudSecondary)
             Button("Got it") { dismiss() }
                 .buttonStyle(ChunkyButtonStyle(colorHex: model.profile.colorHex, height: 56))

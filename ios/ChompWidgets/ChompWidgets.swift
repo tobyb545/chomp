@@ -33,18 +33,21 @@ private let pellet = Color(hex: "FFF1C1")
 private let power = Color(hex: "FF2BD6")
 private let muted = Color(hex: "A3A3C2")
 
-// MARK: Streets held
+// MARK: Coins held (kind "StreetsHeld" kept so installed widgets survive)
 
 struct StreetsHeldWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "StreetsHeld", provider: SnapshotProvider()) { e in
             StreetsHeldView(s: e.snapshot).containerBackground(ink, for: .widget).widgetURL(URL(string: "chomp://map"))
         }
-        .configurationDisplayName("Streets held")
-        .description("Your territory in your home town.")
+        .configurationDisplayName("Coins")
+        .description("Coins you've collected, and your share of the coins around you.")
         .supportedFamilies([.systemSmall, .systemMedium, .accessoryCircular, .accessoryRectangular])
     }
 }
+
+/// "1.2k" for a small circular widget.
+private func short(_ n: Int) -> String { n >= 1000 ? String(format: "%.1fk", Double(n) / 1000) : "\(n)" }
 
 struct StreetsHeldView: View {
     @Environment(\.widgetFamily) private var family
@@ -54,29 +57,29 @@ struct StreetsHeldView: View {
         let c = Color(hex: s.playerColorHex)
         switch family {
         case .accessoryCircular:
-            Gauge(value: min(1, s.townPercent)) { Text("\(s.streetsHeld)") } currentValueLabel: { Text("\(s.streetsHeld)") }
+            Gauge(value: min(1, s.townPercent)) { Text(short(s.coinsHeld)) } currentValueLabel: { Text(short(s.coinsHeld)) }
                 .gaugeStyle(.accessoryCircularCapacity)
-                .accessibilityLabel("\(s.streetsHeld) streets held")
+                .accessibilityLabel("\(s.coinsHeld) coins collected")
         case .accessoryRectangular:
             VStack(alignment: .leading) {
                 Text("CHOMP").font(.caption2.weight(.black))
-                Text("\(s.streetsHeld) streets").font(.headline)
+                Text("\(s.coinsHeld.formatted()) coins").font(.headline)
                 Text("\(Int(s.townPercent * 100))% of \(s.townName)").font(.caption)
             }
         default:
             HStack(spacing: 16) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("CHOMP").font(.system(size: 11, weight: .black, design: .rounded)).tracking(2).foregroundStyle(c)
-                    Text("\(s.streetsHeld)").font(.system(size: 44, weight: .black, design: .rounded)).foregroundStyle(.white)
+                    Text(s.coinsHeld.formatted()).font(.system(size: 44, weight: .black, design: .rounded)).foregroundStyle(.white)
                         .minimumScaleFactor(0.5).contentTransition(.numericText())
-                    Text("streets held").font(.caption.weight(.semibold)).foregroundStyle(muted)
+                    Text("coins collected").font(.caption.weight(.semibold)).foregroundStyle(muted)
                     Spacer(minLength: 0)
-                    Text("\(String(format: "%.1f", s.kmHeld)) km · \(Int(s.townPercent * 100))%").font(.caption2.weight(.bold)).foregroundStyle(pellet)
+                    Text("\(Int(s.townPercent * 100))% of coins nearby").font(.caption2.weight(.bold)).foregroundStyle(pellet)
                 }
                 if family == .systemMedium {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(s.townName).font(.headline).foregroundStyle(.white)
-                        if s.fadingSoon > 0 { Label("\(s.fadingSoon) fading", systemImage: "hourglass").foregroundStyle(muted) }
+                        if s.fadingSoon > 0 { Label("\(s.fadingSoon) coins fading", systemImage: "hourglass").foregroundStyle(muted) }
                         if let b = s.bonusLabels.first { Label(b, systemImage: "star.fill").foregroundStyle(power).lineLimit(1) }
                     }
                     .font(.caption.weight(.semibold))
@@ -96,7 +99,7 @@ struct UnderAttackWidget: Widget {
             UnderAttackView(s: e.snapshot).containerBackground(ink, for: .widget)
         }
         .configurationDisplayName("Under attack")
-        .description("Streets rivals have taken from you.")
+        .description("Coins rivals have taken from you.")
         .supportedFamilies([.systemSmall, .systemMedium])
     }
 }
@@ -107,16 +110,16 @@ struct UnderAttackView: View {
         VStack(alignment: .leading, spacing: 6) {
             Label("UNDER ATTACK", systemImage: "exclamationmark.triangle.fill").font(.caption.weight(.black)).foregroundStyle(Color(hex: "FF3355"))
             if s.underAttack.isEmpty {
-                Text("All quiet. Your streets are safe… for now.").font(.subheadline.weight(.semibold)).foregroundStyle(.white)
+                Text("All quiet. Your coins are safe… for now.").font(.subheadline.weight(.semibold)).foregroundStyle(.white)
             }
             ForEach(s.underAttack.prefix(3), id: \.self) { a in
                 VStack(alignment: .leading, spacing: 0) {
                     Text(a.street).font(.subheadline.weight(.bold)).foregroundStyle(.white).lineLimit(1)
-                    Text("eaten by \(a.by)").font(.caption2).foregroundStyle(muted)
+                    Text("coins taken by \(a.by)").font(.caption2).foregroundStyle(muted)
                 }
             }
             Spacer(minLength: 0)
-            if s.fadingSoon > 0 { Text("\(s.fadingSoon) streets fading").font(.caption2.weight(.bold)).foregroundStyle(pellet) }
+            if s.fadingSoon > 0 { Text("\(s.fadingSoon) coins fading").font(.caption2.weight(.bold)).foregroundStyle(pellet) }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .widgetURL(URL(string: "chomp://map"))
@@ -172,8 +175,8 @@ struct RunLiveActivity: Widget {
             return DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
                     VStack(alignment: .leading) {
-                        Text("\(ctx.state.streetsCaptured)").font(.title.weight(.black)).foregroundStyle(c)
-                        Text("streets").font(.caption2).foregroundStyle(muted)
+                        Text("\(ctx.state.coinsStolen)").font(.title.weight(.black)).foregroundStyle(c)
+                        Text("stolen").font(.caption2).foregroundStyle(muted)
                     }
                 }
                 DynamicIslandExpandedRegion(.trailing) {
@@ -197,9 +200,9 @@ struct RunLiveActivity: Widget {
             } compactLeading: {
                 Image(systemName: ctx.state.frenzyEndsAt.map { $0 > .now } == true ? "bolt.fill" : "circle.grid.cross.fill").foregroundStyle(c)
             } compactTrailing: {
-                Text("\(ctx.state.streetsCaptured)").font(.headline.weight(.black)).foregroundStyle(c)
+                Text("\(ctx.state.pelletsEaten)").font(.headline.weight(.black)).foregroundStyle(pellet)
             } minimal: {
-                Text("\(ctx.state.streetsCaptured)").font(.caption.weight(.black)).foregroundStyle(c)
+                Text("\(ctx.state.pelletsEaten)").font(.caption.weight(.black)).foregroundStyle(pellet)
             }
         }
     }
@@ -219,9 +222,8 @@ struct LockScreenRunView: View {
                 else { Text(attrs.startedAt, style: .timer).font(.headline.weight(.heavy)).monospacedDigit().foregroundStyle(.white) }
             }
             HStack {
-                stat("\(state.streetsCaptured)", "streets", c)
                 stat("\(state.pelletsEaten)", "coins", pellet)
-                stat("\(state.streetsStolen)", "won back", .white)
+                stat("\(state.coinsStolen)", "stolen", c)
                 stat(String(format: "%.2f", state.distanceMetres / 1000), "km", .white)
             }
             if let f = state.frenzyEndsAt, f > .now {

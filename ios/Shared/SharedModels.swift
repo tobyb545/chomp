@@ -27,7 +27,8 @@ struct WidgetSnapshot: Codable, Hashable {
     }
     var townName: String
     var playerColorHex: String
-    var streetsHeld: Int
+    /// Coins collected, all time.
+    var coinsHeld: Int
     var kmHeld: Double
     var townPercent: Double
     var blocksHeld: Int
@@ -38,8 +39,8 @@ struct WidgetSnapshot: Codable, Hashable {
     var updatedAt: Date
 
     static let placeholder = WidgetSnapshot(
-        townName: "West Byfleet", playerColorHex: "C6FF00", streetsHeld: 42, kmHeld: 6.3, townPercent: 0.041, blocksHeld: 2,
-        underAttack: [Attack(street: "Old Woking Road", by: "Bot Rook"), Attack(street: "Station Approach", by: "Bot Moth")],
+        townName: "West Byfleet", playerColorHex: "C6FF00", coinsHeld: 1_240, kmHeld: 6.3, townPercent: 0.041, blocksHeld: 2,
+        underAttack: [Attack(street: "Old Woking Road", by: "Jess M"), Attack(street: "Station Approach", by: "Callum R")],
         fadingSoon: 5,
         pellets: [Pellet(name: "West Byfleet", kind: "station", collected: false),
                   Pellet(name: "All Saints Church", kind: "worship", collected: true),
@@ -61,9 +62,10 @@ struct WidgetSnapshot: Codable, Hashable {
 #if canImport(ActivityKit) && os(iOS)
 struct ChompRunAttributes: ActivityAttributes {
     struct ContentState: Codable, Hashable {
+        /// Coins collected this run.
         var pelletsEaten: Int
-        var streetsCaptured: Int
-        var streetsStolen: Int
+        /// Of those, coins stolen from rivals.
+        var coinsStolen: Int
         var distanceMetres: Double
         var frenzyEndsAt: Date?
         var isPaused: Bool

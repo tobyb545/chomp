@@ -35,7 +35,8 @@ struct GameMapView: UIViewRepresentable {
         map.compassViewMargins = CGPoint(x: 16, y: 120)
         map.tintColor = UIColor(Color(hex: snapshot.playerColorHex))
         map.minimumZoomLevel = 9
-        map.maximumZoomLevel = 19
+        // Coins are ~10 m apart: past this, a street shows only one or two of them.
+        map.maximumZoomLevel = 17.6
         map.isPitchEnabled = false
         map.isRotateEnabled = interactive
         map.isScrollEnabled = interactive

@@ -39,7 +39,7 @@ export function groupOutbox(rows: OutboxRow[]): Message[] {
     const more = group.length - 1;
     let body = latest.body;
     if (more > 0 && (latest.kind === "lost" || latest.kind === "raid")) {
-      body += ` (and ${more} more ${latest.kind === "lost" ? `street${more === 1 ? "" : "s"}` : `raid${more === 1 ? "" : "s"}`})`;
+      body += ` (and ${more} more time${more === 1 ? "" : "s"})`;
     }
     return { userID: latest.user_id, kind: latest.kind, title: latest.title, body, ids: group.map((g) => g.id), collapseID: `chomp-${latest.kind}` };
   });

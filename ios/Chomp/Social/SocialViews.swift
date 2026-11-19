@@ -180,7 +180,7 @@ struct ActivityFeedView: View {
                         if let id = e.segmentIDs.first, let s = model.area.segment(id) { model.focusRequest = s.midpoint; dismiss() }
                     }
                     .accessibilityElement(children: .combine)
-                    .accessibilityHint(e.segmentIDs.isEmpty ? "" : "Shows the street on the map")
+                    .accessibilityHint(e.segmentIDs.isEmpty ? "" : "Shows it on the map")
                 }
             }
             .navigationTitle("Activity")
@@ -224,15 +224,15 @@ struct StreetListView: View {
     enum Filter: String, CaseIterable, Identifiable {
         case near, mine, rivals, fading
         var id: String { rawValue }
-        /// No "Fading" tab while streets don't fade.
+        /// No "Fading" tab while coins don't fade.
         static var allCases: [Filter] { RulesConfig.bundled.decay.isEnabled ? [.near, .mine, .rivals, .fading] : [.near, .mine, .rivals] }
         var label: String { switch self { case .near: "To grab"; case .mine: "Mine"; case .rivals: "Rivals"; case .fading: "Fading" } }
         var empty: String {
             switch self {
-            case .near: "Nothing to grab here. You hold every street nearby!"
-            case .mine: "No streets yet. Run one end to end to make it yours."
-            case .rivals: "No rivals' streets nearby."
-            case .fading: "None of your streets are fading."
+            case .near: "Nothing to grab here. You hold every coin nearby!"
+            case .mine: "No coins yet. Run past some to make them yours."
+            case .rivals: "No rivals' coins nearby."
+            case .fading: "None of your coins are fading."
             }
         }
     }
@@ -293,7 +293,7 @@ struct StreetListView: View {
                 Picker("Show", selection: $filter) { ForEach(Filter.allCases) { Text($0.label).tag($0) } }
                     .pickerStyle(.segmented).listRowBackground(Color.clear)
                 if list.isEmpty {
-                    Text(query.isEmpty ? filter.empty : "No streets called \u{201C}\(query)\u{201D} here.")
+                    Text(query.isEmpty ? filter.empty : "Nothing called \u{201C}\(query)\u{201D} here.")
                         .foregroundStyle(Theme.textSecondary)
                 } else if filter == .near, query.isEmpty {
                     let tokens = list.prefix(20).reduce(0) { $0 + $1.tokens }
@@ -329,8 +329,8 @@ struct StreetListView: View {
                     .accessibilityHint("Shows it on the map")
                 }
             }
-            .searchable(text: $query, prompt: "Find a street")
-            .navigationTitle("Streets near you")
+            .searchable(text: $query, prompt: "Search by road name")
+            .navigationTitle("Coins near you")
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
         }
     }
@@ -368,7 +368,7 @@ struct PlayerSheet: View {
                         Button(model.profile.mutedPlayers.contains(playerID) ? "Unmute" : "Mute notifications", systemImage: "bell.slash.fill") { toggleMute() }
                         Button("Block \(name)", systemImage: "hand.raised.fill", role: .destructive) { block() }
                     } footer: {
-                        Text("Blocking hides their streets and notifications from you. They aren't told.")
+                        Text("Blocking hides their coins and notifications from you. They aren't told.")
                     }
                 }
                 if let status { Section { Text(status) } }
@@ -476,7 +476,7 @@ struct ClubsView: View {
 
             Section("Friends") {
                 ForEach(friends) { f in
-                    HStack { Circle().fill(Color(hex: f.colorHex)).frame(width: 12, height: 12); Text(f.name); Spacer(); Text("\(f.streets) streets").foregroundStyle(Theme.textSecondary) }
+                    HStack { Circle().fill(Color(hex: f.colorHex)).frame(width: 12, height: 12); Text(f.name); Spacer(); Text("\(f.streets.formatted()) coins").foregroundStyle(Theme.textSecondary) }
                 }
                 TextField("Add by runner name", text: $handle)
                 Button("Send friend request") { Task { await run { try await model.backend.addFriend(handle: handle) } } }.disabled(handle.count < 2)

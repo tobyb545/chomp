@@ -10,7 +10,7 @@ final class ProStore {
     static let entitlement = "pro"
 
     enum Feature: String, CaseIterable, Identifiable {
-        case clubs, stats, customColours, trails, stravaImport, replayExport
+        case clubs, stats, customColours, trails, replayExport
         var id: String { rawValue }
         var title: String {
             switch self {
@@ -18,7 +18,6 @@ final class ProStore {
             case .stats: "Detailed stats & heatmaps"
             case .customColours: "Any colour you like"
             case .trails: "Custom run trails"
-            case .stravaImport: "Strava history import"
             case .replayExport: "Export run replays"
             }
         }
@@ -28,7 +27,6 @@ final class ProStore {
             case .stats: "chart.xyaxis.line"
             case .customColours: "paintpalette.fill"
             case .trails: "scribble.variable"
-            case .stravaImport: "arrow.down.circle"
             case .replayExport: "film.stack"
             }
         }

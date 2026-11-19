@@ -126,6 +126,9 @@ public struct TownProgress: Sendable, Hashable {
     public var exploredFraction: Double
     public var blocksHeld: Int
     public var totalSegments: Int
+    /// Coins held here, out of all the coins on the loaded map.
+    public var coinsHeld: Int = 0
+    public var coinsTotal: Int = 0
 }
 
 public struct Standing: Sendable, Hashable, Identifiable {

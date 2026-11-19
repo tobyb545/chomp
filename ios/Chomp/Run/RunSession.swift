@@ -17,8 +17,8 @@ final class RunSession {
     private(set) var trail: [Coordinate] = []
     private(set) var distance: Double = 0
     private(set) var pelletsEaten = 0
-    private(set) var streetsCaptured = 0
-    private(set) var streetsStolen = 0
+    /// Coins taken from rivals this run.
+    private(set) var coinsStolen = 0
     private(set) var pointsProvisional = 0
     private(set) var frenzyEndsAt: Date?
     private(set) var lastEatenName: String?
@@ -95,7 +95,7 @@ final class RunSession {
         voice.splits = model.profile.voiceSplits
         nextSplitAt = model.profile.useMiles ? 1609.344 : 1000
         if let r = model.plannedRoute {
-            voice.say("Run started. Your route is \(formatDistance(r.distance, miles: model.profile.useMiles)) with \(r.targets) streets to chomp.")
+            voice.say("Run started. Your route is \(formatDistance(r.distance, miles: model.profile.useMiles)) with \(coinCount(r.tokens)) to collect.")
         } else {
             voice.say("Run started.")
         }
@@ -158,9 +158,10 @@ final class RunSession {
         let end = trace.last?.timestamp ?? .now
         if practice {
             locationTask = nil
+            LiveActivityController.shared.end(liveState)
             RunVoice.shared.stop()
             Feedback.shared.play(.finish)
-            model.practiceResult = .init(coins: pelletsEaten, streets: streetsCaptured)
+            model.practiceResult = .init(coins: pelletsEaten)
             reset()
             model.bumpMap()
             return
@@ -170,7 +171,7 @@ final class RunSession {
         LiveActivityController.shared.end(liveState)
         Feedback.shared.play(.finish)
         RunVoice.shared.stop()
-        RunVoice.shared.say("Run finished. \(streetsCaptured) street\(streetsCaptured == 1 ? "" : "s"), \(pelletsEaten) coins.")
+        RunVoice.shared.say("Run finished. \(coinCount(pelletsEaten))" + (coinsStolen > 0 ? ", \(coinsStolen) stolen from rivals." : "."))
         let captured = trace
         let id = runID
         let wasSimulated = simulated
@@ -189,15 +190,13 @@ final class RunSession {
         trail = []
         distance = 0
         pelletsEaten = 0
-        streetsCaptured = 0
-        streetsStolen = 0
+        coinsStolen = 0
         pointsProvisional = 0
         frenzyEndsAt = nil
         lastEatenName = nil
         collectedThisRun = []
         practice = false
         coinsTaken = [:]
-        streetsStolenSet = []
         tracker = nil
         pausedDuration = 0
         pausedAt = nil
@@ -222,7 +221,7 @@ final class RunSession {
             let unit = model.profile.useMiles ? 1609.344 : 1000
             let now = elapsed
             RunVoice.shared.split(index: splitIndex, miles: model.profile.useMiles,
-                                  paceSecondsPerUnit: (now - lastSplitTime) * (simulated ? 8 : 1), streets: streetsCaptured)
+                                  paceSecondsPerUnit: (now - lastSplitTime) * (simulated ? 8 : 1), coins: pelletsEaten)
             lastSplitTime = now
             nextSplitAt += unit
         }
@@ -236,7 +235,7 @@ final class RunSession {
                 frenzyEndsAt = max(frenzyEndsAt ?? .distantPast, end)
                 Feedback.shared.play(.powerUp)
                 model.toast = "FRENZY! Double points at \(pellet.landmark.name)"
-                RunVoice.shared.say("Frenzy! Double points for \(Int(model.rules.frenzy.durationSeconds / 60)) minutes. Rival streets flip faster.")
+                RunVoice.shared.say("Frenzy! Double points for \(Int(model.rules.frenzy.durationSeconds / 60)) minutes. Rivals' coins are easier to steal.")
                 scheduleFrenzyEnd()
             }
         }
@@ -250,7 +249,6 @@ final class RunSession {
 
     /// Coins taken this run (not counting ones that were already yours), by street.
     private(set) var coinsTaken: [SegmentID: [Int]] = [:]
-    private var streetsStolenSet = Set<SegmentID>()
 
     private func runLiveMatch() {
         guard var t = tracker, let model else { return }
@@ -264,18 +262,17 @@ final class RunSession {
         var anyNew = false, anyStolen = false
         for segID in update.newlyEaten {
             guard let seg = model.area.segment(segID), let idx = update.newCoins[segID] else { continue }
-            var gained = 0, stolenHere = false
+            var gained = 0, stolenHere = 0
             for i in idx {
                 let o = state.ownership[Coins.id(segID, i)].flatMap { $0.strength(at: .now, decay: decay) > 0 ? $0 : nil }
                 if o?.owner == me { continue }
-                if o != nil { stolenHere = true }
+                if o != nil { stolenHere += 1 }
                 gained += 1
                 coinsTaken[segID, default: []].append(i)
             }
             guard gained > 0 else { continue }
             anyNew = true
-            if coinsTaken[segID]!.count == gained { streetsCaptured += 1 }  // first coins on this street
-            if stolenHere, streetsStolenSet.insert(segID).inserted { streetsStolen += 1; anyStolen = true }
+            if stolenHere > 0 { coinsStolen += stolenHere; anyStolen = true }
             pelletsEaten += gained
             RunVoice.shared.captured(street: seg.displayName, tokens: gained, stolen: stolenHere)
             let mult = (isFrenzy ? model.rules.frenzy.multiplier : 1)
@@ -309,7 +306,7 @@ final class RunSession {
     }
 
     var liveState: ChompRunAttributes.ContentState {
-        .init(pelletsEaten: pelletsEaten, streetsCaptured: streetsCaptured, streetsStolen: streetsStolen, distanceMetres: distance,
+        .init(pelletsEaten: pelletsEaten, coinsStolen: coinsStolen, distanceMetres: distance,
               frenzyEndsAt: isFrenzy ? frenzyEndsAt : nil, isPaused: phase == .paused)
     }
 

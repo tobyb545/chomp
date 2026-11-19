@@ -20,8 +20,10 @@
   Coin ownership is keyed `"<segment id>#<i>"` (`Coins.swift` / `chomp/coins.ts`). Each street
   with coins taken gets one capture record (*captured*, or *stolen* if any coin was a rival's)
   carrying `tokens` and the coin indexes; coins you already held are *refreshed*. Later capture
-  still wins per coin. Imports: Strava is exploration only; Health runs within the import
-  window take the coins they passed. `capture.coverageThreshold` (80%) now only decides when
+  still wins per coin. Imports: Strava runs within the import window come back to the app
+  and go through the normal pipeline, taking the coins they passed; older Strava runs are
+  exploration only (server-side). There's no Apple Health import: Garmin and Strava save runs
+  there without GPS. `capture.coverageThreshold` (80%) now only decides when
   a street counts as explored. Bots run whole streets and take every coin.
 - **Decay**: ownership strength falls linearly from 1 to 0 over 21 days since the last visit.
   It's derived from `last_visited_at` and never stored, and an hourly cron clears faded streets.
@@ -83,7 +85,7 @@ The server re-matches, runs anti-cheat, applies the rules and writes everything 
 
 - Concurrent runs: ownership writes use *later capture wins* under a row lock.
 - Retries: idempotent on run ID.
-- Late uploads and Apple Health imports capture streets if the run ended within 7 days
+- Late uploads and recent Strava runs collect coins if the run ended within 7 days
   (`imports.captureWindowHours`); older runs, and Strava history, count for exploration only.
 - *Later capture wins* also applies to imports: an old run can't take a street from someone
   who ran it more recently.
@@ -189,12 +191,11 @@ and each member's contribution. Joining or starting a club leaves the current on
 who leaves hands over to the longest-standing member, and an empty club is deleted. Starting a
 club needs Pro; joining is free. Migration: `20261125000000_club_battles.sql`.
 
-## Health runs on launch
+## Player-facing wording
 
-On launch and when returning to the app, Chomp looks for running workouts recorded by other
-apps within the capture window (7 days) and offers to import them in one alert. Each workout
-is offered once (`PlayerProfile.healthOffered`), and it only checks after the player has
-already answered the Health permission sheet.
+The game is described in coins only. Streets still exist internally (segments, capture
+records, blocks) but the UI, notifications and voice talk about coins collected, held and
+stolen. The map card shows coins held and the share of coins nearby.
 
 ## Builds
 

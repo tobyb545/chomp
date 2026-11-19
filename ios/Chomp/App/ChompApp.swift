@@ -17,7 +17,6 @@ struct ChompApp: App {
                     await model.bootstrap()
                     model.checkForAttacks()
                     model.locationApproximate = LocationPermission.shared.problem == .approximate
-                    await model.checkForNewHealthRuns()
                     await PushService.shared.refresh()
                     IntentRouter.shared.flush()
                 }
@@ -68,22 +67,6 @@ final class IntentRouter {
 struct RootView: View {
     @Environment(AppModel.self) private var model
 
-    private var healthTitle: String {
-        let n = model.healthPrompt?.runs.count ?? 0
-        return n == 1 ? "New run in Apple Health" : "\(n) new runs in Apple Health"
-    }
-
-    private var healthMessage: String {
-        guard let runs = model.healthPrompt?.runs else { return "" }
-        let miles = model.profile.useMiles
-        let lines = runs.prefix(3).map { r in
-            [r.start.formatted(.dateTime.weekday(.wide).hour().minute()),
-             r.distance.map { formatDistance($0, miles: miles) }, r.source].compactMap { $0 }.joined(separator: " · ")
-        }
-        let more = runs.count > 3 ? "\nand \(runs.count - 3) more" : ""
-        return lines.joined(separator: "\n") + more + "\n\nImport \(runs.count == 1 ? "it" : "them") to collect the coins along the way?"
-    }
-
     var body: some View {
         @Bindable var model = model
         Group {
@@ -103,7 +86,7 @@ struct RootView: View {
         }
         .sheet(item: $model.practiceResult) { r in PracticeResultView(result: r) }
         // Badge unlocks wait until the run summary (and any other prompt) is closed.
-        .sheet(item: Binding(get: { model.presentedSummary == nil && model.healthPrompt == nil && model.practiceResult == nil ? model.pendingBadges.first : nil },
+        .sheet(item: Binding(get: { model.presentedSummary == nil && model.practiceResult == nil ? model.pendingBadges.first : nil },
                              set: { if $0 == nil, !model.pendingBadges.isEmpty { model.pendingBadges.removeFirst() } })) { b in
             BadgeDetailView(badge: b, earnedAt: model.profile.badgesEarned[b.id], celebrate: true)
         }
@@ -116,12 +99,6 @@ struct RootView: View {
             NavigationStack {
                 InviteView().toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { model.showInvite = false } } }
             }
-        }
-        .alert(healthTitle, isPresented: Binding(get: { model.healthPrompt != nil }, set: { _ in })) {
-            Button("Import") { Task { await model.answerHealthPrompt(importing: true) } }
-            Button("Not now", role: .cancel) { Task { await model.answerHealthPrompt(importing: false) } }
-        } message: {
-            Text(healthMessage)
         }
         .overlay(alignment: .top) { ToastView() }
         .tint(Theme.readableTint(model.profile.colorHex))

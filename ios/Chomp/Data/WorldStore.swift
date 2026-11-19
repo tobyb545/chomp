@@ -11,9 +11,9 @@ actor WorldStore {
         case offline, busy, bad(String)
         var errorDescription: String? {
             switch self {
-            case .offline: "Couldn't download streets here. Check your connection and try again."
+            case .offline: "Couldn't download the map here. Check your connection and try again."
             case .busy: "The free map server is busy. Chomp will try again in a moment."
-            case .bad(let s): "Couldn't read the street data (\(s))."
+            case .bad(let s): "Couldn't read the map data (\(s))."
             }
         }
     }

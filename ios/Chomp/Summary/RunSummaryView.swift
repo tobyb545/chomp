@@ -85,7 +85,7 @@ struct RunSummaryView: View {
                 .disabled(replaying)
             }
             .accessibilityElement()
-            .accessibilityLabel("Replay map. \(outcome.gained.count) streets eaten on this run.")
+            .accessibilityLabel("Replay map. \(coinCount(record.tokens ?? outcome.coins)) collected on this run.")
     }
 
     private func replay() async {
@@ -116,7 +116,7 @@ struct RunSummaryView: View {
 
     private var statsGrid: some View {
         let lost = model.state.events.filter { $0.kind == .ghostRaid && $0.date > record.startedAt.addingTimeInterval(-7 * 86_400) && $0.date < record.startedAt }
-            .reduce(0) { $0 + $1.segmentIDs.count }
+            .reduce(0) { $0 + $1.segmentIDs.count }  // coin keys
         return Grid(horizontalSpacing: 10, verticalSpacing: 10) {
             GridRow {
                 tile(formatDistance(record.distance, miles: model.profile.useMiles), "Distance")
@@ -124,12 +124,12 @@ struct RunSummaryView: View {
                 tile(RunMath.formatPace(record.distance > 0 ? record.movingTime / (record.distance / 1000) : 0), "Avg pace")
             }
             GridRow {
-                tile("\(outcome.gained.count - outcome.stolen.count)", "New streets")
-                tile("\(outcome.stolen.count)", "Won back")
+                tile("\(record.tokens ?? model.tokens(of: outcome, in: model.area))", "Coins collected")
+                tile("\(outcome.coinsStolen)", "Stolen")
                 tile("\(lost)", "Lost this week")
             }
             GridRow {
-                tile("\(record.tokens ?? model.tokens(of: outcome, in: model.area))", "Coins collected")
+                tile("\(outcome.coinsKept)", "Kept fresh")
                 tile("\(model.state.tokens(of: model.state.me).formatted())", "All-time coins")
                 tile(model.streak.current > 0 ? "\(model.streak.current) day\(model.streak.current == 1 ? "" : "s")" : "–", "Run streak")
             }
@@ -159,10 +159,10 @@ struct RunSummaryView: View {
 
     private var fairPlayCard: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label(outcome.verdict == .underReview ? "Run sent for review" : "Some streets didn't count", systemImage: "exclamationmark.shield.fill")
+            Label(outcome.verdict == .underReview ? "Run sent for review" : "Some coins didn't count", systemImage: "exclamationmark.shield.fill")
                 .font(.headline).foregroundStyle(Theme.danger)
             if outcome.verdict == .underReview {
-                Text("This run looked more like cycling or driving than running, so it won't change any street ownership. If that's wrong, nothing is lost: your next run counts as normal.")
+                Text("This run looked more like cycling or driving than running, so it won't collect or steal any coins. If that's wrong, nothing is lost: your next run counts as normal.")
                     .font(.subheadline).foregroundStyle(Theme.textSecondary)
             }
             ForEach(Array(Set(outcome.rejected.compactMap(\.reason))).sorted(), id: \.self) { r in
@@ -191,9 +191,9 @@ struct RunSummaryView: View {
 
     private var streetsCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Streets").font(.headline)
+            Text("Where you collected").font(.headline)
             if outcome.gained.isEmpty && outcome.refreshed.isEmpty {
-                Text("No coins this time. Run along a street to collect the coins you pass.")
+                Text("No coins this time. Run past coins on the map to collect them.")
                     .font(.subheadline).foregroundStyle(Theme.textSecondary)
             }
             ForEach(ordered.prefix(40)) { c in
@@ -217,7 +217,7 @@ struct RunSummaryView: View {
             }
             if ordered.count > 40 { Text("and \(ordered.count - 40) more").font(.caption).foregroundStyle(Theme.textSecondary) }
             if !outcome.refreshed.isEmpty {
-                Text("\(outcome.refreshed.count) street\(outcome.refreshed.count == 1 ? "" : "s") you already held")
+                Text("\(coinCount(outcome.coinsKept)) you already held, kept fresh")
                     .font(.caption).foregroundStyle(Theme.textSecondary)
             }
         }
@@ -250,7 +250,7 @@ struct RunSummaryView: View {
                 .buttonStyle(ChunkyButtonStyle(colorHex: model.profile.colorHex, height: 56))
             }
             if let img = shareImage {
-                ShareLink(item: img, preview: SharePreview("My streets in \(model.placeName)", image: img)) {
+                ShareLink(item: img, preview: SharePreview("My coins in \(model.placeName)", image: img)) {
                     Label("Share my territory", systemImage: "square.and.arrow.up")
                 }
                 .buttonStyle(ChunkyButtonStyle(colorHex: "2A2A4A", height: 50))
@@ -277,14 +277,14 @@ struct RunSummaryView: View {
     private func renderPoster(reveal: Int? = nil) -> Image? {
         let poster = TerritoryPoster(area: model.area, state: model.state, me: model.state.me, colorHex: model.profile.colorHex,
                                      highlight: Set(ordered.prefix(reveal ?? ordered.count).map(\.segmentID)),
-                                     title: model.placeName, subtitle: "\(model.progress.heldSegments) streets held · +\(outcome.totalPoints) pts",
+                                     title: model.placeName, subtitle: "\(model.progress.coinsHeld.formatted()) coins held · +\(outcome.totalPoints) pts",
                                      ownerColor: model.ownerColor)
         let r = ImageRenderer(content: poster.frame(width: 1080 / 3, height: 1350 / 3))
         r.scale = 3
         return r.uiImage.map { Image(uiImage: $0) }
     }
 
-    /// 9:16 card for Instagram/TikTok Stories: this run's streets up close, coins and stats.
+    /// 9:16 card for Instagram/TikTok Stories: this run's map up close, coins and stats.
     @MainActor
     private func renderStory() -> Image? {
         let coins = record.tokens ?? model.tokens(of: outcome, in: model.area)
@@ -302,9 +302,8 @@ struct RunSummaryView: View {
             stats: [("Distance", formatDistance(record.distance, miles: miles)),
                     ("Pace", RunMath.formatPace(pace) + (miles ? " /mi" : " /km")),
                     ("Time", RunMath.formatDuration(record.movingTime))],
-            extras: [("Streets", "\(outcome.gained.count)"),
-                     outcome.stolen.isEmpty ? ("Streak", model.streak.current > 0 ? "\(model.streak.current) days" : "1 day")
-                                            : ("Stolen", "\(outcome.stolen.count)"),
+            extras: [("Stolen", "\(outcome.coinsStolen)"),
+                     ("Streak", model.streak.current > 0 ? "\(model.streak.current) day\(model.streak.current == 1 ? "" : "s")" : "1 day"),
                      ("Points", "+\(outcome.totalPoints.formatted())")],
             colorHex: model.profile.colorHex)
         let r = ImageRenderer(content: card.frame(width: 360, height: 640))

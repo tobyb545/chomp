@@ -1,4 +1,5 @@
 import AVFoundation
+import ChompKit
 import Foundation
 
 /// Spoken updates during a run, for runners with headphones who don't look at
@@ -29,12 +30,12 @@ final class RunVoice {
         synth.speak(u)
     }
 
-    /// Streets eaten within a few seconds of each other become one sentence.
-    func captured(street: String, tokens: Int, stolen: Bool) {
+    /// Coins collected within a few seconds of each other become one sentence.
+    func captured(street: String, tokens: Int, stolen: Int) {
         guard enabled else { return }
         pendingStreets.append(street)
         pendingTokens += tokens
-        if stolen { pendingStolen += 1 }
+        pendingStolen += stolen
         flushTask?.cancel()
         flushTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(3))
@@ -46,14 +47,14 @@ final class RunVoice {
     private func flush() {
         defer { pendingStreets = []; pendingTokens = 0; pendingStolen = 0 }
         guard !pendingStreets.isEmpty else { return }
-        let what = pendingStreets.count == 1 ? pendingStreets[0] : "\(pendingStreets.count) streets"
-        let verb = pendingStolen == pendingStreets.count ? "Stole" : "Captured"
-        var line = "\(verb) \(what). \(pendingTokens) coins."
-        if pendingStolen > 0, pendingStolen < pendingStreets.count { line += " \(pendingStolen) taken from rivals." }
+        var line = "\(coinCount(pendingTokens))"
+        if Set(pendingStreets).count == 1, !pendingStreets[0].isEmpty { line += " on \(pendingStreets[0])" }
+        line += "."
+        if pendingStolen > 0 { line += pendingStolen == pendingTokens ? " All stolen from rivals." : " \(pendingStolen) stolen from rivals." }
         say(line)
     }
 
-    func split(index: Int, miles: Bool, paceSecondsPerUnit: Double, streets: Int) {
+    func split(index: Int, miles: Bool, paceSecondsPerUnit: Double, coins: Int) {
         guard enabled, splits else { return }
         let unit = miles ? (index == 1 ? "mile" : "miles") : (index == 1 ? "kilometre" : "kilometres")
         var line = "\(index) \(unit)."
@@ -61,7 +62,7 @@ final class RunVoice {
             let m = Int(paceSecondsPerUnit) / 60, s = Int(paceSecondsPerUnit) % 60
             line += " Pace \(m) \(s == 0 ? "flat" : String(format: "%02d", s))."
         }
-        if streets > 0 { line += " \(streets) street\(streets == 1 ? "" : "s") so far." }
+        if coins > 0 { line += " \(coinCount(coins)) so far." }
         say(line)
     }
 

@@ -150,23 +150,9 @@ struct ClubTests {
     }
 }
 
-@Suite("Health import prompt") @MainActor
-struct HealthPromptTests {
-    @Test func decliningRemembersTheRunsSoTheyAreNotOfferedAgain() async {
-        let model = AppModel()
-        let w = HealthService.WorkoutSummary(id: UUID(), start: .now.addingTimeInterval(-3600), end: .now.addingTimeInterval(-1800),
-                                             distance: 5000, source: "Workout")
-        model.healthPrompt = .init(runs: [w])
-        await model.answerHealthPrompt(importing: false)
-        #expect(model.healthPrompt == nil)
-        #expect(model.profile.healthOffered.contains(w.id))
-        model.profile.healthOffered.removeAll { $0 == w.id }
-    }
-}
-
 @Suite("Under attack banner") @MainActor
 struct AttackBannerTests {
-    @Test func reportsStreetsLostSinceLastSeen() {
+    @Test func reportsCoinsLostSinceLastSeen() {
         let model = AppModel()
         let saved = (model.profile, model.state.events)
         defer { model.profile = saved.0; model.replaceEventsForTesting(saved.1); model.attackReport = nil }
@@ -174,12 +160,13 @@ struct AttackBannerTests {
         model.profile.attacksSeenAt = Date().addingTimeInterval(-3600)
         model.replaceEventsForTesting([
             GameEvent(date: .now.addingTimeInterval(-7200), kind: .lost, actor: nil, segmentIDs: ["old"], message: "old"),
-            GameEvent(date: .now.addingTimeInterval(-60), kind: .lost, actor: nil, segmentIDs: ["a", "b"], message: "x"),
-            GameEvent(date: .now.addingTimeInterval(-30), kind: .ghostRaid, actor: nil, segmentIDs: ["b", "c"], message: "y"),
+            GameEvent(date: .now.addingTimeInterval(-60), kind: .lost, actor: nil, segmentIDs: ["a#0", "a#1"], message: "x"),
+            GameEvent(date: .now.addingTimeInterval(-30), kind: .ghostRaid, actor: nil, segmentIDs: ["a#1", "c#4"], message: "y"),
             GameEvent(date: .now.addingTimeInterval(-10), kind: .captured, actor: nil, segmentIDs: ["d"], message: "z"),
         ])
         model.checkForAttacks()
-        #expect(model.attackReport?.streets == 3, "a, b, c: distinct, recent, losses only")
+        #expect(model.attackReport?.coins == 3, "a#0, a#1, c#4: distinct, recent, losses only")
+        #expect(model.attackReport?.message.contains("3 of your coins") == true)
         model.dismissAttacks(showMe: false)
         #expect(model.attackReport == nil)
         model.checkForAttacks()

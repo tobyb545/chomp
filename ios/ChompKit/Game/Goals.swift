@@ -26,12 +26,12 @@ public struct WeeklyGoal: Sendable, Hashable, Identifiable {
 
     public var title: String {
         switch kind {
-        case .streets: "Capture \(target) streets"
-        case .tokens: "Eat \(target.formatted()) tokens"
+        case .streets: "Collect coins on \(target) runs"
+        case .tokens: "Collect \(target.formatted()) coins"
         case .days: "Run on \(target) different days"
         case .distance: "Run \(target) km"
-        case .steal: "Take \(target) streets from rivals"
-        case .pellets: target == 1 ? "Grab a power pellet" : "Grab \(target) power pellets"
+        case .steal: "Steal \(target) coins from rivals"
+        case .pellets: target == 1 ? "Reach a power-up" : "Reach \(target) power-ups"
         case .blocks: target == 1 ? "Win a block" : "Win \(target) blocks"
         }
     }
@@ -68,13 +68,14 @@ public enum Goals {
 
     private static let options: [WeeklyGoal.Kind: [Int]] = [
         .streets: [12, 20, 30], .tokens: [300, 600, 1000], .days: [3, 4, 5], .distance: [10, 15, 20],
-        .steal: [3, 5, 8], .pellets: [1, 2], .blocks: [1, 2],
+        .steal: [10, 25, 50], .pellets: [1, 2], .blocks: [1, 2],
     ]
 
     /// This week's three goals with progress from `runs`.
     public static func weekly(runs: [RunFacts], now: Date) -> [WeeklyGoal] {
         var rng = SeededRandom(string: "goals|\(weekKey(now))")
-        var kinds = WeeklyGoal.Kind.allCases.filter { $0 != .blocks }  // capture areas are off for now
+        // Coins only: no street-count goals, and capture areas are off for now.
+        var kinds = WeeklyGoal.Kind.allCases.filter { $0 != .blocks && $0 != .streets }
         var picked: [WeeklyGoal] = []
         for _ in 0..<3 {
             let k = kinds.remove(at: rng.int(kinds.count))

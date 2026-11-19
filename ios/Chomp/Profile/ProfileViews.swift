@@ -29,9 +29,6 @@ struct ProfileView: View {
                     Text("Badges · \(model.profile.badgesEarned.count) of \(model.badges.count)")
                 }
                 Section("Runs") {
-                    NavigationLink { HealthImportView() } label: {
-                        Label("Add a run from Apple Health", systemImage: "heart.text.square.fill")
-                    }
                     if model.runs.isEmpty { Text("No runs yet").foregroundStyle(Theme.textSecondary) }
                     ForEach(model.runs.prefix(50)) { r in
                         Button { model.presentedSummary = r } label: { RunRow(record: r) }.buttonStyle(.plain)
@@ -64,8 +61,8 @@ struct RunRow: View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text(record.startedAt.formatted(date: .abbreviated, time: .shortened)).font(.body.weight(.semibold))
-                Text("\(formatDistance(record.distance, miles: model.profile.useMiles)) · \(record.outcome.gained.count) streets"
-                     + (record.source == .healthImport ? " · imported" : "") + (record.simulated ? " · simulated" : ""))
+                Text("\(formatDistance(record.distance, miles: model.profile.useMiles)) · \(coinCount(record.tokens ?? record.outcome.coins))"
+                     + (record.source == .live ? "" : record.source == .stravaImport ? " · Strava" : " · imported") + (record.simulated ? " · simulated" : ""))
                     .font(.caption).foregroundStyle(Theme.textSecondary)
             }
             Spacer()
@@ -85,15 +82,13 @@ struct StatsSection: View {
         let totalKm = live.reduce(0) { $0 + $1.distance } / 1000
         Group {
             LabeledContent("Coins collected", value: model.state.tokens(of: model.state.me).formatted())
-            LabeledContent("Streets held", value: "\(model.streetsHeldEverywhere)")
-            LabeledContent("Held around \(model.placeName)", value: p.heldFraction.percentString)
-            LabeledContent("Explored around \(model.placeName)", value: p.exploredFraction.percentString)
+            LabeledContent("Coins held around \(model.placeName)", value: "\(p.coinsHeld.formatted()) (\(p.heldFraction.percentString))")
             if model.rules.blocks.isEnabled { LabeledContent("Blocks held", value: "\(p.blocksHeld)") }
             if model.pro.isPro {
                 LabeledContent("Distance run", value: String(format: "%.1f km", totalKm))
-                LabeledContent("Streets stolen back", value: "\(model.runs.reduce(0) { $0 + $1.outcome.stolen.count })")
+                LabeledContent("Coins stolen", value: "\(model.runs.reduce(0) { $0 + $1.outcome.coinsStolen }.formatted())")
                 LabeledContent("Power-ups", value: "\(model.state.collectedPellets.count)")
-                LabeledContent("Most-run street", value: mostRun ?? "–")
+                LabeledContent("Favourite road", value: mostRun ?? "–")
                 Toggle("Heatmap on the map", isOn: Bindable(model).heatmapOn)
             } else {
                 Button { paywall = true } label: {
@@ -175,7 +170,7 @@ struct SettingsView: View {
                     }
                 NavigationLink("Privacy zones (\(model.profile.privacyZones.count))") { PrivacyZonesView() }
             } header: { Text("Privacy") } footer: {
-                Text("Private mode keeps every run on this phone: nothing is uploaded and no one else sees your streets. Privacy zones hide where your runs start and end, even from you on shared images.")
+                Text("Private mode keeps every run on this phone: nothing is uploaded and no one else sees your coins. Privacy zones hide where your runs start and end, even from you on shared images.")
             }
 
             Section {
@@ -194,7 +189,7 @@ struct SettingsView: View {
                     Toggle("Include \(model.profile.useMiles ? "mile" : "kilometre") splits", isOn: $model.profile.voiceSplits)
                 }
             } header: { Text("During a run") } footer: {
-                Text("Chomp tells you when you capture or steal a street, when a frenzy starts and ends, and your pace each \(model.profile.useMiles ? "mile" : "kilometre"). Music is turned down while it speaks.")
+                Text("Chomp tells you the coins you collect and steal, when a frenzy starts and ends, and your pace each \(model.profile.useMiles ? "mile" : "kilometre"). Music is turned down while it speaks.")
             }
 
             Section {
@@ -221,17 +216,7 @@ struct SettingsView: View {
             }
 
             Section {
-                NavigationLink("Add a run from Apple Health") { HealthImportView() }
-                Button(importing ? "Importing…" : "Import a year of Health runs (exploration)") {
-                    Task {
-                        importing = true
-                        let n = await model.importHealthHistory()
-                        importResult = n == 0 ? "No new runs with routes found." : "Imported \(n) run\(n == 1 ? "" : "s")."
-                        importing = false
-                    }
-                }.disabled(importing)
-                Button(importing ? "Importing…" : "Import from Strava (Pro)") {
-                    guard model.pro.isPro else { paywall = true; return }
+                Button(importing ? "Importing…" : "Import runs from Strava") {
                     Task {
                         importing = true
                         importResult = await StravaImport.run(model: model, webAuth: webAuth)
@@ -240,7 +225,7 @@ struct SettingsView: View {
                 }.disabled(importing)
                 if let importResult { Text(importResult).font(.footnote).foregroundStyle(Theme.textSecondary) }
             } header: { Text("History") } footer: {
-                Text("A single run added from Health within 7 days of running it captures streets like any other run, unless someone has run them since. A year of history and Strava imports only count towards streets you've explored, so they can't steal anyone's streets.")
+                Text("Forgot to start Chomp? Strava runs from the last \(Int(model.rules.imports.captureWindowHours / 24)) days collect coins like any other run. Older runs go into your history and can't collect or steal coins.")
             }
 
             Section {
@@ -258,7 +243,7 @@ struct SettingsView: View {
                                 }
                             }
                         } message: {
-                            Text("Your runner name, runs, streets and club memberships are removed from our servers. Runs on this phone stay. This can't be undone.")
+                            Text("Your runner name, runs, coins and club memberships are removed from our servers. Runs on this phone stay. This can't be undone.")
                         }
                 } else {
                     AccountSignInView(name: model.displayName, colorHex: model.profile.colorHex)
@@ -296,7 +281,7 @@ struct SettingsView: View {
             .sheet(isPresented: $paywall) { PaywallView() }
         .confirmationDialog("Reset everything?", isPresented: $confirmReset, titleVisibility: .visible) {
             Button("Reset", role: .destructive) { Task { await model.resetAllData() } }
-        } message: { Text("Deletes your streets, runs and settings from this phone.") }
+        } message: { Text("Deletes your coins, runs and settings from this phone.") }
         .onAppear { customColour = Color(hex: model.profile.colorHex) }
     }
 }
@@ -320,7 +305,7 @@ struct PrivacyZonesView: View {
                 }
                 .onDelete { model.profile.privacyZones.remove(atOffsets: $0) }
             } header: { Text("Zones") } footer: {
-                Text("Runs that start or end inside a zone are trimmed on this phone before anything is saved or uploaded. Zone centres are deliberately shifted a little so their edge can't pinpoint your door. Streets inside a zone can only be captured by running through it, not by starting or finishing there.")
+                Text("Runs that start or end inside a zone are trimmed on this phone before anything is saved or uploaded. Zone centres are deliberately shifted a little so their edge can't pinpoint your door. Coins inside a zone can only be collected by running through it, not by starting or finishing there.")
             }
             if !suggestions.isEmpty {
                 Section("Suggested") {
@@ -364,7 +349,8 @@ extension AppModel {
 
 enum StravaImport {
     /// Strava OAuth in the app; the code goes to the strava-import Edge Function,
-    /// which holds the client secret, imports runs and returns a summary.
+    /// which holds the client secret. Older runs are added there as history;
+    /// recent ones come back and are added here like any run, so they collect coins.
     @MainActor
     static func run(model: AppModel, webAuth: WebAuthenticationSession) async -> String {
         let backend = model.backend
@@ -386,8 +372,22 @@ enum StravaImport {
             let r = try await backend.importStrava(code: code)
             UserDefaults.standard.set(true, forKey: "stravaConnected")
             await model.mergeServerCoverage()
-            if r.imported == 0 { return "No new Strava runs to import." }
-            return "Imported \(r.imported) Strava run\(r.imported == 1 ? "" : "s"), \(r.streets) streets explored." + (r.more ? " Tap again for more." : "")
+            var added = 0, coins = 0
+            for run in (r.recent ?? []).sorted(by: { $0.start < $1.start }) {
+                let trace = run.points.compactMap { p -> TracePoint? in
+                    guard p.count >= 3 else { return nil }
+                    return TracePoint(coordinate: Coordinate(latitude: p[0], longitude: p[1]), timestamp: Date(timeIntervalSince1970: p[2]),
+                                      horizontalAccuracy: 10, speed: -1, altitude: 0)
+                }
+                if let n = await model.importStravaRun(start: Date(timeIntervalSince1970: run.start), end: Date(timeIntervalSince1970: run.end), trace: trace) {
+                    added += 1; coins += n
+                }
+            }
+            var parts: [String] = []
+            if added > 0 { parts.append("Added \(added) recent run\(added == 1 ? "" : "s"): \(coinCount(coins)) collected.") }
+            if r.imported > 0 { parts.append("\(r.imported) older run\(r.imported == 1 ? "" : "s") added to your history.") }
+            if parts.isEmpty { return "No new Strava runs to import." }
+            return parts.joined(separator: " ") + (r.more ? " Tap again for more." : "")
         } catch let e as ASWebAuthenticationSessionError where e.code == .canceledLogin {
             return "Strava import cancelled."
         } catch {

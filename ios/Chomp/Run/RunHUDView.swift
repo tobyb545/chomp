@@ -27,8 +27,8 @@ struct RunHUDView: View {
                         HStack {
                             StatTile(value: formatDistance(run.distance, miles: model.profile.useMiles), label: "Distance")
                             StatTile(value: RunMath.formatPace(run.paceSecondsPerKm), label: "Pace /km")
-                            StatTile(value: "\(run.streetsCaptured)", label: "Streets", tint: Color(hex: model.profile.colorHex))
                             StatTile(value: "\(run.pelletsEaten)", label: "Coins", tint: Theme.pellet)
+                            StatTile(value: "\(run.coinsStolen)", label: "Stolen", tint: Color(hex: model.profile.colorHex))
                         }
                         if run.isFrenzy, let end = run.frenzyEndsAt {
                             HStack {
@@ -42,10 +42,10 @@ struct RunHUDView: View {
                             .padding(10)
                             .background(Theme.power, in: RoundedRectangle(cornerRadius: 14))
                             .accessibilityElement(children: .combine)
-                            .accessibilityLabel("Frenzy active. Rival streets flip instantly.")
+                            .accessibilityLabel("Frenzy active. Rivals' coins are easier to steal.")
                         }
                         if let last = run.lastEatenName {
-                            Text("Ate \(last)\(run.streetsStolen > 0 ? " · \(run.streetsStolen) stolen back" : "")")
+                            Text(last.isEmpty ? "Collecting coins" : "Coins on \(last)")
                                 .font(.footnote.weight(.semibold)).foregroundStyle(Theme.hudSecondary)
                                 .lineLimit(1)
                         }

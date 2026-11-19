@@ -80,7 +80,7 @@ public struct GhostSimulator: Sendable {
                 let ghost = state.ghosts[g]
                 let names = stolen.compactMap { engine.area.segment($0)?.name }.filter { !$0.isEmpty }
                 let street = Dictionary(grouping: names, by: { $0 }).max { $0.value.count < $1.value.count }?.key
-                let msg = "\(ghost.name) took \(stolen.count) of your street\(stolen.count == 1 ? "" : "s")" + (street.map { " on \($0)" } ?? "")
+                let msg = "\(ghost.name) took some of your coins" + (street.map { " on \($0)" } ?? "")
                 let e = GameEvent(date: now, kind: .ghostRaid, actor: .ghost(ghost.id), segmentIDs: stolen, message: msg)
                 state.log(e)
                 events.append(e)

@@ -65,11 +65,10 @@ final class AppModel {
     var showInvite = false
     /// Set when a practice run ends, to show what would have happened.
     var practiceResult: PracticeResult?
-    struct PracticeResult: Identifiable { let id = UUID(); let coins: Int; let streets: Int }
+    struct PracticeResult: Identifiable { let id = UUID(); let coins: Int }
     /// Onboarding asked for a practice run once the map is ready.
     var wantsPractice = false
     /// New runs found in Apple Health on launch, waiting for the player to say yes or no.
-    var healthPrompt: HealthPrompt?
     private var lastHealthCheck: Date?
     var focusRequest: Coordinate?
     var toast: String?
@@ -246,6 +245,8 @@ final class AppModel {
     // MARK: Lifecycle
 
     func bootstrap() async {
+        // A run never survives the app closing, so any lock-screen activity is left over.
+        LiveActivityController.shared.endAll()
         if let saved = await LocalStore.shared.loadState(area: Self.worldSlug) {
             state = saved
         } else if var legacy = await LocalStore.shared.loadState(area: "west-byfleet") {
@@ -341,7 +342,6 @@ final class AppModel {
         NotificationService.cancelRaid()
         checkForAttacks()
         locationApproximate = LocationPermission.shared.problem == .approximate
-        Task { await checkForNewHealthRuns() }
         if case .failed = worldStatus, let f = savedFocus { focusWorld(on: f, force: true) }
         refreshDay()
         tickWorld()
@@ -402,7 +402,7 @@ final class AppModel {
         NotificationService.scheduleRaid(message: first.message, at: at)
         let fading = Set(state.ownership.filter {
             $0.value.owner == state.me && $0.value.strength(at: .now.addingTimeInterval(3 * 86_400), decay: rules.decayInterval) <= 0
-        }.map { Coins.segment(of: $0.key) }).count
+        }.map(\.key)).count
         NotificationService.fadeWarning(count: fading, at: Calendar.current.date(bySettingHour: 18, minute: 0, second: 0, of: .now.addingTimeInterval(86_400)) ?? at)
     }
 
@@ -618,7 +618,7 @@ final class AppModel {
             !r.simulated
             #endif
         }.map { r in
-            RunFacts(date: r.startedAt, distance: r.distance, streets: r.outcome.gained.count, stolen: r.outcome.stolen.count,
+            RunFacts(date: r.startedAt, distance: r.distance, streets: r.outcome.gained.count, stolen: r.outcome.coinsStolen,
                      tokens: r.tokens ?? r.outcome.gained.count * 8, pellets: r.outcome.pelletsCollected.count,
                      blocks: r.outcome.blocksCompleted.count)
         }
@@ -646,7 +646,7 @@ final class AppModel {
         guard Goals.calendar.isDate(at, inSameDayAs: .now) else { return }
         let c = UNMutableNotificationContent()
         c.title = "Keep your \(s.current)-day streak"
-        c.body = "A short run today keeps it going. Even one street counts."
+        c.body = "A short run today keeps it going. Even one coin counts."
         c.sound = .default
         let comps = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: at)
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: id, content: c,
@@ -656,14 +656,14 @@ final class AppModel {
     enum RouteGoal: String, CaseIterable, Identifiable {
         case capture, defend, explore
         var id: String { rawValue }
-        /// "Save fading" only makes sense while streets fade.
+        /// "Save fading" only makes sense while coins fade.
         static var allCases: [RouteGoal] { RulesConfig.bundled.decay.isEnabled ? [.capture, .defend, .explore] : [.capture, .explore] }
-        var label: String { switch self { case .capture: "Grab streets"; case .defend: "Save fading"; case .explore: "Explore" } }
+        var label: String { switch self { case .capture: "Grab coins"; case .defend: "Save fading"; case .explore: "Explore" } }
         var detail: String {
             switch self {
-            case .capture: "Neutral streets and rivals' streets to take."
-            case .defend: "Your streets that are fading, before they turn neutral."
-            case .explore: "Streets you've never run."
+            case .capture: "Silver coins, and rivals' coins to steal."
+            case .defend: "Your coins that are fading, before they turn silver."
+            case .explore: "Places you've never run."
             }
         }
     }
@@ -846,14 +846,16 @@ final class AppModel {
 
     // MARK: Apple Health
 
-    /// Streets rivals or bots took while you were away.
+    /// Coins rivals took while you were away.
     struct AttackReport: Equatable {
-        let streets: Int
+        /// 0 when the losses can't be counted coin by coin.
+        let coins: Int
         let by: [String]
         let focus: Coordinate?
         var message: String {
             let who = by.count == 1 ? by[0] : by.count == 2 ? "\(by[0]) and \(by[1])" : "\(by[0]) and \(by.count - 1) others"
-            return "\(who) took \(streets) of your street\(streets == 1 ? "" : "s") while you were away"
+            let what = coins == 0 ? "some of your coins" : coins == 1 ? "one of your coins" : "\(coins) of your coins"
+            return "\(who) took \(what) while you were away"
         }
     }
     var attackReport: AttackReport?
@@ -905,14 +907,15 @@ final class AppModel {
         guard let since = profile.attacksSeenAt else { profile.attacksSeenAt = .now; return }
         let hits = state.events.filter { ($0.kind == .lost || $0.kind == .ghostRaid) && $0.date > since
             && !($0.actor.map { profile.mutedPlayers.contains($0.id) } ?? false) }
-        let streets = Set(hits.flatMap(\.segmentIDs)).count
-        guard streets > 0 else { attackReport = nil; return }
+        let ids = Set(hits.flatMap(\.segmentIDs))
+        guard !ids.isEmpty else { attackReport = nil; return }
+        let coins = ids.filter { Coins.index(of: $0) != nil }.count
         var names: [String] = []
         for e in hits.sorted(by: { $0.date > $1.date }) {
             if let a = e.actor { let n = ownerName(a); if !names.contains(n) { names.append(n) } }
         }
         let focus = hits.max { $0.date < $1.date }?.segmentIDs.first.flatMap { area.segment($0)?.midpoint }
-        attackReport = AttackReport(streets: streets, by: names.isEmpty ? ["Rivals"] : names, focus: focus)
+        attackReport = AttackReport(coins: coins, by: names.isEmpty ? ["Rivals"] : names, focus: focus)
     }
 
     #if DEBUG
@@ -925,97 +928,18 @@ final class AppModel {
         profile.attacksSeenAt = .now
     }
 
-    struct HealthPrompt: Identifiable {
-        let id = UUID()
-        let runs: [HealthService.WorkoutSummary]
-    }
-
-    /// On launch: offers runs recorded by another app since you last opened Chomp,
-    /// while they can still capture coins. Each run is only offered once.
-    func checkForNewHealthRuns() async {
-        guard profile.onboarded, profile.seenIntro, run.phase == .idle, healthPrompt == nil, presentedSummary == nil else { return }
-        if let last = lastHealthCheck, Date().timeIntervalSince(last) < 600 { return }
-        lastHealthCheck = .now
-        guard await HealthService.shared.hasBeenAsked() else { return }
-        let since = Date().addingTimeInterval(-rules.imports.captureWindowHours * 3600)
-        let offered = Set(profile.healthOffered)
-        let fresh = await HealthService.shared.recentRuns(since: since).filter { w in
-            w.hasRoute && !offered.contains(w.id) && !runs.contains { abs($0.startedAt.timeIntervalSince(w.start)) < 120 }
-        }
-        guard !fresh.isEmpty else { return }
-        healthPrompt = HealthPrompt(runs: fresh.sorted { $0.start < $1.start })
-    }
-
-    /// The player answered the prompt. Either way these runs aren't offered again.
-    func answerHealthPrompt(importing: Bool) async {
-        guard let prompt = healthPrompt else { return }
-        healthPrompt = nil
-        profile.healthOffered = Array((profile.healthOffered + prompt.runs.map(\.id)).suffix(300))
-        guard importing else { return }
-        var coins = 0, added = 0
-        for w in prompt.runs {
-            presentedSummary = nil
-            _ = await importHealthRun(w)
-            if let r = presentedSummary, abs(r.startedAt.timeIntervalSince(w.start)) < 120 {
-                added += 1
-                coins += tokens(of: r.outcome, in: area)
-            }
-        }
-        toast = added == 0 ? "No streets Chomp knows about on \(prompt.runs.count == 1 ? "that run" : "those runs")"
-            : "Added \(added) run\(added == 1 ? "" : "s"): \(coins) coin\(coins == 1 ? "" : "s") collected"
-    }
-
-    /// Runs in Health that Chomp hasn't seen yet (recorded by another app or watch).
-    func healthRunsToImport() async -> [HealthService.WorkoutSummary] {
-        guard await HealthService.shared.requestAuthorization() else { return [] }
-        let since = Date().addingTimeInterval(-60 * 86_400)
-        return await HealthService.shared.recentRuns(since: since).filter { w in
-            !runs.contains { abs($0.startedAt.timeIntervalSince(w.start)) < 120 }
-        }
-    }
-
-    /// Why a Health run can't be added. Garmin Connect and Strava usually save
-    /// runs to Health without the GPS route.
-    static func noRouteMessage(source: String) -> String {
-        "\(source) saved that run to Apple Health without its GPS route, so there are no streets to add. Record runs with Chomp, or import them with Strava instead."
-    }
-
-    /// Whether an imported run this old still captures streets.
+    /// Whether an imported run this old still collects coins.
     func importCaptures(endedAt: Date) -> Bool {
         Date().timeIntervalSince(endedAt) <= rules.imports.captureWindowHours * 3600
     }
 
-    /// Adds one run from Health as if it had been recorded in Chomp. Recent runs
-    /// capture streets (within the import window); older ones count as exploration.
-    func importHealthRun(_ w: HealthService.WorkoutSummary) async -> String {
-        let raw = await HealthService.shared.trace(for: w.id)
-        guard raw.count > 10 else { return Self.noRouteMessage(source: w.source) }
-        var signals = RunSignals()
-        signals.heartRate = await HealthService.shared.heartRate(from: w.start, to: w.end)
-        let counts = importCaptures(endedAt: w.end)
-        guard let record = await resolve(id: UUID(), raw: raw, signals: signals, startedAt: w.start, endedAt: w.end,
-                                         source: .healthImport, isImport: !counts, simulated: false) else {
-            return "None of that run was on streets Chomp knows about."
-        }
-        presentedSummary = record
-        if let end = raw.last?.coordinate { focusRequest = end; focusWorld(on: end) }
-        if !counts { return "Added for exploration. Runs older than \(Int(rules.imports.captureWindowHours / 24)) days can't capture streets." }
-        let n = record.outcome.gained.count
-        return n == 0 ? "Run added. No new streets this time." : "Run added: \(n) street\(n == 1 ? "" : "s") captured."
-    }
-
-    /// Imports past HealthKit runs as personal exploration only.
-    func importHealthHistory() async -> Int {
-        guard await HealthService.shared.requestAuthorization() else { return 0 }
-        let past = await HealthService.shared.pastRuns(since: .now.addingTimeInterval(-365 * 86_400))
-        var imported = 0
-        for r in past where !runs.contains(where: { abs($0.startedAt.timeIntervalSince(r.start)) < 120 }) {
-            if await resolve(id: UUID(), raw: r.trace, signals: RunSignals(), startedAt: r.start, endedAt: r.end,
-                             source: .healthImport, isImport: true, simulated: false, upload: false) != nil {
-                imported += 1
-            }
-        }
-        return imported
+    /// A recent Strava run, added as if Chomp had recorded it, so it collects
+    /// coins. Returns the coins collected, or nil if it was skipped.
+    func importStravaRun(start: Date, end: Date, trace raw: [TracePoint]) async -> Int? {
+        guard raw.count > 10, !runs.contains(where: { abs($0.startedAt.timeIntervalSince(start)) < 120 }) else { return nil }
+        guard let record = await resolve(id: UUID(), raw: raw, signals: RunSignals(), startedAt: start, endedAt: end,
+                                         source: .stravaImport, isImport: !importCaptures(endedAt: end), simulated: false) else { return nil }
+        return record.tokens ?? record.outcome.coins
     }
 
     func leaderboard(scope: LeaderboardScope) async throws -> [LeaderboardEntry] {
@@ -1053,14 +977,14 @@ final class AppModel {
         let p = progress
         let recentRaids = state.events.filter { $0.kind == .ghostRaid && $0.date > .now.addingTimeInterval(-48 * 3600) }
         let attacks = recentRaids.prefix(3).map { e in
-            WidgetSnapshot.Attack(street: e.segmentIDs.compactMap { area.segment($0)?.name }.first { !$0.isEmpty } ?? "your streets",
+            WidgetSnapshot.Attack(street: e.segmentIDs.compactMap { area.segment(Coins.segment(of: $0))?.name }.first { !$0.isEmpty } ?? "near you",
                                   by: e.actor.map(ownerName) ?? "A rival")
         }
         let fading = Set(state.ownership.filter {
             $0.value.owner == state.me && $0.value.strength(at: .now, decay: rules.decayInterval) < 0.2
-        }.map { Coins.segment(of: $0.key) }).count
+        }.map(\.key)).count
         WidgetBridge.publish(WidgetSnapshot(
-            townName: placeName, playerColorHex: profile.colorHex, streetsHeld: streetsHeldEverywhere, kmHeld: p.heldMetres / 1000,
+            townName: placeName, playerColorHex: profile.colorHex, coinsHeld: state.tokens(of: state.me), kmHeld: p.heldMetres / 1000,
             townPercent: p.heldFraction, blocksHeld: p.blocksHeld, underAttack: Array(attacks), fadingSoon: fading,
             pellets: pellets.map { .init(name: $0.landmark.name, kind: $0.landmark.kind, collected: state.collectedPellets[$0.id] != nil) },
             bonusLabels: activeBonus.map { $0.label() }, updatedAt: .now))
@@ -1069,7 +993,7 @@ final class AppModel {
     func mirrorToWatch() {
         var payload: [String: Any] = [
             WatchMessage.running: run.phase == .running || run.phase == .paused,
-            WatchMessage.streets: run.phase == .idle ? progress.heldSegments : run.streetsCaptured,
+            WatchMessage.streets: run.phase == .idle ? state.tokens(of: state.me) : run.coinsStolen,
             WatchMessage.pellets: run.pelletsEaten,
             WatchMessage.distance: run.distance,
             WatchMessage.frenzyEndsAt: run.frenzyEndsAt?.timeIntervalSince1970 ?? 0,

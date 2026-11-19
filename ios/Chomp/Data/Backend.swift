@@ -93,6 +93,7 @@ struct Friend: Identifiable, Hashable, Codable {
     var id: String
     var name: String
     var colorHex: String
+    /// Coins they hold.
     var streets: Int
 }
 
@@ -406,7 +407,19 @@ final class SupabaseBackend: @unchecked Sendable {
         try await client.from("user_relations").upsert(Row(user_id: userID, target_id: player, kind: mute ? "mute" : "block")).execute()
     }
 
-    struct StravaImportResult: Decodable { let imported: Int; let streets: Int; let more: Bool }
+    struct StravaImportResult: Decodable {
+        /// Older runs the server added as history.
+        let imported: Int
+        let more: Bool
+        /// Runs from the last few days, for the app to add as normal runs so they collect coins.
+        let recent: [RecentRun]?
+        struct RecentRun: Decodable {
+            let start: Double
+            let end: Double
+            /// [lat, lon, unix time] per point.
+            let points: [[Double]]
+        }
+    }
 
     func importStrava(code: String?) async throws -> StravaImportResult {
         guard let client else { throw BackendError.notConfigured }

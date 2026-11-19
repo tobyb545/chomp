@@ -80,13 +80,13 @@ Deno.serve(async (req) => {
         ? walkGhost(area, rules, g, steps, now - elapsed, now, ownership, `walk|${g.id}|${Math.trunc(last)}`)
         : { writes: new Map<string, Ownership>(), raids: [], cursor: g.cursorNode };
 
-      // One notification per raided player, naming the street they lost most of.
+      // One notification per raided player, naming the road where they lost the most coins.
       const byUser = new Map<string, string[]>();
       for (const r of result.raids) byUser.set(r.from.id, [...(byUser.get(r.from.id) ?? []), r.segmentID]);
       const raids = [...byUser].map(([user, segs]) => {
         const names = segs.map((s) => area.segment(s)?.name).filter((x): x is string => !!x);
         const top = names.sort((a, b) => names.filter((x) => x === b).length - names.filter((x) => x === a).length)[0];
-        return { user, message: `${g.name} took ${segs.length} of your street${segs.length === 1 ? "" : "s"}${top ? ` on ${top}` : ""}` };
+        return { user, message: `${g.name} took some of your coins${top ? ` on ${top}` : ""}` };
       });
 
       const tileOf = (id: string) => { const s = area.segment(coinSegment(id)); return s ? area.segmentTile[s.index] : null; };

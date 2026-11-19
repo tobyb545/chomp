@@ -3,7 +3,7 @@ import Foundation
 
 struct StartRunIntent: AppIntent {
     static let title: LocalizedStringResource = "Start a Chomp run"
-    static let description = IntentDescription("Starts recording a run so you can collect coins and claim streets.")
+    static let description = IntentDescription("Starts recording a run so you can collect coins.")
     static let openAppWhenRun = true
 
     @MainActor
@@ -25,12 +25,12 @@ struct FinishRunIntent: AppIntent {
 }
 
 struct StreetsHeldIntent: AppIntent {
-    static let title: LocalizedStringResource = "How many streets do I hold?"
+    static let title: LocalizedStringResource = "How many coins do I have?"
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
         guard let s = WidgetSnapshot.load() else { return .result(dialog: "Go for a run first!") }
-        let attack = s.underAttack.first.map { " \($0.by) has been eating your streets on \($0.street)." } ?? ""
-        return .result(dialog: "You hold \(s.streetsHeld) streets in \(s.townName), \(Int(s.townPercent * 100)) percent of the streets nearby.\(attack)")
+        let attack = s.underAttack.first.map { " \($0.by) has been taking your coins on \($0.street)." } ?? ""
+        return .result(dialog: "You've collected \(s.coinsHeld) coins, and you hold \(Int(s.townPercent * 100)) percent of the coins around \(s.townName).\(attack)")
     }
 }
 
@@ -40,7 +40,7 @@ struct ChompShortcuts: AppShortcutsProvider {
                     shortTitle: "Start run", systemImageName: "figure.run")
         AppShortcut(intent: FinishRunIntent(), phrases: ["Finish my \(.applicationName) run"],
                     shortTitle: "Finish run", systemImageName: "stop.circle")
-        AppShortcut(intent: StreetsHeldIntent(), phrases: ["How many streets do I hold in \(.applicationName)"],
-                    shortTitle: "Streets held", systemImageName: "map")
+        AppShortcut(intent: StreetsHeldIntent(), phrases: ["How many coins do I have in \(.applicationName)"],
+                    shortTitle: "My coins", systemImageName: "circle.grid.cross.fill")
     }
 }

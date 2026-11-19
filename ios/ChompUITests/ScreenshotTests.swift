@@ -31,8 +31,8 @@ final class ScreenshotTests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.buttons["START RUN"].waitForExistence(timeout: 60))
         // Wait for the streets to download and the demo week to be played (fresh simulators are slow).
-        let loading = app.staticTexts["Loading the streets around you…"]
-        let noTokens = app.staticTexts.matching(NSPredicate(format: "label CONTAINS '· 0 tokens'")).firstMatch
+        let loading = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Loading the coins around you'")).firstMatch
+        let noTokens = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH '0 coins held'")).firstMatch
         for _ in 0..<60 where loading.exists || noTokens.exists { sleep(3) }
         sleep(8)  // coins settle
         save("01-map")
@@ -53,7 +53,7 @@ final class ScreenshotTests: XCTestCase {
         // Plan a loop that grabs coins, then run it.
         app.buttons["Plan a route"].firstMatch.tap()
         XCTAssertTrue(app.navigationBars["Plan a route"].waitForExistence(timeout: 5))
-        app.buttons["Grab streets"].tap()
+        app.buttons["Grab coins"].tap()
         app.collectionViews.buttons["Plan a route"].tap()
         let show = app.buttons["Show it on the map"]
         XCTAssertTrue(show.waitForExistence(timeout: 30))
@@ -87,8 +87,8 @@ final class ScreenshotTests: XCTestCase {
     func testReelFootage() {
         app.launch()
         XCTAssertTrue(app.buttons["START RUN"].waitForExistence(timeout: 60))
-        let loading = app.staticTexts["Loading the streets around you…"]
-        let noTokens = app.staticTexts.matching(NSPredicate(format: "label CONTAINS '· 0 tokens'")).firstMatch
+        let loading = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Loading the coins around you'")).firstMatch
+        let noTokens = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH '0 coins held'")).firstMatch
         for _ in 0..<60 where loading.exists || noTokens.exists { sleep(3) }
         sleep(6)
         mark("map")
@@ -175,11 +175,11 @@ final class ScreenshotTests: XCTestCase {
         app.segmentedControls.buttons["Clubs"].tap(); shot("t03-leader-clubs")
         done()
         tap(app.buttons["Activity"]); shot("t04-activity"); done()
-        tap(app.buttons["Streets"]); shot("t05-streets"); done()
+        tap(app.buttons["Coins nearby"]); shot("t05-streets"); done()
         let chip = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Run streak'")).firstMatch
         tap(chip); shot("t06-goals"); done()
         tap(app.buttons["Plan a route"].firstMatch); shot("t07-route-sheet")
-        app.buttons["Grab streets"].tap()
+        app.buttons["Grab coins"].tap()
         app.collectionViews.buttons["Plan a route"].tap()
         XCTAssertTrue(app.buttons["Show it on the map"].waitForExistence(timeout: 30)); shot("t07-route-planned")
         app.buttons["Show it on the map"].tap(); shot("t07-route-map")

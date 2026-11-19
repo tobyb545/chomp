@@ -14,9 +14,10 @@ final class LiveActivityController {
     private var activity: Activity<ChompRunAttributes>?
 
     func start(startedAt: Date, colorHex: String, town: String) {
+        endAll()  // never two on the lock screen
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
         let attrs = ChompRunAttributes(startedAt: startedAt, playerColorHex: colorHex, townName: town)
-        let state = ChompRunAttributes.ContentState(pelletsEaten: 0, streetsCaptured: 0, streetsStolen: 0, distanceMetres: 0, frenzyEndsAt: nil, isPaused: false)
+        let state = ChompRunAttributes.ContentState(pelletsEaten: 0, coinsStolen: 0, distanceMetres: 0, frenzyEndsAt: nil, isPaused: false)
         activity = try? Activity.request(attributes: attrs, content: .init(state: state, staleDate: nil))
     }
 
@@ -25,10 +26,18 @@ final class LiveActivityController {
         Task { await activity.update(.init(state: state, staleDate: Date().addingTimeInterval(120))) }
     }
 
+    /// The run is over: take it off the lock screen straight away.
     func end(_ state: ChompRunAttributes.ContentState) {
-        guard let activity else { return }
-        self.activity = nil
-        Task { await activity.end(.init(state: state, staleDate: nil), dismissalPolicy: .after(Date().addingTimeInterval(60 * 15))) }
+        activity = nil
+        endAll(state)
+    }
+
+    /// Ends every Chomp activity, including any left behind if the app was
+    /// closed mid-run. Called at launch when no run is going.
+    func endAll(_ state: ChompRunAttributes.ContentState? = nil) {
+        for a in Activity<ChompRunAttributes>.activities where a.id != activity?.id {
+            Task { await a.end(state.map { .init(state: $0, staleDate: nil) }, dismissalPolicy: .immediate) }
+        }
     }
 }
 
@@ -43,7 +52,7 @@ enum NotificationService {
     /// Schedules the next local raid message for exactly when it will happen.
     static func scheduleRaid(message: String, at date: Date) {
         let c = UNMutableNotificationContent()
-        c.title = "Your streets are under attack"
+        c.title = "Coins lost"
         c.body = message
         c.sound = .default
         c.threadIdentifier = "raids"
@@ -60,8 +69,8 @@ enum NotificationService {
     static func fadeWarning(count: Int, at date: Date) {
         guard count > 0 else { return }
         let c = UNMutableNotificationContent()
-        c.title = "Streets fading"
-        c.body = "\(count) of your streets fade back to neutral soon. A quick run keeps them yours."
+        c.title = "Coins fading"
+        c.body = "\(coinCount(count)) of yours fade back to silver soon. A quick run keeps them yours."
         let comps = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: date)
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "fade-warning", content: c,
                                                                       trigger: UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)))

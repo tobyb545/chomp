@@ -59,7 +59,16 @@ public struct RunOutcome: Codable, Hashable, Sendable {
     public var refreshed: [CaptureRecord] { captures.filter { $0.kind == .refreshed } }
     public var rejected: [CaptureRecord] { captures.filter { $0.kind == .rejected } }
     public var totalPoints: Int { points + blockBonus }
+    /// Coins collected (new and stolen). 0 for runs saved before coins.
+    public var coins: Int { gained.reduce(0) { $0 + ($1.tokens ?? 0) } }
+    /// Coins taken from rivals.
+    public var coinsStolen: Int { stolen.reduce(0) { $0 + ($1.tokens ?? 0) } }
+    /// Coins you already held and ran past again (kept fresh).
+    public var coinsKept: Int { refreshed.reduce(0) { $0 + ($1.tokens ?? $1.coins?.count ?? 0) } }
 }
+
+/// "1 coin", "12 coins".
+public func coinCount(_ n: Int) -> String { "\(n.formatted()) coin\(n == 1 ? "" : "s")" }
 
 /// Pure game rules. Given state + a matched, anti-cheat-checked run, decides
 /// every capture. The server's resolve-run function implements the same rules.
@@ -262,14 +271,14 @@ public struct GameEngine: Sendable {
         if !gained.isEmpty {
             state.log(GameEvent(date: run.endedAt, kind: .captured, actor: me, segmentIDs: gained.map(\.segmentID),
                                 points: gained.reduce(0) { $0 + $1.points },
-                                message: "You ate \(gained.count) new street\(gained.count == 1 ? "" : "s")"))
+                                message: "You collected \(coinCount(gained.reduce(0) { $0 + ($1.tokens ?? 0) }))"))
         }
         let stolen = records.filter { $0.kind == .stolen }
         for (owner, recs) in Dictionary(grouping: stolen, by: { $0.previousOwner }) {
             let who = owner.map { ownerName($0, state: state) } ?? "a rival"
             state.log(GameEvent(date: run.endedAt, kind: .stolen, actor: me, segmentIDs: recs.map(\.segmentID),
                                 points: recs.reduce(0) { $0 + $1.points },
-                                message: "You won back \(recs.count) street\(recs.count == 1 ? "" : "s") from \(who)"))
+                                message: "You stole \(coinCount(recs.reduce(0) { $0 + ($1.tokens ?? 0) })) from \(who)"))
         }
         if !newBlocks.isEmpty {
             state.log(GameEvent(date: run.endedAt, kind: .blockCompleted, actor: me, points: blockBonus,
@@ -278,7 +287,7 @@ public struct GameEngine: Sendable {
         let rejected = records.filter { $0.kind == .rejected && $0.reason != "Imported runs count for exploration only" }
         if !rejected.isEmpty {
             state.log(GameEvent(date: run.endedAt, kind: .runRejected, actor: me, segmentIDs: rejected.map(\.segmentID),
-                                message: "\(rejected.count) street\(rejected.count == 1 ? "" : "s") not counted: \(rejected[0].reason ?? "")"))
+                                message: "Some of this run didn't count: \(rejected[0].reason ?? "")"))
         }
 
         // Conquering: hold (practically) every street in a map tile.
@@ -303,14 +312,15 @@ public struct GameEngine: Sendable {
     @discardableResult
     public func sweepDecay(state: inout GameState, now: Date) -> Int {
         var faded = Set<SegmentID>()
+        var coins = 0
         for (id, o) in state.ownership where o.strength(at: now, decay: rules.decayInterval) <= 0 {
             state.ownership[id] = nil
-            if o.owner == state.me { faded.insert(Coins.segment(of: id)) }
+            if o.owner == state.me { faded.insert(Coins.segment(of: id)); coins += 1 }
         }
         state.lastDecaySweep = now
         if !faded.isEmpty {
             state.log(GameEvent(date: now, kind: .decayed, actor: nil, segmentIDs: faded.sorted(),
-                                message: "\(faded.count) of your street\(faded.count == 1 ? "" : "s") faded back to neutral"))
+                                message: "\(coinCount(coins)) of yours faded back to silver"))
         }
         return faded.count
     }
@@ -334,13 +344,15 @@ public struct GameEngine: Sendable {
         }.map(\.id)
     }
 
-    /// Streets count once you hold at least one coin on them; distance is
-    /// weighted by the share of coins held.
+    /// Coins held out of all the coins on the map. (Streets count once you hold
+    /// at least one coin on them; distance is weighted by the share of coins held.)
     public func progress(for owner: OwnerRef, state: GameState, now: Date) -> TownProgress {
         var held = 0
         var metres = 0.0
+        var coins = 0, total = 0
         for s in area.segments {
             let c = coinsHeld(s, by: owner, state: state, now: now)
+            coins += c.held; total += c.total
             guard c.held > 0 else { continue }
             held += 1
             metres += s.length * Double(c.held) / Double(c.total)
@@ -349,10 +361,10 @@ public struct GameEngine: Sendable {
             ? state.coverage.keys.reduce(0.0) { $0 + (area.segment($1)?.length ?? 0) }
             : metres
         return TownProgress(heldSegments: held, heldMetres: metres,
-                            heldFraction: area.totalLength > 0 ? metres / area.totalLength : 0,
+                            heldFraction: total > 0 ? Double(coins) / Double(total) : 0,
                             exploredFraction: area.totalLength > 0 ? explored / area.totalLength : 0,
                             blocksHeld: completedBlocks(for: owner, state: state, now: now).count,
-                            totalSegments: area.segments.count)
+                            totalSegments: area.segments.count, coinsHeld: coins, coinsTotal: total)
     }
 
     /// Share of a tile's street length the owner holds (by coins).
