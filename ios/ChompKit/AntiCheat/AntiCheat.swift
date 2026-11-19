@@ -70,8 +70,10 @@ public struct AntiCheatReport: Codable, Hashable, Sendable {
 }
 
 public enum AntiCheat {
+    /// `imported`: the trace came from a file or Strava, which don't record GPS
+    /// accuracy, so the synthetic-trace check (identical accuracy) can't apply.
     public static func evaluate(trace: [TracePoint], signals: RunSignals, rules: RulesConfig.AntiCheat,
-                                matching: RulesConfig.Matching) -> AntiCheatReport {
+                                matching: RulesConfig.Matching, imported: Bool = false) -> AntiCheatReport {
         var flags: [AntiCheatFlag] = []
         var excluded: [DateInterval] = []
         let pts = trace.filter { $0.horizontalAccuracy >= 0 && $0.horizontalAccuracy <= matching.maxAccuracyMetres }
@@ -145,7 +147,7 @@ public enum AntiCheat {
         let accs = Set(pts.map { ($0.horizontalAccuracy * 10).rounded() })
         let intervals = (1..<pts.count).map { pts[$0].timestamp.timeIntervalSince(pts[$0 - 1].timestamp) }
         let regular = intervals.count > 120 && intervals.allSatisfy { abs($0 - intervals[0]) < 0.001 }
-        if pts.count > 120, accs.count == 1, regular {
+        if !imported, pts.count > 120, accs.count == 1, regular {
             flags.append(.init(rule: "synthetic", severity: .high, detail: "identical accuracy and perfectly regular timestamps"))
         }
 

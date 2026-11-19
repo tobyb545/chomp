@@ -548,7 +548,8 @@ final class AppModel {
         let matcher = runArea === area ? self.matcher : MapMatcher(area: runArea, rules: rules.matching)
         let rules = self.rules
         let (match, report) = await Task.detached(priority: .userInitiated) {
-            (matcher.match(trace), AntiCheat.evaluate(trace: trace, signals: signals, rules: rules.antiCheat, matching: rules.matching))
+            (matcher.match(trace), AntiCheat.evaluate(trace: trace, signals: signals, rules: rules.antiCheat, matching: rules.matching,
+                                                       imported: source != .live))
         }.value
         guard source == .live || !match.pieces.isEmpty else { return nil }
         var s = state

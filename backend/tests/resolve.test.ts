@@ -110,3 +110,16 @@ test("streets never fade while decay is off", async () => {
   assert.ok(strength({ owner: { kind: "player", id: "p" }, capturedAt: 0, lastVisitedAt: 0 } as any, 22 * 86_400, 21 * 86_400) === 0,
     "with decay on, 21 days still fades");
 });
+
+test("imported runs skip the identical-accuracy check, live runs don't", async () => {
+  const { evaluate, rules } = await import("../supabase/functions/_shared/chomp/mod.ts");
+  // Garmin-style: a point every second, the same made-up accuracy throughout.
+  const trace = Array.from({ length: 600 }, (_, i) => ({
+    coordinate: { lat: 51.34 + i * 0.000027, lon: -0.51 + Math.sin(i / 40) * 0.0002 }, t: 1_795_000_000 + i, accuracy: 10, speed: -1,
+  }));
+  const none = { motion: [], cadence: [], heartRate: [] };
+  assert.ok(evaluate(trace, none, rules.antiCheat, rules.matching).flags.some((f) => f.rule === "synthetic"));
+  const imported = evaluate(trace, none, rules.antiCheat, rules.matching, true);
+  assert.ok(!imported.flags.some((f) => f.rule === "synthetic"));
+  assert.equal(imported.verdict, "accepted");
+});

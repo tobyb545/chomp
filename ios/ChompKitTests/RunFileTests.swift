@@ -100,3 +100,28 @@ enum FITBuilder {
         return Data(header + body + [0, 0])  // CRC isn't checked
     }
 }
+
+@Suite("Imported runs and anti-cheat")
+struct ImportedAntiCheatTests {
+    /// A Garmin-style trace: one point a second, and the same made-up accuracy on
+    /// every point because GPX files don't record it.
+    static func garminTrace() -> [TracePoint] {
+        (0..<600).map { i in
+            TracePoint(coordinate: Coordinate(latitude: 51.34 + Double(i) * 0.000027, longitude: -0.51 + sin(Double(i) / 40) * 0.0002),
+                       timestamp: Date(timeIntervalSince1970: 1_795_000_000 + Double(i)), horizontalAccuracy: 10, speed: -1)
+        }
+    }
+
+    @Test func liveRunsWithFakeLookingGPSAreStillFlagged() {
+        let r = AntiCheat.evaluate(trace: Self.garminTrace(), signals: RunSignals(), rules: RulesConfig.bundled.antiCheat,
+                                   matching: RulesConfig.bundled.matching)
+        #expect(r.flags.contains { $0.rule == "synthetic" })
+    }
+
+    @Test func importedRunsSkipTheAccuracyCheck() {
+        let r = AntiCheat.evaluate(trace: Self.garminTrace(), signals: RunSignals(), rules: RulesConfig.bundled.antiCheat,
+                                   matching: RulesConfig.bundled.matching, imported: true)
+        #expect(!r.flags.contains { $0.rule == "synthetic" })
+        #expect(r.verdict == .accepted)
+    }
+}

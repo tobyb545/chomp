@@ -67,7 +67,8 @@ function straightLineSeconds(pts: TracePoint[]): number {
   return Math.max(longest, pts[pts.length - 1].t - pts[start].t);
 }
 
-export function evaluate(trace: TracePoint[], signals: RunSignals, rules: Rules["antiCheat"], matching: Rules["matching"]): AntiCheatReport {
+/** `imported`: from a file or Strava, which don't record GPS accuracy, so the synthetic-trace check can't apply. */
+export function evaluate(trace: TracePoint[], signals: RunSignals, rules: Rules["antiCheat"], matching: Rules["matching"], imported = false): AntiCheatReport {
   const flags: AntiCheatFlag[] = [];
   let excluded: Interval[] = [];
   const pts = trace.filter((p) => p.accuracy >= 0 && p.accuracy <= matching.maxAccuracyMetres).sort((a, b) => a.t - b.t);
@@ -129,7 +130,7 @@ export function evaluate(trace: TracePoint[], signals: RunSignals, rules: Rules[
   const accs = new Set(pts.map((p) => Math.round(p.accuracy * 10)));
   const intervals = pts.slice(1).map((p, i) => p.t - pts[i].t);
   const regular = intervals.length > 120 && intervals.every((x) => Math.abs(x - intervals[0]) < 0.001);
-  if (pts.length > 120 && accs.size === 1 && regular) {
+  if (!imported && pts.length > 120 && accs.size === 1 && regular) {
     flags.push({ rule: "synthetic", severity: 2, detail: "identical accuracy and perfectly regular timestamps" });
   }
 

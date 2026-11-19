@@ -85,7 +85,7 @@ export function resolveUpload(area: Area, u: Upload, v: Extract<Validated, { ok:
   // Any run collects coins if it ended recently enough (live, or a recent
   // Strava run the app added). Strava history never comes through here.
   const isImport = opts.now - v.endedAt > LATE_UPLOAD_S;
-  const report = evaluate(v.trace, v.signals, rules.antiCheat, rules.matching);
+  const report = evaluate(v.trace, v.signals, rules.antiCheat, rules.matching, u.source !== "live");
   const match = new MapMatcher(area, rules.matching).match(v.trace);
   const { outcome, writes } = new GameEngine(area, rules).resolve({ runID: v.runId, startedAt: v.startedAt, endedAt: v.endedAt, isImport }, v.trace, match, report, world);
   const shadow = opts.shadowRestricted;
