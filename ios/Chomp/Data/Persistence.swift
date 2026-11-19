@@ -24,6 +24,9 @@ struct PlayerProfile: Codable, Hashable {
     /// Spoken updates during runs, and whether they include splits.
     var voiceOn = false
     var voiceSplits = true
+    /// Push notifications when a rival takes your coins, and when bots raid.
+    var pushLost = true
+    var pushRaids = true
     /// Invite code typed in (or opened from a link) before signing in.
     var pendingInviteCode: String?
 
@@ -53,6 +56,7 @@ struct PlayerProfile: Codable, Hashable {
         get(.trailStyle, &trailStyle); get(.privacyZones, &privacyZones); get(.dismissedZoneSuggestions, &dismissedZoneSuggestions)
         get(.blockedPlayers, &blockedPlayers); get(.mutedPlayers, &mutedPlayers); get(.debugPro, &debugPro)
         get(.mapLook, &mapLook); get(.voiceOn, &voiceOn); get(.voiceSplits, &voiceSplits)
+        get(.pushLost, &pushLost); get(.pushRaids, &pushRaids)
         pendingInviteCode = try? c.decodeIfPresent(String.self, forKey: .pendingInviteCode)
         get(.seenIntro, &seenIntro)  // existing players see the cards once too
     }

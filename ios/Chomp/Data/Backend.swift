@@ -133,6 +133,19 @@ final class SupabaseBackend: @unchecked Sendable {
         userID = nil
     }
 
+    func registerPushToken(_ token: String, environment: String, kinds: [String]) async throws {
+        guard let client else { throw BackendError.notConfigured }
+        guard userID != nil else { throw BackendError.notSignedIn }
+        struct Params: Encodable { let p_token: String; let p_environment: String; let p_kinds: [String] }
+        try await client.rpc("register_push_token", params: Params(p_token: token, p_environment: environment, p_kinds: kinds)).execute()
+    }
+
+    func unregisterPushToken(_ token: String) async throws {
+        guard let client, userID != nil else { return }
+        struct Params: Encodable { let p_token: String }
+        try await client.rpc("unregister_push_token", params: Params(p_token: token)).execute()
+    }
+
     func updateProfile(name: String, colorHex: String, isPrivate: Bool) async throws {
         guard let client, let userID else { return }
         struct Patch: Encodable { let display_name: String; let color_hex: String; let is_private: Bool }

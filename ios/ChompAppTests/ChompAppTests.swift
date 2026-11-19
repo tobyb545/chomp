@@ -105,3 +105,26 @@ struct CoinColours {
         }
     }
 }
+
+@Suite("Push notifications") @MainActor
+struct PushTests {
+    @Test func kindsFollowSettings() {
+        var p = PlayerProfile()
+        #expect(Set(PushService.kinds(for: p)) == ["invite", "lost", "raid"])
+        p.pushLost = false
+        #expect(Set(PushService.kinds(for: p)) == ["invite", "raid"])
+        p.pushRaids = false
+        #expect(PushService.kinds(for: p) == ["invite"])
+    }
+
+    @Test func olderProfilesGetPushOn() throws {
+        let old = #"{"id":"x","name":"Old","colorHex":"C6FF00","onboarded":true}"#
+        let p = try JSONDecoder().decode(PlayerProfile.self, from: Data(old.utf8))
+        #expect(p.pushLost && p.pushRaids)
+        #expect(p.name == "Old")
+    }
+
+    @Test func debugBuildsUseTheSandbox() {
+        #expect(PushService.environment == "sandbox")
+    }
+}

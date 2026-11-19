@@ -338,7 +338,7 @@ final class AppModel {
     }
 
     private func scheduleRaidNotification() {
-        guard run.phase == .idle else { return }
+        guard run.phase == .idle, profile.pushRaids else { return }
         let at = Date().addingTimeInterval(6 * 3600)
         var copy = state
         let ghosts = GhostSimulator(engine: engine)
@@ -648,6 +648,7 @@ final class AppModel {
 
     func syncOnline() async {
         await refreshInvitePro()
+        await PushService.shared.sync()
         guard backend.isSignedIn, !profile.privateMode, !area.tiles.isEmpty else { return }
         do {
             let rows = try await backend.ownership(tiles: area.tiles.map(\.description))

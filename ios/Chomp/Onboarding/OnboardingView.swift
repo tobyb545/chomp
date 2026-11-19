@@ -125,7 +125,7 @@ struct OnboardingView: View {
         model.profile = p
         Task {
             await model.locateAndLoad()
-            _ = await NotificationService.requestPermission()
+            if await NotificationService.requestPermission() { await PushService.shared.refresh() }
         }
     }
 }

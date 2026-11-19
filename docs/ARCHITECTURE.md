@@ -187,10 +187,10 @@ These run on the phone only and need no server:
 
 ## Not built yet
 
-- **Push delivery.** Lost-street and bot-raid messages are written to `notification_outbox`,
-  but nothing sends them to APNs yet. That needs a push key, the `aps-environment`
-  entitlement and device-token registration in the app. Locally, bot raids and fade warnings
-  already use local notifications.
+- **Push delivery** is built but needs setup: run migration `20261124000000_push.sql`, set the
+  Edge Function secrets APNS_KEY (.p8 contents), APNS_KEY_ID, APNS_TEAM_ID and APNS_TOPIC,
+  then deploy `send-push` (a cron job runs it every minute). The app registers its token via
+  `register_push_token`; settings choose "coins lost" and "bot raid" pushes.
 - **A web admin UI** for `review_queue` and reports. For now, use the Supabase table editor.
 - **The watch app** is built but isn't embedded by default. Set `CHOMP_EMBED_WATCH=true`
   once the watchOS runtime is installed.

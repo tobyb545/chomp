@@ -3,6 +3,7 @@ import ChompKit
 
 @main
 struct ChompApp: App {
+    @UIApplicationDelegateAdaptor(ChompAppDelegate.self) private var appDelegate
     @State private var model = AppModel()
     @Environment(\.scenePhase) private var scenePhase
 
@@ -12,7 +13,9 @@ struct ChompApp: App {
                 .environment(model)
                 .task {
                     IntentRouter.shared.model = model
+                    PushService.shared.model = model
                     await model.bootstrap()
+                    await PushService.shared.refresh()
                     IntentRouter.shared.flush()
                 }
                 .onChange(of: scenePhase) { _, phase in

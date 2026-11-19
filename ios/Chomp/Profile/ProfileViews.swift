@@ -136,6 +136,7 @@ struct SettingsView: View {
     @State private var customColour = Color.white
     @State private var nonce = ""
     @State private var accountError: String?
+    @State private var notificationsDenied = false
 
     var body: some View {
         @Bindable var model = model
@@ -173,6 +174,9 @@ struct SettingsView: View {
 
             Section {
                 Toggle("Play privately", isOn: $model.profile.privateMode)
+                    .onChange(of: model.profile.privateMode) { _, isPrivate in
+                        Task { if isPrivate { await PushService.shared.unregister() } else { await PushService.shared.sync() } }
+                    }
                 NavigationLink("Privacy zones (\(model.profile.privacyZones.count))") { PrivacyZonesView() }
             } header: { Text("Privacy") } footer: {
                 Text("Private mode keeps every run on this phone: solo play with bots only, nothing uploaded. Privacy zones hide where your runs start and end, even from you on shared images.")
@@ -195,6 +199,25 @@ struct SettingsView: View {
                 }
             } header: { Text("During a run") } footer: {
                 Text("Chomp tells you when you capture or steal a street, when a frenzy starts and ends, and your pace each \(model.profile.useMiles ? "mile" : "kilometre"). Music is turned down while it speaks.")
+            }
+
+            Section {
+                if notificationsDenied {
+                    Button("Turn on notifications in Settings") {
+                        if let url = URL(string: UIApplication.openNotificationSettingsURLString) { UIApplication.shared.open(url) }
+                    }
+                }
+                Toggle("A rival takes your coins", isOn: $model.profile.pushLost)
+                Toggle("Bots raid your streets", isOn: $model.profile.pushRaids)
+            } header: { Text("Notifications") } footer: {
+                Text(model.backend.isSignedIn
+                     ? "Sent to this phone. Several at once are rolled into one."
+                     : "Sign in to get these when you're not in the app. Bot raids on this phone are still announced.")
+            }
+            .onChange(of: model.profile.pushLost) { _, _ in Task { await PushService.shared.sync() } }
+            .onChange(of: model.profile.pushRaids) { _, _ in Task { await PushService.shared.sync() } }
+            .task {
+                notificationsDenied = await PushService.authorizationStatus() == .denied
             }
 
             Section("Feel") {
@@ -231,7 +254,7 @@ struct SettingsView: View {
                     Text("Online play isn't connected in this build. Everything else works offline.").foregroundStyle(Theme.textSecondary)
                 } else if model.backend.isSignedIn {
                     LabeledContent("Signed in", value: "Apple")
-                    Button("Sign out") { Task { await model.backend.signOut() } }
+                    Button("Sign out") { Task { await PushService.shared.unregister(); await model.backend.signOut() } }
                     Button("Delete online account", role: .destructive) { Task { try? await model.backend.deleteAccount() } }
                 } else {
                     SignInWithAppleButton(.signIn) { req in

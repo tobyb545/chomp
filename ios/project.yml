@@ -105,6 +105,8 @@ targets:
         com.apple.developer.healthkit.access: []
         com.apple.developer.applesignin: [Default]
         com.apple.security.application-groups: [group.com.tobyb545.chomp]
+        # Xcode swaps this to "production" when exporting for TestFlight / the App Store.
+        aps-environment: development
     info:
       path: Chomp/Info.plist
       properties:
