@@ -14,19 +14,18 @@ struct IntroCardsView: View {
 
     private var cards: [IntroCard] {
         let r = model.rules
-        let pct = Int((r.capture.coverageThreshold * 100).rounded())
         let days = Int(r.decay.days)
         let frenzyMin = Int(r.frenzy.durationSeconds / 60)
         let importDays = Int(r.imports.captureWindowHours / 24)
         return [
             IntroCard(scene: .tokens, title: "Every street is full of tokens",
                       body: "Wherever you are, the streets on the map are lined with white coins. Run along a street to collect them."),
-            IntroCard(scene: .capture, title: "Run it to make it yours",
-                      body: "Cover \(pct)% of a street in one run and its coins turn gold: they're yours. Running the pavement counts for the road."),
+            IntroCard(scene: .capture, title: "Run past coins to make them yours",
+                      body: "Every coin you run past turns gold: it's yours. You don't need to finish the street, and running the pavement counts for the road."),
             IntroCard(scene: .rivals, title: "Defend your streets",
                       body: r.decay.isEnabled
-                        ? "Rivals and bots can take your coins by running your streets. Streets you don't rerun fade back to white after \(days) days."
-                        : "Your coins stay yours until someone else runs the street. Rivals and bots can take them, so keep an eye on your patch."),
+                        ? "Rivals and bots can take your coins by running past them. Streets you don't rerun fade back to white after \(days) days."
+                        : "Your coins stay yours until someone else runs past them. Rivals and bots can take them, so keep an eye on your patch."),
             IntroCard(scene: .power, title: "Power pellets and bonus streets",
                       body: "Run past the glowing pink landmark for a \(frenzyMin)-minute frenzy: double points, and rivals' streets flip more easily. Some streets glow pink for bonus points at certain times."),
             IntroCard(scene: .health, title: "Forgot to press start?",

@@ -9,7 +9,9 @@ struct MapSnapshot {
     struct SegmentLook { var state: String; var colorHex: String; var strength: Double }
     struct GhostMarker: Identifiable { var id: String; var name: String; var colorHex: String; var coordinate: Coordinate; var isBot: Bool }
     var version = 0
+    /// Whole-street looks (used by the run replay) and per-coin looks (owned coins).
     var looks: [SegmentID: SegmentLook] = [:]
+    var coinLooks: [CoinID: SegmentLook] = [:]
     var bonus: Set<SegmentID> = []
     var pellets: [PowerPellet] = []
     var ghosts: [GhostMarker] = []
@@ -184,6 +186,8 @@ final class AppModel {
             state.tokensCaptured = [:]
             for s in a.segments { if let o = state.ownership[s.id] { state.addTokens(rules.tokens(forLength: s.length), to: o.owner) } }
         }
+        // State saved before coins: each street's owner now holds all its coins.
+        engine.migrateToCoins(state: &state)
         if state.ghosts.isEmpty, !a.segments.isEmpty { tickWorld() }
         bumpMap()
         Task { await subscribeRealtime() }
@@ -342,9 +346,9 @@ final class AppModel {
         guard let first = raids.first else { return }
         state.scheduledGhostTick = at
         NotificationService.scheduleRaid(message: first.message, at: at)
-        let fading = state.ownership.values.filter {
-            $0.owner == state.me && $0.strength(at: .now.addingTimeInterval(3 * 86_400), decay: rules.decayInterval) <= 0
-        }.count
+        let fading = Set(state.ownership.filter {
+            $0.value.owner == state.me && $0.value.strength(at: .now.addingTimeInterval(3 * 86_400), decay: rules.decayInterval) <= 0
+        }.map { Coins.segment(of: $0.key) }).count
         NotificationService.fadeWarning(count: fading, at: Calendar.current.date(bySettingHour: 18, minute: 0, second: 0, of: .now.addingTimeInterval(86_400)) ?? at)
     }
 
@@ -403,19 +407,19 @@ final class AppModel {
         s.look = profile.mapLook
         let now = Date()
         let decay = rules.decayInterval
-        let eatenLive = Set(run.tracker?.eaten ?? [])
         let blocked = Set(profile.blockedPlayers)
-        for seg in area.segments {
-            if eatenLive.contains(seg.id) {
-                s.looks[seg.id] = .init(state: "mine", colorHex: profile.colorHex, strength: 1)
-                continue
-            }
-            guard let o = state.ownership[seg.id], o.strength(at: now, decay: decay) > 0, !blocked.contains(o.owner.id) else {
-                s.looks[seg.id] = .init(state: "neutral", colorHex: "FFF1C1", strength: 0)
-                continue
-            }
+        var colours: [OwnerRef: String] = [:]
+        for (id, o) in state.ownership where Coins.isCoin(id) && !blocked.contains(o.owner.id) {
+            let strength = o.strength(at: now, decay: decay)
+            guard strength > 0 else { continue }
             let mine = o.owner == state.me
-            s.looks[seg.id] = .init(state: mine ? "mine" : "rival", colorHex: ownerColor(o.owner), strength: o.strength(at: now, decay: decay))
+            let colour = colours[o.owner] ?? ownerColor(o.owner)
+            colours[o.owner] = colour
+            s.coinLooks[id] = .init(state: mine ? "mine" : "rival", colorHex: colour, strength: strength)
+        }
+        // Coins collected on this run so far turn yours straight away.
+        for (seg, idx) in run.coinsTaken {
+            for i in idx { s.coinLooks[Coins.id(seg, i)] = .init(state: "mine", colorHex: profile.colorHex, strength: 1) }
         }
         s.bonus = Set(activeBonus.flatMap(\.segmentIDs))
         s.pellets = uncollectedPellets.filter { pellet in !run.collectedThisRun.contains(pellet.id) }
@@ -434,7 +438,7 @@ final class AppModel {
     private func ghostMarkers(now: Date) -> [MapSnapshot.GhostMarker] {
         var byOwner: [OwnerRef: [Coordinate]] = [:]
         for (id, o) in state.ownership where o.owner != state.me && o.strength(at: now, decay: rules.decayInterval) > 0 {
-            if let seg = area.segment(id) { byOwner[o.owner, default: []].append(seg.midpoint) }
+            if let seg = area.segment(Coins.segment(of: id)) { byOwner[o.owner, default: []].append(seg.midpoint) }
         }
         return byOwner.compactMap { owner, pts in
             guard pts.count >= 3, !profile.blockedPlayers.contains(owner.id) else { return nil }
@@ -523,9 +527,11 @@ final class AppModel {
     /// Pulls authoritative ownership for the tiles on screen and listens for changes.
     // MARK: Goals, streaks and route planning
 
-    /// Tokens a run earned: the dots on every street it captured or stole.
+    /// Tokens a run earned: the coins it collected (whole streets, for runs saved before coins).
     func tokens(of outcome: RunOutcome, in a: Area) -> Int {
-        outcome.gained.compactMap { a.segment($0.segmentID) }.reduce(0) { $0 + rules.tokens(forLength: $1.length) }
+        outcome.gained.reduce(0) { sum, c in
+            sum + (c.tokens ?? a.segment(c.segmentID).map { rules.tokens(forLength: $0.length) } ?? 0)
+        }
     }
 
     /// Runs that count for goals and streaks. Debug builds count simulated runs
@@ -600,13 +606,16 @@ final class AppModel {
         let a = area, st = state, me = state.me, now = Date(), decay = rules.decayInterval, r = rules
         let start = routeStart
         let wanted: [Double] = a.segments.map { seg in
-            let o = st.ownership[seg.id].flatMap { $0.strength(at: now, decay: decay) > 0 ? $0 : nil }
+            let coins = r.coinIDs(seg).map { st.ownership[$0].flatMap { $0.strength(at: now, decay: decay) > 0 ? $0 : nil } }
+            let n = Double(coins.count)
             switch goal {
-            case .capture: return o == nil ? 1 : (o!.owner == me ? 0 : 1.2)
+            case .capture:
+                // Value the coins you'd gain: unclaimed 1, a rival's 1.2, yours nothing.
+                return coins.reduce(0.0) { $0 + ($1 == nil ? 1 : ($1!.owner == me ? 0 : 1.2)) } / n
             case .defend:
-                guard let o, o.owner == me else { return 0 }
-                let strength = o.strength(at: now, decay: decay)
-                return strength < 0.6 ? 1.2 - strength : 0
+                let mine = coins.compactMap { $0 }.filter { $0.owner == me }
+                guard let weakest = mine.map({ $0.strength(at: now, decay: decay) }).min() else { return 0 }
+                return weakest < 0.6 ? 1.2 - weakest : 0
             case .explore: return st.coverage[seg.id] == nil ? 1 : 0
             }
         }
@@ -662,7 +671,13 @@ final class AppModel {
         for r in rows {
             let owner = OwnerRef(kind: r.owner_kind == "ghost" ? .ghost : .player, id: r.owner_id == backend.userID ? profile.id : r.owner_id)
             if owner.kind == .player, owner.id != profile.id { rivals[owner.id] = RivalInfo(name: r.owner_name, colorHex: r.owner_color) }
-            state.ownership[r.segment_id] = Ownership(owner: owner, capturedAt: r.captured_at, lastVisitedAt: r.last_visited_at)
+            let o = Ownership(owner: owner, capturedAt: r.captured_at, lastVisitedAt: r.last_visited_at)
+            if Coins.isCoin(r.segment_id) {
+                state.ownership[r.segment_id] = o
+            } else if let seg = area.segment(r.segment_id) {
+                // A server that still stores whole streets: the owner holds every coin.
+                for id in rules.coinIDs(seg) { state.ownership[id] = o }
+            }
         }
         persist()
         bumpMap()
@@ -763,9 +778,9 @@ final class AppModel {
             WidgetSnapshot.Attack(street: e.segmentIDs.compactMap { area.segment($0)?.name }.first { !$0.isEmpty } ?? "your streets",
                                   by: e.actor.map(ownerName) ?? "Bot")
         }
-        let fading = state.ownership.values.filter {
-            $0.owner == state.me && $0.strength(at: .now, decay: rules.decayInterval) < 0.2
-        }.count
+        let fading = Set(state.ownership.filter {
+            $0.value.owner == state.me && $0.value.strength(at: .now, decay: rules.decayInterval) < 0.2
+        }.map { Coins.segment(of: $0.key) }).count
         WidgetBridge.publish(WidgetSnapshot(
             townName: placeName, playerColorHex: profile.colorHex, streetsHeld: streetsHeldEverywhere, kmHeld: p.heldMetres / 1000,
             townPercent: p.heldFraction, blocksHeld: p.blocksHeld, underAttack: Array(attacks), fadingSoon: fading,

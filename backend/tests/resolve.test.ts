@@ -39,7 +39,11 @@ test("resolves a clean run and writes the client fixture", () => {
   const r = resolveUpload(area, u, v, "user-1", toWorld("user-1", emptyWorld), { now, shadowRestricted: false, tracePath: "x" });
   assert.equal(r.status, "resolved");
   assert.equal(r.payload.runId, "6f9619ff-8b86-4d11-b42d-00c04fc964ff");
-  assert.equal(r.payload.ownership.length, fx.runs[0].captures && Object.values(fx.runs[0].captures).filter((k) => k === "captured").length);
+  // One ownership write per coin collected.
+  const coins = Object.values(fx.runs[0].coins as Record<string, number[]>).reduce((n, c) => n + c.length, 0);
+  assert.ok(coins > 0);
+  assert.equal(r.payload.ownership.length, coins);
+  assert.ok(r.payload.ownership.every((w) => /#\d+$/.test(w.s)));
   assert.ok(r.payload.distance > 2500 && r.payload.distance < 4500, `distance ${r.payload.distance}`);
   assert.match(r.clientOutcome.captures[0].at, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/);
   mkdirSync(new URL("shared/fixtures/", root), { recursive: true });

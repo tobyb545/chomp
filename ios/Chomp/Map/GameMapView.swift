@@ -110,8 +110,8 @@ struct GameMapView: UIViewRepresentable {
         var centredOnStreets = false
         var userMoved = false
         var lastFit: [Coordinate]?
-        private var coinFeatures: [MLNPointCollectionFeature] = []
         private var coinPoints: [[CLLocationCoordinate2D]] = []
+        private var coinKeys: [[CoinID]] = []
         private weak var featuresArea: Area?
         private var registeredIcons = Set<String>()
         private var pulse: Timer?
@@ -182,12 +182,7 @@ struct GameMapView: UIViewRepresentable {
                     return CLLocationCoordinate2D(latitude: c.latitude, longitude: c.longitude)
                 }
             }
-            coinFeatures = coinPoints.enumerated().map { i, pts in
-                var pts = pts
-                let f = MLNPointCollectionFeature(coordinates: &pts, count: UInt(pts.count))!  // never empty: n >= 1
-                f.identifier = area.segments[i].id as NSString
-                return f
-            }
+            coinKeys = area.segments.enumerated().map { i, seg in (0..<coinPoints[i].count).map { Coins.id(seg.id, $0) } }
             return true
         }
 
@@ -209,31 +204,61 @@ struct GameMapView: UIViewRepresentable {
             let rebuilt = rebuildFeaturesIfNeeded(metresPerToken: s.metresPerToken)
             guard rebuilt || s.version != lastVersion || lastVersion == -1 else { return }
             lastVersion = s.version
+            // One feature per run of same-looking coins on a street.
             let neutral = MapStyle.neutralCoin(s.look)
-            for (i, seg) in parent.area.segments.enumerated() where i < coinFeatures.count {
-                let look = s.looks[seg.id]
-                let state = look?.state ?? "neutral"
-                var hex: String
-                if let heat = s.heat?[seg.id], heat > 0 { hex = Self.heatHex(heat) }
-                else if state == "neutral" { hex = s.bonus.contains(seg.id) ? MapStyle.bonusCoin : neutral }
-                else if state == "mine" { hex = MapStyle.mineCoin(s.look) }
-                else { hex = MapStyle.rivalCoin(look?.colorHex ?? "FF3355") }
-                hex = hex.uppercased()
-                coinFeatures[i].attributes = [
-                    "icon": coinIcon(hex, in: style),
-                    "state": state,
-                    "strength": look?.strength ?? 0,
-                    // Lower draws first when coins compete for space: yours win, then rivals', then gold.
-                    "rank": state == "mine" ? 0 : state == "rival" ? 1 : 2,
-                ]
+            var features: [MLNPointCollectionFeature] = []
+            features.reserveCapacity(coinPoints.count)
+            for (i, seg) in parent.area.segments.enumerated() where i < coinPoints.count {
+                let streetLook = s.looks[seg.id]
+                let heat = s.heat?[seg.id] ?? 0
+                var runStart = 0
+                var runKey: String?
+                var runAttrs: [String: Any] = [:]
+                func flush(_ end: Int) {
+                    guard end > runStart else { return }
+                    var pts = Array(coinPoints[i][runStart..<end])
+                    let f = MLNPointCollectionFeature(coordinates: &pts, count: UInt(pts.count))!
+                    f.attributes = runAttrs
+                    features.append(f)
+                }
+                for c in 0..<coinPoints[i].count {
+                    let look = s.coinLooks[coinKeys[i][c]] ?? streetLook
+                    let state = look?.state ?? "neutral"
+                    var hex: String
+                    if heat > 0 { hex = Self.heatHex(heat) }
+                    else if state == "neutral" { hex = s.bonus.contains(seg.id) ? MapStyle.bonusCoin : neutral }
+                    else if state == "mine" { hex = MapStyle.mineCoin(s.look) }
+                    else { hex = MapStyle.rivalCoin(look?.colorHex ?? "FF3355") }
+                    let strength = ((look?.strength ?? 0) * 20).rounded() / 20
+                    let key = "\(hex)|\(state)|\(strength)"
+                    if key != runKey {
+                        flush(c)
+                        runStart = c
+                        runKey = key
+                        runAttrs = [
+                            "icon": coinIcon(hex.uppercased(), in: style),
+                            "state": state,
+                            "strength": strength,
+                            // Lower draws first when coins compete for space: yours win, then rivals', then unclaimed.
+                            "rank": state == "mine" ? 0 : state == "rival" ? 1 : 2,
+                        ]
+                    }
+                }
+                flush(coinPoints[i].count)
             }
-            set(style, "coins", MLNShapeCollectionFeature(shapes: coinFeatures))
+            set(style, "coins", MLNShapeCollectionFeature(shapes: features))
 
-            let eaten: [MLNPointCollectionFeature] = s.eaten.suffix(3).compactMap { id in
-                guard let idx = parent.area.segmentIndex(id), idx < coinPoints.count else { return nil }
-                var pts = coinPoints[idx]
-                return MLNPointCollectionFeature(coordinates: &pts, count: UInt(pts.count))
+            // Flash the most recently collected coins (or whole streets, for old runs).
+            var flash: [CLLocationCoordinate2D] = []
+            for key in s.eaten.suffix(12) {
+                guard let idx = parent.area.segmentIndex(Coins.segment(of: key)), idx < coinPoints.count else { continue }
+                if let c = Coins.index(of: key) {
+                    if c < coinPoints[idx].count { flash.append(coinPoints[idx][c]) }
+                } else {
+                    flash += coinPoints[idx]
+                }
             }
+            let eaten: [MLNPointCollectionFeature] = flash.isEmpty ? [] : [MLNPointCollectionFeature(coordinates: &flash, count: UInt(flash.count))!]
             set(style, "eaten", MLNShapeCollectionFeature(shapes: eaten))
 
             var trail = s.trail.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }

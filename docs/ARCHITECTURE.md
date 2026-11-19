@@ -10,14 +10,19 @@
   from OSM. It has a stable ID (a hash of its end nodes). Pavements alongside a road are
   folded into that road, so running the pavement credits the road.
 - **Tokens**: the dots along every street, one per 10 m (`tokens.metresPerToken`, at least one
-  per street). Capturing or stealing a street earns its tokens, and leaderboards (nearby =
+  per street). Each coin you collect is one token, and leaderboards (nearby =
   same ~25 km region, global, friends, club) rank by tokens captured, all time.
 - **Invites**: a friend who joins with your code gets 30 days of Pro at once; you get 30 days
   when they finish their first live run (max 12). Stored as the `pro_invite` entitlement, next
   to RevenueCat's `pro`; `has_pro()` and the app accept either.
-- **Capture**: covering at least 80% of a segment's length in one run (`capture.coverageThreshold`).
-  A neutral street is *captured*, a rival's street is *stolen*, and your own street is *refreshed*
-  (its decay timer resets, but it earns no points).
+- **Capture**: per coin. A run takes every coin its matched path passes within
+  `capture.coinReachMetres` (5 m, along the street), so half a street takes half its coins.
+  Coin ownership is keyed `"<segment id>#<i>"` (`Coins.swift` / `chomp/coins.ts`). Each street
+  with coins taken gets one capture record (*captured*, or *stolen* if any coin was a rival's)
+  carrying `tokens` and the coin indexes; coins you already held are *refreshed*. Later capture
+  still wins per coin. Imports: Strava is exploration only; Health runs within the import
+  window take the coins they passed. `capture.coverageThreshold` (80%) now only decides when
+  a street counts as explored. Bots run whole streets and take every coin.
 - **Decay**: ownership strength falls linearly from 1 to 0 over 21 days since the last visit.
   It's derived from `last_visited_at` and never stored, and an hourly cron clears faded streets.
 - **Blocks**: faces of the street graph. Holding every bounding segment pays a one-off bonus
@@ -143,7 +148,7 @@ switch is turned on in both places.
 ## Coins, and capture areas (off)
 
 Every street is drawn as a row of coins, one per token (`rules.tokens.metresPerToken`, 10 m),
-evenly spaced: white when nobody holds the street, gold when you do, and a rival's own
+evenly spaced: white when nobody holds the coin, gold when you do, and a rival's own
 colour when they do (a rival whose colour reads as gold or orange is shown red, so gold
 always means yours), fading with strength. There are no street lines. Coin art is drawn in code
 (`CoinIcon` in `GameMapView.swift`) per colour and placed with a MapLibre symbol layer.
@@ -155,6 +160,13 @@ still cover them with the switch on. The server applies the switch from its bund
 copy of rules.json, so it takes effect there at the next Edge Function deploy. Until
 then, the server can still add block-bonus points (points only: tokens and the
 leaderboard are unaffected).
+
+Server: migration `20261123000000_coins.sql` re-keys `segment_ownership` by coin (with a
+derived `street_id` that keeps the cascade on segments), expands existing street ownership to
+coins, adds `captures.tokens`, sums coins on the leaderboard, keeps events and "lost"
+notifications to one per street per run, and counts "streets held" as streets with any of
+your coins. Run it before deploying Edge Functions that write coin IDs. The app accepts both
+coin and street rows, and migrates local street ownership to coins on load.
 
 ## On-device extras
 

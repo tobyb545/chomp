@@ -50,19 +50,21 @@ struct RunSummaryView: View {
         var snap = MapSnapshot()
         snap.version = revealed + (replaying ? 10_000 : 0)
         snap.playerColorHex = model.profile.colorHex
-        let shown = Set(ordered.prefix(revealed).map(\.segmentID))
-        for c in ordered {
-            if shown.contains(c.segmentID) {
-                snap.looks[c.segmentID] = .init(state: "mine", colorHex: model.profile.colorHex, strength: 1)
-            } else if let prev = c.previousOwner {
-                snap.looks[c.segmentID] = .init(state: "rival", colorHex: model.ownerColor(prev), strength: 1)
+        // Coins taken on this run light up street by street; before that they show
+        // whoever held them. Runs saved before coins colour whole streets.
+        for (n, c) in ordered.enumerated() {
+            let look: MapSnapshot.SegmentLook = n < revealed
+                ? .init(state: "mine", colorHex: model.profile.colorHex, strength: 1)
+                : c.previousOwner.map { .init(state: "rival", colorHex: model.ownerColor($0), strength: 1) }
+                    ?? .init(state: "neutral", colorHex: "FFFFFF", strength: 0)
+            if let coins = c.coins {
+                for i in coins { snap.coinLooks[Coins.id(c.segmentID, i)] = look }
             } else {
-                snap.looks[c.segmentID] = .init(state: "neutral", colorHex: "FFF1C1", strength: 0)
+                snap.looks[c.segmentID] = look
             }
         }
-        for c in outcome.refreshed { snap.looks[c.segmentID] = .init(state: "mine", colorHex: model.profile.colorHex, strength: 0.6) }
         snap.trail = trace.map(\.coordinate)
-        snap.eaten = Array(ordered.prefix(revealed).map(\.segmentID).suffix(2))
+        snap.eaten = ordered.prefix(revealed).suffix(2).flatMap { c in c.coins.map { $0.map { Coins.id(c.segmentID, $0) } } ?? [c.segmentID] }
         let fitCoords = trace.isEmpty
             ? ordered.compactMap { model.area.segment($0.segmentID)?.midpoint }
             : stride(from: 0, to: trace.count, by: max(1, trace.count / 60)).map { trace[$0].coordinate }
@@ -187,7 +189,7 @@ struct RunSummaryView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Streets").font(.headline)
             if outcome.gained.isEmpty && outcome.refreshed.isEmpty {
-                Text("No full streets this time. Run at least \(Int(model.rules.capture.coverageThreshold * 100))% of a street to eat its pellets.")
+                Text("No coins this time. Run along a street to collect the coins you pass.")
                     .font(.subheadline).foregroundStyle(Theme.textSecondary)
             }
             ForEach(ordered.prefix(40)) { c in
@@ -195,8 +197,12 @@ struct RunSummaryView: View {
                     Circle().fill(Color(hex: model.profile.colorHex)).frame(width: 10, height: 10)
                     VStack(alignment: .leading) {
                         Text(c.streetName).font(.subheadline.weight(.semibold))
+                        let coins = c.tokens.map { "\($0) coin\($0 == 1 ? "" : "s")" }
                         if let prev = c.previousOwner {
-                            Text("Taken from \(model.ownerName(prev))").font(.caption).foregroundStyle(Theme.textSecondary)
+                            Text([coins, "taken from \(model.ownerName(prev))"].compactMap { $0 }.joined(separator: ", "))
+                                .font(.caption).foregroundStyle(Theme.textSecondary)
+                        } else if let coins {
+                            Text(coins).font(.caption).foregroundStyle(Theme.textSecondary)
                         }
                     }
                     Spacer()
@@ -207,7 +213,7 @@ struct RunSummaryView: View {
             }
             if ordered.count > 40 { Text("and \(ordered.count - 40) more").font(.caption).foregroundStyle(Theme.textSecondary) }
             if !outcome.refreshed.isEmpty {
-                Text("\(outcome.refreshed.count) of your streets refreshed (decay timer reset)")
+                Text("\(outcome.refreshed.count) street\(outcome.refreshed.count == 1 ? "" : "s") you already held")
                     .font(.caption).foregroundStyle(Theme.textSecondary)
             }
         }
@@ -315,7 +321,7 @@ struct TerritoryPoster: View {
                 for seg in area.segments {
                     var path = Path()
                     for (i, v) in seg.polyline.points.enumerated() { i == 0 ? path.move(to: pt(v)) : path.addLine(to: pt(v)) }
-                    let owner = state.ownership[seg.id]?.owner
+                    let owner = state.mainOwner(of: seg, rules: RulesConfig.bundled)
                     if highlight.contains(seg.id) {
                         ctx.stroke(path, with: .color(Color(hex: colorHex).opacity(0.5)), style: StrokeStyle(lineWidth: 6, lineCap: .round))
                         ctx.stroke(path, with: .color(.white), style: StrokeStyle(lineWidth: 1.8, lineCap: .round))

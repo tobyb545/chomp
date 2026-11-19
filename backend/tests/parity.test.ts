@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
   Area, bonusStreets, buildTile, subset, TileKey, type TileFile, type OverpassResponse, evaluate, GameEngine, MapMatcher, powerPellets, rules, SeededRandom, coverageOf,
-  type TracePoint, makeGhosts, walkGhost, type Ownership, decodePolyline, encodePolyline,
+  type TracePoint, makeGhosts, walkGhost, type Ownership, decodePolyline, encodePolyline, coinsOf, coinID, coinSegment,
 } from "../supabase/functions/_shared/chomp/mod.ts";
 
 const root = new URL("../../", import.meta.url);
@@ -78,6 +78,7 @@ for (const run of fx.runs) {
       { runID: "r", startedAt: trace[0].t, endedAt: trace[trace.length - 1].t, isImport: false }, trace, match, report,
       { playerID: "p1", ownership: new Map(), collectedPellets: new Set(), capturesToday: 0, blockAwards: new Map(), conqueredTiles: new Set<string>() });
     assert.deepEqual(Object.fromEntries(outcome.captures.map((c) => [c.segmentID, c.kind])), run.captures);
+    assert.deepEqual(Object.fromEntries(outcome.captures.filter((c) => c.coins).map((c) => [c.segmentID, c.coins])), run.coins);
     assert.equal(outcome.points, run.points);
     assert.equal(outcome.blockBonus, run.blockBonus);
     assert.deepEqual(outcome.pelletsCollected, run.pellets);
@@ -90,7 +91,8 @@ test("a stolen street needs the rival to hold it", () => {
   const match = new MapMatcher(area, rules.matching).match(trace);
   const target = Object.entries(run.captures as Record<string, string>).find(([, k]) => k === "captured")![0];
   const t0 = trace[0].t;
-  const ownership = new Map<string, Ownership>([[target, { owner: { kind: "player", id: "rival" }, capturedAt: t0 - 3600, lastVisitedAt: t0 - 3600 }]]);
+  const seg = area.segment(target)!;
+  const ownership = new Map<string, Ownership>(coinsOf(rules, seg).map((id) => [id, { owner: { kind: "player", id: "rival" }, capturedAt: t0 - 3600, lastVisitedAt: t0 - 3600 }]));
   const { outcome, writes } = new GameEngine(area, rules).resolve(
     { runID: "r", startedAt: t0, endedAt: trace[trace.length - 1].t, isImport: false }, trace, match,
     { verdict: "accepted", flags: [], excluded: [] },
@@ -98,7 +100,8 @@ test("a stolen street needs the rival to hold it", () => {
   const rec = outcome.captures.find((c) => c.segmentID === target)!;
   assert.equal(rec.kind, "stolen");
   assert.equal(rec.previousOwner?.id, "rival");
-  assert.equal(writes.ownership.get(target)?.owner.id, "p1");
+  for (const i of rec.coins!) assert.equal(writes.ownership.get(coinID(target, i))?.owner.id, "p1");
+  assert.ok(rec.tokens! > 0);
 });
 
 test("imports and runs under review never change ownership", () => {
@@ -127,10 +130,13 @@ test("bots walk the graph, respect the cap and raid players", () => {
   assert.equal(ghosts.length, rules.ghosts.perArea);
   const ownership = new Map<string, Ownership>();
   const now = 1_790_000_000;
-  for (const s of area.segments.slice(0, 400)) ownership.set(s.id, { owner: { kind: "player", id: "p1" }, capturedAt: now - 60, lastVisitedAt: now - 60 });
+  for (const s of area.segments.slice(0, 400)) for (const id of coinsOf(rules, s)) ownership.set(id, { owner: { kind: "player", id: "p1" }, capturedAt: now - 60, lastVisitedAt: now - 60 });
   const g = { ...ghosts[0], aggression: 0.8, cursorNode: area.segments[0].startNode };
   const { writes, raids } = walkGhost(area, rules, g, 40, now, now + 86_400, ownership, "test");
-  assert.ok(writes.size > 0 && writes.size <= 40);
+  const streets = new Set([...writes.keys()].map(coinSegment));
+  assert.ok(streets.size > 0 && streets.size <= 40);
+  // A bot takes every coin on each street it runs.
+  for (const id of streets) for (const c of coinsOf(rules, area.segment(id)!)) assert.ok(writes.has(c));
   assert.ok(raids.length > 0, "an aggressive bot next to player territory should raid");
 });
 

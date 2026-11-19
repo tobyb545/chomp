@@ -8,6 +8,8 @@ public struct RulesConfig: Codable, Sendable, Hashable {
         public var frenzyRivalCoverageThreshold: Double
         public var pointsPerMetre: Double
         public var minimumPointsPerSegment: Int
+        /// A coin is taken when the matched run passes within this many metres of it.
+        public var coinReachMetres: Double?
     }
     public struct Decay: Codable, Sendable, Hashable {
         /// Off: streets stay yours until someone else runs them.

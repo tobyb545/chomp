@@ -1,79 +1,79 @@
 import Foundation
 
-/// Incremental, provisional capture detection while running. Re-matches a
-/// sliding window of recent fixes and unions coverage, so cost stays flat no
-/// matter how long the run is. Final results always come from a full match.
+/// Live, provisional coin collection during a run: matches the recent window of
+/// the trace and reports coins as the runner passes them. The authoritative
+/// decision is made when the run is resolved (on device or server), using the
+/// same coin positions and reach.
 public struct LiveCaptureTracker: Sendable {
     public struct Update: Sendable {
-        /// Streets that just crossed the capture threshold (pellets eaten).
+        /// Streets where at least one coin was just collected.
         public var newlyEaten: [SegmentID]
-        /// Rival/bot streets among those.
-        public var newlyStolen: [SegmentID]
-        /// Coverage ratio of streets touched in this window.
-        public var touched: [SegmentID: Double]
+        /// Coins just collected, by street.
+        public var newCoins: [SegmentID: [Int]]
     }
 
     public let matcher: MapMatcher
-    public let threshold: Double
+    public let metresPerToken: Double
+    public let reach: Double
     private var pieces: [CoveragePiece] = []
-    private var coverage: [Int: IntervalSet] = [:]
     private var processed = 0
-    public private(set) var eaten: Set<SegmentID> = []
-    public private(set) var eatenOrder: [SegmentID] = []
+    /// Every coin passed so far (whoever owned it).
+    public private(set) var eaten: Set<CoinID> = []
+    /// Coins in the order they were passed.
+    public private(set) var eatenOrder: [CoinID] = []
 
-    public init(matcher: MapMatcher, threshold: Double) {
+    public init(matcher: MapMatcher, metresPerToken: Double, reach: Double) {
         self.matcher = matcher
-        self.threshold = threshold
+        self.metresPerToken = metresPerToken
+        self.reach = reach
     }
 
     public var allPieces: [CoveragePiece] { pieces }
 
-    public mutating func ingest(trace: [TracePoint], isRival: (SegmentID) -> Bool, frenzy: Bool, frenzyThreshold: Double) -> Update {
-        guard trace.count >= 2 else { return Update(newlyEaten: [], newlyStolen: [], touched: [:]) }
+    public mutating func ingest(trace: [TracePoint]) -> Update {
+        guard trace.count >= 2 else { return Update(newlyEaten: [], newCoins: [:]) }
         let overlap = 20
         let from = max(0, processed - overlap)
         let window = Array(trace[from...])
         processed = trace.count
         let r = matcher.match(window)
         pieces.append(contentsOf: r.pieces)
-        var touched: [SegmentID: Double] = [:]
-        var newly: [SegmentID] = []
-        var stolen: [SegmentID] = []
-        for p in r.pieces {
-            coverage[p.segment, default: IntervalSet()].insert(p.from...p.to)
-        }
-        for seg in Set(r.pieces.map(\.segment)) {
-            let s = matcher.area.segments[seg]
-            let ratio = min(1, (coverage[seg]?.coveredLength ?? 0) / max(s.length, 0.1))
-            touched[s.id] = ratio
-            let rival = isRival(s.id)
-            let need = (frenzy && rival) ? min(threshold, frenzyThreshold) : threshold
-            if ratio >= need, !eaten.contains(s.id) {
-                eaten.insert(s.id)
-                eatenOrder.append(s.id)
-                newly.append(s.id)
-                if rival { stolen.append(s.id) }
-            }
-        }
-        return Update(newlyEaten: newly, newlyStolen: stolen, touched: touched)
+        return collect(r.pieces)
     }
 
-    /// Same tracker on a new (bigger) map: coverage is recomputed from the whole
-    /// trace, but streets already eaten stay eaten and aren't reported again.
+    private mutating func collect(_ new: [CoveragePiece]) -> Update {
+        var coins: [SegmentID: [Int]] = [:]
+        var order: [SegmentID] = []
+        for p in new {
+            let s = matcher.area.segments[p.segment]
+            let n = Coins.count(length: s.length, metresPerToken: metresPerToken)
+            let lo = min(p.from, p.to) - reach, hi = max(p.from, p.to) + reach
+            // Walk the coins in the direction the runner went.
+            let indexes = p.to >= p.from ? Array(0..<n) : Array((0..<n).reversed())
+            for i in indexes {
+                let o = Coins.offset(i, of: n, length: s.length)
+                guard o >= lo, o <= hi else { continue }
+                let id = Coins.id(s.id, i)
+                guard eaten.insert(id).inserted else { continue }
+                eatenOrder.append(id)
+                if coins[s.id] == nil { order.append(s.id) }
+                coins[s.id, default: []].append(i)
+            }
+        }
+        return Update(newlyEaten: order, newCoins: coins)
+    }
+
+    /// Same tracker on a new (bigger) map: coins already passed stay passed
+    /// and aren't reported again.
     public mutating func rebase(matcher: MapMatcher, trace: [TracePoint]) {
         let keep = eaten, order = eatenOrder
-        self = LiveCaptureTracker(matcher: matcher, threshold: threshold)
+        self = LiveCaptureTracker(matcher: matcher, metresPerToken: metresPerToken, reach: reach)
         eaten = keep
         eatenOrder = order
         guard trace.count >= 2 else { return }
         let r = matcher.match(trace)
         pieces = r.pieces
         processed = trace.count
-        for p in r.pieces { coverage[p.segment, default: IntervalSet()].insert(p.from...p.to) }
-    }
-
-    public func ratio(for id: SegmentID) -> Double {
-        guard let i = matcher.area.segmentIndex(id) else { return 0 }
-        return min(1, (coverage[i]?.coveredLength ?? 0) / max(matcher.area.segments[i].length, 0.1))
+        _ = collect(r.pieces)
     }
 }

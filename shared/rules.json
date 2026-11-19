@@ -4,7 +4,8 @@
     "coverageThreshold": 0.8,
     "frenzyRivalCoverageThreshold": 0.4,
     "pointsPerMetre": 1.0,
-    "minimumPointsPerSegment": 1
+    "minimumPointsPerSegment": 1,
+    "coinReachMetres": 5
   },
   "tokens": {
     "metresPerToken": 10

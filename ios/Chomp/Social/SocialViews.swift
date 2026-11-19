@@ -15,7 +15,7 @@ struct LeaderboardView: View {
                 Section {
                     Picker("Scope", selection: $scope) { ForEach(LeaderboardScope.allCases) { Text($0.label).tag($0) } }
                         .pickerStyle(.segmented)
-                    Text("Ranked by tokens captured: every dot you eat by taking a street.")
+                    Text("Ranked by tokens captured: every coin you run past.")
                         .font(.footnote).foregroundStyle(Theme.textSecondary)
                 }
                 .listRowBackground(Color.clear)
@@ -173,23 +173,35 @@ struct StreetListView: View {
         let here = model.routeStart
         // Named streets group by name and owner; unnamed paths and service roads stay separate.
         let grouped = Dictionary(grouping: model.area.segments) { seg -> String in
-            seg.name.isEmpty ? seg.id : "\(seg.name)|\(model.state.ownership[seg.id]?.owner.id ?? "-")"
+            seg.name.isEmpty ? seg.id : "\(seg.name)|\(model.state.mainOwner(of: seg, rules: model.rules)?.id ?? "-")"
         }
         let out = grouped.compactMap { _, segs -> Row? in
-            let o = model.state.ownership[segs[0].id]
-            let live = o.flatMap { $0.strength(at: now, decay: decay) > 0 ? $0 : nil }
-            let strength = live?.strength(at: now, decay: decay) ?? 0
-            switch filter {
-            case .near: guard live == nil || live?.owner != me else { return nil }
-            case .mine: guard live?.owner == me else { return nil }
-            case .rivals: guard let l = live, l.owner != me else { return nil }
-            case .fading: guard live?.owner == me, strength < 0.35 else { return nil }
+            // Count coins: yours, rivals', unclaimed.
+            var mine = 0, rival = 0, free = 0
+            var weakest = 1.0
+            var rivalOwner: OwnerRef?
+            for seg in segs {
+                for id in model.rules.coinIDs(seg) {
+                    guard let o = model.state.ownership[id], o.strength(at: now, decay: decay) > 0 else { free += 1; continue }
+                    if o.owner == me { mine += 1; weakest = min(weakest, o.strength(at: now, decay: decay)) }
+                    else { rival += 1; rivalOwner = rivalOwner ?? o.owner }
+                }
             }
+            let tokens: Int
+            switch filter {
+            case .near: guard free + rival > 0 else { return nil }; tokens = free + rival
+            case .mine: guard mine > 0 else { return nil }; tokens = mine
+            case .rivals: guard rival > 0 else { return nil }; tokens = rival
+            case .fading: guard mine > 0, weakest < 0.35 else { return nil }; tokens = mine
+            }
+            let owner: OwnerRef? = filter == .rivals ? rivalOwner
+                : mine >= max(rival, 1) ? me : rival > 0 ? rivalOwner : nil
+            let strength = owner == me ? weakest : (owner == nil ? 0 : 1)
             if !query.isEmpty, !segs[0].displayName.localizedCaseInsensitiveContains(query) { return nil }
             let closest = segs.min { $0.midpoint.distance(to: here) < $1.midpoint.distance(to: here) }!
             return Row(id: segs[0].id, name: segs[0].displayName, segments: segs, metres: segs.reduce(0) { $0 + $1.length },
-                       owner: live?.owner, strength: strength,
-                       tokens: segs.reduce(0) { $0 + model.rules.tokens(forLength: $1.length) },
+                       owner: owner, strength: strength,
+                       tokens: tokens,
                        away: closest.midpoint.distance(to: here), nearest: closest.midpoint)
         }
         switch filter {

@@ -148,17 +148,23 @@ struct MatchingTests {
     @Test func liveTrackerAgreesWithFullMatch() {
         let (_, trace) = Fixtures.run(seed: 5, distance: 1500)
         let matcher = MapMatcher(area: Fixtures.area, rules: Fixtures.rules.matching)
-        var live = LiveCaptureTracker(matcher: matcher, threshold: 0.8)
+        var live = LiveCaptureTracker(matcher: matcher, metresPerToken: Fixtures.rules.tokens.metresPerToken, reach: Fixtures.rules.coinReach)
         var i = 30
         while i <= trace.count {
-            _ = live.ingest(trace: Array(trace[0..<i]), isRival: { _ in false }, frenzy: false, frenzyThreshold: 0.4)
+            _ = live.ingest(trace: Array(trace[0..<i]))
             i += 30
         }
-        _ = live.ingest(trace: trace, isRival: { _ in false }, frenzy: false, frenzyThreshold: 0.4)
-        let full = matcher.match(trace).coverage()
-        let fullEaten = Set(full.filter { $0.value.coveredLength / Fixtures.area.segments[$0.key].length >= 0.8 }.map { Fixtures.area.segments[$0.key].id })
-        let overlap = live.eaten.intersection(fullEaten).count
-        #expect(Double(overlap) >= Double(fullEaten.count) * 0.85)
+        _ = live.ingest(trace: trace)
+        // The coins the live tracker lit up are (nearly all) the ones the run is credited with.
+        var state = GameState(areaSlug: "west-byfleet", playerID: "me")
+        let engine = GameEngine(area: Fixtures.area, rules: Fixtures.rules)
+        let report = AntiCheat.evaluate(trace: trace, signals: RunSignals(), rules: Fixtures.rules.antiCheat, matching: Fixtures.rules.matching)
+        let out = engine.resolve(run: RunContext(runID: UUID(), startedAt: trace.first!.timestamp, endedAt: trace.last!.timestamp),
+                                 trace: trace, match: matcher.match(trace), report: report, state: &state)
+        let credited = Set(out.gained.flatMap { c in (c.coins ?? []).map { Coins.id(c.segmentID, $0) } })
+        #expect(!credited.isEmpty)
+        #expect(Double(live.eaten.intersection(credited).count) >= Double(credited.count) * 0.9)
+        #expect(Double(live.eaten.subtracting(credited).count) <= Double(credited.count) * 0.1)
     }
 }
 
@@ -205,6 +211,7 @@ struct GameTests {
         let (_, trace) = Fixtures.run(seed: 13)
         let first = MapMatcher(area: Fixtures.area, rules: Fixtures.rules.matching).match(trace).coverage()
         for (i, _) in first { state.ownership[Fixtures.area.segments[i].id] = Ownership(owner: .ghost("bot-rook"), capturedAt: Fixtures.t0.addingTimeInterval(-3600), lastVisitedAt: Fixtures.t0.addingTimeInterval(-3600)) }
+        engine.migrateToCoins(state: &state)
         state.ghosts = [GhostProfile(id: "bot-rook", name: "Bot Rook", colorHex: "FF6FA1", aggression: 0.5, segmentsPerDay: 5, cursorNode: 0)]
         let out = resolve(trace, state: &state)
         #expect(out.stolen.count > 5)
@@ -218,7 +225,7 @@ struct GameTests {
         #expect(!out.gained.isEmpty)
         let fiveYears = Fixtures.t0.addingTimeInterval(5 * 365 * 86_400)
         #expect(engine.sweepDecay(state: &state, now: fiveYears) == 0)
-        #expect(state.ownership.count == out.gained.count)
+        #expect(state.ownership.count == out.gained.reduce(0) { $0 + ($1.tokens ?? 0) })
         #expect(state.ownership.values.allSatisfy { $0.strength(at: fiveYears, decay: Fixtures.rules.decayInterval) == 1 })
     }
 
@@ -308,6 +315,7 @@ struct GameTests {
         for s in segs where s.id != last.id {
             state.ownership[s.id] = Ownership(owner: state.me, capturedAt: Fixtures.t0, lastVisitedAt: Fixtures.t0)
         }
+        GameEngine(area: area, rules: Fixtures.rules).migrateToCoins(state: &state)
         let trace = RouteSimulator(area: area).trace(along: last.coordinates, start: Fixtures.t0.addingTimeInterval(60), speed: 2.5, noise: 1, seed: 5)
         var off = state
         let outOff = resolve(trace, state: &off)
@@ -324,10 +332,11 @@ struct GameTests {
         // A bot ran it an hour after our (imported) run.
         state.ownership[seg.id] = Ownership(owner: .ghost("bot-rook"), capturedAt: Fixtures.t0.addingTimeInterval(3600),
                                             lastVisitedAt: Fixtures.t0.addingTimeInterval(3600))
+        engine.migrateToCoins(state: &state)
         let trace = RouteSimulator(area: area).trace(along: seg.coordinates, start: Fixtures.t0, speed: 2.5, noise: 1, seed: 6)
         let out = resolve(trace, state: &state)
         #expect(out.captures.first { $0.segmentID == seg.id }?.kind == .rejected)
-        #expect(state.ownership[seg.id]?.owner == .ghost("bot-rook"))
+        #expect(engine.coinOwners(seg, state: state, now: Fixtures.t0).allSatisfy { $0 == .ghost("bot-rook") })
     }
 
     @Test func completingABlockPaysABonus() throws {
@@ -339,6 +348,7 @@ struct GameTests {
         for s in block.segmentIDs where s != last {
             state.ownership[s] = Ownership(owner: state.me, capturedAt: Fixtures.t0, lastVisitedAt: Fixtures.t0)
         }
+        engine.migrateToCoins(state: &state)
         let seg = try #require(area.segment(last))
         let trace = RouteSimulator(area: area).trace(along: seg.coordinates, start: Fixtures.t0.addingTimeInterval(60), speed: 2.5, noise: 1, seed: 3)
         var off = state
@@ -364,8 +374,8 @@ struct GhostTests {
         let botHeld = state.ownership.values.filter { $0.owner.kind == .ghost }.count
         #expect(botHeld > 0)
         // Give the player some streets, then let a few days pass.
-        for s in Fixtures.area.segments.prefix(300) where state.ownership[s.id] == nil {
-            state.ownership[s.id] = Ownership(owner: state.me, capturedAt: Fixtures.t0, lastVisitedAt: Fixtures.t0)
+        for s in Fixtures.area.segments.prefix(300) where engine.coinOwners(s, state: state, now: Fixtures.t0).allSatisfy({ $0 == nil }) {
+            for id in Fixtures.rules.coinIDs(s) { state.ownership[id] = Ownership(owner: state.me, capturedAt: Fixtures.t0, lastVisitedAt: Fixtures.t0) }
         }
         sim.tick(state: &state, now: Fixtures.t0.addingTimeInterval(86_400 * 2))
         let afterHeld = state.ownership.values.filter { $0.owner.kind == .ghost }.count
@@ -459,6 +469,7 @@ struct ParityFixture {
                 "chunks": match.chunks, "used": match.usedPoints, "unmatched": match.unmatchedPoints, "coverage": coverage,
                 "verdict": report.verdict.rawValue, "flags": report.flags.map(\.rule), "excluded": report.excluded.count,
                 "captures": Dictionary(uniqueKeysWithValues: outcome.captures.map { ($0.segmentID, $0.kind.rawValue) }),
+                "coins": Dictionary(uniqueKeysWithValues: outcome.captures.compactMap { c in c.coins.map { (c.segmentID, $0) } }),
                 "points": outcome.points, "blockBonus": outcome.blockBonus, "pellets": outcome.pelletsCollected,
             ])
         }
@@ -568,6 +579,7 @@ struct RoutesGoalsTokens {
                                  trace: pts, match: match, report: report, state: &state)
         let expected = out.gained.compactMap { Fixtures.area.segment($0.segmentID) }.reduce(0) { $0 + Fixtures.rules.tokens(forLength: $1.length) }
         #expect(expected > 0)
+        #expect(out.gained.reduce(0) { $0 + ($1.tokens ?? 0) } == expected, "running a whole street takes every coin on it")
         #expect(state.tokens(of: state.me) == expected)
     }
 }
@@ -675,5 +687,117 @@ struct RoutePlannerRobustness {
             }
         }
         #expect(failures.isEmpty, "no loop from: \(failures)")
+    }
+}
+
+@Suite("Coins: collected as you pass them")
+struct CoinTests {
+    let engine = GameEngine(area: Fixtures.area, rules: Fixtures.rules)
+
+    /// A street that's long, straight-ish and not a footpath.
+    var street: Segment { Fixtures.area.segments.filter { $0.length > 220 && !$0.isPath }.max { $0.length < $1.length }! }
+
+    /// Runs `seg` from fraction `a` to `b` of its length.
+    func run(_ seg: Segment, from a: Double, to b: Double, at t: Date, state: inout GameState) -> RunOutcome {
+        let pts = stride(from: a, through: b, by: (b - a) / 40).map { f -> TracePoint in
+            let c = seg.polyline.point(at: seg.length * f)
+            return TracePoint(coordinate: Fixtures.area.projection.unproject(c),
+                              timestamp: t.addingTimeInterval(abs(f - a) * seg.length / 3), horizontalAccuracy: 5, speed: 3)
+        }
+        let match = MapMatcher(area: Fixtures.area, rules: Fixtures.rules.matching).match(pts)
+        let report = AntiCheat.evaluate(trace: pts, signals: RunSignals(), rules: Fixtures.rules.antiCheat, matching: Fixtures.rules.matching)
+        return engine.resolve(run: RunContext(runID: UUID(), startedAt: t, endedAt: pts.last!.timestamp),
+                              trace: pts, match: match, report: report, state: &state)
+    }
+
+    @Test func coinIDsRoundTrip() {
+        let id = Coins.id("s85498bbf9eb", 7)
+        #expect(id == "s85498bbf9eb#7")
+        #expect(Coins.segment(of: id) == "s85498bbf9eb")
+        #expect(Coins.index(of: id) == 7)
+        #expect(Coins.segment(of: "s85498bbf9eb") == "s85498bbf9eb")
+        #expect(Coins.index(of: "s85498bbf9eb") == nil)
+        #expect(Coins.offset(0, of: 4, length: 40) == 5)
+        #expect(Coins.offset(3, of: 4, length: 40) == 35)
+    }
+
+    @Test func halfAStreetTakesHalfItsCoins() throws {
+        let seg = street
+        let n = Fixtures.rules.coinCount(seg)
+        var state = GameState(areaSlug: "west-byfleet", playerID: "me")
+        let out = run(seg, from: 0.02, to: 0.5, at: Fixtures.t0, state: &state)
+        let c = try #require(out.gained.first { $0.segmentID == seg.id })
+        let got = try #require(c.tokens)
+        #expect(Double(got) >= Double(n) * 0.4 && Double(got) <= Double(n) * 0.62, "\(got) of \(n)")
+        #expect(c.coverage < Fixtures.rules.capture.coverageThreshold, "no longer needs most of the street")
+        #expect(engine.coinsHeld(seg, by: state.me, state: state, now: Fixtures.t0.addingTimeInterval(3600)).held == got)
+        #expect(state.tokens(of: state.me) >= got)
+        // The rest of the street is still unclaimed, and you don't count as having explored it.
+        #expect(state.coverage[seg.id] == nil)
+
+        // Come back for the rest.
+        let later = run(seg, from: 0.5, to: 0.98, at: Fixtures.t0.addingTimeInterval(86_400), state: &state)
+        let c2 = try #require(later.gained.first { $0.segmentID == seg.id })
+        // Both runs skipped the last 2% at each end, so only the coins right at the ends are left.
+        let missing = Set(0..<n).subtracting(engine.coinOwners(seg, state: state, now: Fixtures.t0.addingTimeInterval(2 * 86_400))
+            .enumerated().filter { $0.element == state.me }.map(\.offset))
+        #expect(got + (c2.tokens ?? 0) == n - missing.count)
+        let edge = Int((Double(n) * 0.03).rounded(.up))
+        #expect(missing.allSatisfy { $0 < edge || $0 >= n - edge }, "\(missing.sorted())")
+    }
+
+    @Test func passingSomeOfARivalsCoinsTakesOnlyThose() throws {
+        let seg = street
+        let n = Fixtures.rules.coinCount(seg)
+        var state = GameState(areaSlug: "west-byfleet", playerID: "me")
+        let bot = OwnerRef.ghost("bot-rook")
+        for id in Fixtures.rules.coinIDs(seg) {
+            state.ownership[id] = Ownership(owner: bot, capturedAt: Fixtures.t0.addingTimeInterval(-3600), lastVisitedAt: Fixtures.t0.addingTimeInterval(-3600))
+        }
+        let out = run(seg, from: 0.02, to: 0.5, at: Fixtures.t0, state: &state)
+        let c = try #require(out.gained.first { $0.segmentID == seg.id })
+        #expect(c.kind == .stolen && c.previousOwner == bot)
+        let now = Fixtures.t0.addingTimeInterval(3600)
+        let mine = engine.coinsHeld(seg, by: state.me, state: state, now: now).held
+        let theirs = engine.coinsHeld(seg, by: bot, state: state, now: now).held
+        #expect(mine == c.tokens && mine + theirs == n && theirs > 0)
+        // Standings split the street by coins.
+        let st = engine.standings(state: state, playerName: "Me", playerColorHex: "FFC83D", now: now)
+        let me = try #require(st.first { $0.owner == state.me })
+        #expect(abs(me.metres - seg.length * Double(mine) / Double(n)) < 0.01)
+    }
+
+    @Test func rerunningYourOwnCoinsRefreshesWithoutTokens() throws {
+        let seg = street
+        var state = GameState(areaSlug: "west-byfleet", playerID: "me")
+        _ = run(seg, from: 0.02, to: 0.98, at: Fixtures.t0, state: &state)
+        let before = state.tokens(of: state.me)
+        let again = run(seg, from: 0.02, to: 0.98, at: Fixtures.t0.addingTimeInterval(86_400), state: &state)
+        #expect(again.refreshed.contains { $0.segmentID == seg.id })
+        #expect(!again.gained.contains { $0.segmentID == seg.id })
+        #expect(state.tokens(of: state.me) == before)
+    }
+
+    @Test func oldStreetOwnershipBecomesCoins() {
+        let seg = street
+        var state = GameState(areaSlug: "west-byfleet", playerID: "me")
+        state.ownership[seg.id] = Ownership(owner: state.me, capturedAt: Fixtures.t0, lastVisitedAt: Fixtures.t0)
+        engine.migrateToCoins(state: &state)
+        #expect(state.ownership[seg.id] == nil)
+        #expect(state.ownership.count == Fixtures.rules.coinCount(seg))
+        #expect(state.mainOwner(of: seg, rules: Fixtures.rules) == state.me)
+        #expect(engine.heldEverywhere(by: state.me, state: state, now: Fixtures.t0) == 1)
+    }
+
+    @Test func botsTakeEveryCoinOnStreetsTheyRun() {
+        var state = GameState(areaSlug: "west-byfleet", playerID: "me")
+        GhostSimulator(engine: engine).ensureGhosts(state: &state, playerColorHex: "C6FF00", now: Fixtures.t0)
+        let ghostStreets = Set(state.ownership.filter { $0.value.owner.kind == .ghost }.map { Coins.segment(of: $0.key) })
+        #expect(!ghostStreets.isEmpty)
+        #expect(state.ownership.keys.allSatisfy(Coins.isCoin))
+        for id in ghostStreets.prefix(20) {
+            let seg = Fixtures.area.segment(id)!
+            #expect(engine.coinOwners(seg, state: state, now: Fixtures.t0).allSatisfy { $0?.kind == .ghost })
+        }
     }
 }

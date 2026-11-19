@@ -1,6 +1,6 @@
 // Pure core of resolve-run (no I/O), so it can be tested under Node.
 import {
-  type Area, type CaptureRecord, decodePolyline, distance, encodePolyline, evaluate, GameEngine, MapMatcher, type MotionActivity,
+  type Area, type CaptureRecord, coinSegment, decodePolyline, distance, encodePolyline, evaluate, GameEngine, MapMatcher, type MotionActivity,
   type Ownership, type RunOutcome, type RunSignals, rules, startOfDay, nextDay, type TracePoint, type World,
 } from "./chomp/mod.ts";
 
@@ -89,7 +89,7 @@ export function resolveUpload(area: Area, u: Upload, v: Extract<Validated, { ok:
   const match = new MapMatcher(area, rules.matching).match(v.trace);
   const { outcome, writes } = new GameEngine(area, rules).resolve({ runID: v.runId, startedAt: v.startedAt, endedAt: v.endedAt, isImport }, v.trace, match, report, world);
   const shadow = opts.shadowRestricted;
-  const tileOf = (id: string) => { const seg = area.segment(id); return seg ? area.segmentTile[seg.index] : null; };
+  const tileOf = (id: string) => { const seg = area.segment(coinSegment(id)); return seg ? area.segmentTile[seg.index] : null; };
 
   let dist = 0;
   for (let i = 1; i < v.trace.length; i++) {

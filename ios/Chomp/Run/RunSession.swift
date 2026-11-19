@@ -60,7 +60,7 @@ final class RunSession {
         let now = Date()
         startedAt = now
         phase = .running
-        tracker = LiveCaptureTracker(matcher: model.matcher, threshold: model.rules.capture.coverageThreshold)
+        tracker = LiveCaptureTracker(matcher: model.matcher, metresPerToken: model.rules.tokens.metresPerToken, reach: model.rules.coinReach)
         let source: LocationSource
         if simulated {
             let sim = RouteSimulator(area: model.area)
@@ -171,6 +171,8 @@ final class RunSession {
         frenzyEndsAt = nil
         lastEatenName = nil
         collectedThisRun = []
+        coinsTaken = [:]
+        streetsStolenSet = []
         tracker = nil
         pausedDuration = 0
         pausedAt = nil
@@ -221,41 +223,47 @@ final class RunSession {
         if trace.count % 10 == 0 { pushLiveActivity(); model.mirrorToWatch() }
     }
 
+    /// Coins taken this run (not counting ones that were already yours), by street.
+    private(set) var coinsTaken: [SegmentID: [Int]] = [:]
+    private var streetsStolenSet = Set<SegmentID>()
+
     private func runLiveMatch() {
         guard var t = tracker, let model else { return }
         fixesSinceMatch = 0
         let state = model.state
         let decay = model.rules.decayInterval
         let me = state.me
-        let update = t.ingest(trace: trace, isRival: { id in
-            guard let o = state.ownership[id] else { return false }
-            return o.owner != me && o.strength(at: .now, decay: decay) > 0
-        }, frenzy: isFrenzy, frenzyThreshold: model.rules.capture.frenzyRivalCoverageThreshold)
+        let update = t.ingest(trace: trace)
         tracker = t
         guard !update.newlyEaten.isEmpty else { return }
-        var mineAlready = 0
-        for id in update.newlyEaten {
-            guard let seg = model.area.segment(id) else { continue }
-            if let o = state.ownership[id], o.owner == me, o.strength(at: .now, decay: decay) > 0 {
-                mineAlready += 1
-                continue
+        var anyNew = false, anyStolen = false
+        for segID in update.newlyEaten {
+            guard let seg = model.area.segment(segID), let idx = update.newCoins[segID] else { continue }
+            var gained = 0, stolenHere = false
+            for i in idx {
+                let o = state.ownership[Coins.id(segID, i)].flatMap { $0.strength(at: .now, decay: decay) > 0 ? $0 : nil }
+                if o?.owner == me { continue }
+                if o != nil { stolenHere = true }
+                gained += 1
+                coinsTaken[segID, default: []].append(i)
             }
-            streetsCaptured += 1
-            let tokens = model.rules.tokens(forLength: seg.length)
-            pelletsEaten += tokens
-            RunVoice.shared.captured(street: seg.displayName, tokens: tokens, stolen: update.newlyStolen.contains(id))
+            guard gained > 0 else { continue }
+            anyNew = true
+            if coinsTaken[segID]!.count == gained { streetsCaptured += 1 }  // first coins on this street
+            if stolenHere, streetsStolenSet.insert(segID).inserted { streetsStolen += 1; anyStolen = true }
+            pelletsEaten += gained
+            RunVoice.shared.captured(street: seg.displayName, tokens: gained, stolen: stolenHere)
             let mult = (isFrenzy ? model.rules.frenzy.multiplier : 1)
-                * (model.activeBonus.filter { $0.segmentIDs.contains(id) && $0.isActive(at: .now) }.map(\.multiplier).max() ?? 1)
-            pointsProvisional += Int(seg.length * model.rules.capture.pointsPerMetre * mult)
+                * (model.activeBonus.filter { $0.segmentIDs.contains(segID) && $0.isActive(at: .now) }.map(\.multiplier).max() ?? 1)
+            pointsProvisional += Int(seg.length / Double(model.rules.coinCount(seg)) * Double(gained) * model.rules.capture.pointsPerMetre * mult)
             lastEatenName = seg.displayName
-            WatchBridge.shared.send([WatchMessage.capture: seg.displayName])
         }
-        streetsStolen += update.newlyStolen.count
-        if !update.newlyStolen.isEmpty {
+        if anyStolen {
             Feedback.shared.play(.steal)
-        } else if update.newlyEaten.count > mineAlready {
+        } else if anyNew {
             Feedback.shared.play(.pellet)
         }
+        if anyNew, let name = lastEatenName { WatchBridge.shared.send([WatchMessage.capture: name]) }
         pushLiveActivity()
         model.bumpMap()
     }

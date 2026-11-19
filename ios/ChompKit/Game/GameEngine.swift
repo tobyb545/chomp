@@ -24,6 +24,10 @@ public struct CaptureRecord: Codable, Hashable, Sendable, Identifiable {
     public var previousOwner: OwnerRef?
     public var at: Date
     public var reason: String?
+    /// Coins taken on this street (nil in runs saved before coins).
+    public var tokens: Int? = nil
+    /// Indexes of the coins taken, for the replay and live map.
+    public var coins: [Int]? = nil
 }
 
 public struct RunContext: Sendable {
@@ -112,11 +116,12 @@ public struct GameEngine: Sendable {
         }
 
         // Coverage per segment, and when each threshold was crossed.
-        struct Progress { var set = IntervalSet(); var crossed: Date?; var frenzyCrossed: Date?; var last: Date = .distantPast }
+        struct Progress { var set = IntervalSet(); var crossed: Date?; var frenzyCrossed: Date?; var last: Date = .distantPast; var pieces: [CoveragePiece] = [] }
         var segProgress: [Int: Progress] = [:]
         for p in pieces.sorted(by: { $0.end < $1.end }) {
             var pr = segProgress[p.segment] ?? Progress()
             pr.set.insert(p.from...p.to)
+            pr.pieces.append(p)
             pr.last = max(pr.last, p.end)
             let len = area.segments[p.segment].length
             let ratio = len > 0 ? pr.set.coveredLength / len : 0
@@ -134,59 +139,98 @@ public struct GameEngine: Sendable {
         var points = 0
         let completeBefore = Set(completedBlocks(for: me, state: state, now: run.startedAt))
 
-        let ordered = segProgress.sorted { ($0.value.crossed ?? $0.value.frenzyCrossed ?? $0.value.last) < ($1.value.crossed ?? $1.value.frenzyCrossed ?? $1.value.last) }
+        // Coins the run passed on each street, and when (earliest piece that reached it).
+        struct Hit { let index: Int; let at: Date }
+        let reach = rules.coinReach
+        var segHits: [Int: [Hit]] = [:]
+        for (segIndex, pr) in segProgress {
+            let seg = area.segments[segIndex]
+            let n = rules.coinCount(seg)
+            var hits: [Hit] = []
+            for i in 0..<n {
+                let o = Coins.offset(i, of: n, length: seg.length)
+                if let p = pr.pieces.first(where: { min($0.from, $0.to) - reach <= o && o <= max($0.from, $0.to) + reach }) {
+                    hits.append(Hit(index: i, at: p.end))
+                }
+            }
+            segHits[segIndex] = hits.sorted { ($0.at, $0.index) < ($1.at, $1.index) }
+        }
+        let ordered = segProgress.sorted { a, b in
+            ((segHits[a.key]?.first?.at ?? a.value.last), a.key) < ((segHits[b.key]?.first?.at ?? b.value.last), b.key)
+        }
         for (segIndex, pr) in ordered {
             let seg = area.segments[segIndex]
             let ratio = min(1, seg.length > 0 ? pr.set.coveredLength / seg.length : 0)
-            let current = state.ownership[seg.id]
-            let currentLive = current.flatMap { $0.strength(at: pr.last, decay: rules.decayInterval) > 0 ? $0 : nil }
-            let at = pr.crossed ?? pr.frenzyCrossed ?? pr.last
+            let hits = segHits[segIndex] ?? []
+            let ids = rules.coinIDs(seg)
+            func liveOwner(_ i: Int, _ t: Date) -> Ownership? {
+                state.ownership[ids[i]].flatMap { $0.strength(at: t, decay: rules.decayInterval) > 0 ? $0 : nil }
+            }
+            let previous = hits.compactMap { h in liveOwner(h.index, h.at).flatMap { $0.owner != me ? $0.owner : nil } }.first
+            let firstAt = hits.first?.at ?? pr.last
 
-            if pr.crossed != nil {
-                var cov = state.coverage[seg.id] ?? PersonalCoverage(firstRunAt: at, lastRunAt: at, timesRun: 0, importedOnly: run.isImport)
-                cov.firstRunAt = min(cov.firstRunAt, at)
-                cov.lastRunAt = max(cov.lastRunAt, at)
+            // Exploration still means running most of a street.
+            if let crossed = pr.crossed {
+                var cov = state.coverage[seg.id] ?? PersonalCoverage(firstRunAt: crossed, lastRunAt: crossed, timesRun: 0, importedOnly: run.isImport)
+                cov.firstRunAt = min(cov.firstRunAt, crossed)
+                cov.lastRunAt = max(cov.lastRunAt, crossed)
                 cov.timesRun += 1
                 cov.importedOnly = cov.importedOnly && run.isImport
                 state.coverage[seg.id] = cov
             }
 
-            func record(_ kind: CaptureKind, pts: Int = 0, mult: Double = 1, reason: String? = nil) {
+            func record(_ kind: CaptureKind, at: Date, pts: Int = 0, mult: Double = 1, reason: String? = nil, taken: [Int]? = nil) {
                 records.append(CaptureRecord(segmentID: seg.id, streetName: seg.displayName, kind: kind, coverage: ratio,
-                                             points: pts, multiplier: mult, previousOwner: currentLive?.owner, at: at, reason: reason))
+                                             points: pts, multiplier: mult, previousOwner: previous, at: at, reason: reason,
+                                             tokens: taken?.count, coins: taken))
             }
 
-            let isMine = currentLive?.owner == me
-            let isRival = currentLive != nil && !isMine
-            let qualifies = pr.crossed != nil || (isRival && pr.frenzyCrossed != nil)
-            guard qualifies else { record(.partial); continue }
+            guard !hits.isEmpty else { record(.partial, at: pr.last); continue }
+            if run.isImport { record(.rejected, at: firstAt, reason: "Imported runs count for exploration only"); continue }
+            if report.verdict == .underReview { record(.rejected, at: firstAt, reason: "Run is under review"); continue }
+            let wouldGain = hits.contains { liveOwner($0.index, $0.at)?.owner != me }
+            if wouldGain, capturesThisRun >= rules.antiCheat.maxCapturesPerRun || capturesToday >= rules.antiCheat.maxCapturesPerDay {
+                record(.rejected, at: firstAt, reason: "Daily capture limit reached")
+                continue
+            }
 
-            if run.isImport { record(.rejected, reason: "Imported runs count for exploration only"); continue }
-            if report.verdict == .underReview { record(.rejected, reason: "Run is under review"); continue }
-
-            // Later capture wins: a run added after the fact can't take back a
-            // street someone else ran more recently.
-            if isRival, let c = currentLive, c.capturedAt > at {
-                record(.rejected, reason: "Someone ran it more recently")
-                continue
+            let spacing = seg.length / Double(ids.count)
+            var taken: [Int] = []
+            var takenAt: Date?
+            var stole = false, refreshed = false, blocked = false
+            var pts = 0.0, maxMult = 1.0
+            for h in hits {
+                let current = liveOwner(h.index, h.at)
+                if let c = current, c.owner == me {
+                    state.ownership[ids[h.index]]?.lastVisitedAt = max(c.lastVisitedAt, h.at)
+                    refreshed = true
+                    continue
+                }
+                // Later capture wins: a run added after the fact can't take back
+                // coins someone else ran more recently.
+                if let c = current, c.capturedAt > h.at { blocked = true; continue }
+                let mult = (inFrenzy(h.at) ? rules.frenzy.multiplier : 1) * bonusMultiplier(seg.id, h.at)
+                maxMult = max(maxMult, mult)
+                pts += spacing * rules.capture.pointsPerMetre * mult
+                if current != nil { stole = true }
+                state.ownership[ids[h.index]] = Ownership(owner: me, capturedAt: h.at, lastVisitedAt: h.at)
+                taken.append(h.index)
+                takenAt = takenAt ?? h.at
             }
-            if isMine {
-                state.ownership[seg.id]?.lastVisitedAt = max(current!.lastVisitedAt, at)
-                record(.refreshed)
-                continue
+            if !taken.isEmpty {
+                let p = max(rules.capture.minimumPointsPerSegment, Int(pts.rounded()))
+                state.addTokens(taken.count, to: me)
+                capturesThisRun += 1
+                capturesToday += 1
+                points += p
+                record(stole ? .stolen : .captured, at: takenAt!, pts: p, mult: maxMult, taken: taken)
+            } else if refreshed {
+                record(.refreshed, at: firstAt)
+            } else if blocked {
+                record(.rejected, at: firstAt, reason: "Someone ran it more recently")
+            } else {
+                record(.partial, at: firstAt)
             }
-            guard capturesThisRun < rules.antiCheat.maxCapturesPerRun, capturesToday < rules.antiCheat.maxCapturesPerDay else {
-                record(.rejected, reason: "Daily capture limit reached")
-                continue
-            }
-            let mult = (inFrenzy(at) ? rules.frenzy.multiplier : 1) * bonusMultiplier(seg.id, at)
-            let pts = max(rules.capture.minimumPointsPerSegment, Int((seg.length * rules.capture.pointsPerMetre * mult).rounded()))
-            state.ownership[seg.id] = Ownership(owner: me, capturedAt: at, lastVisitedAt: at)
-            state.addTokens(rules.tokens(forLength: seg.length), to: me)
-            capturesThisRun += 1
-            capturesToday += 1
-            points += pts
-            record(isRival ? .stolen : .captured, pts: pts, mult: mult)
         }
         for p in excludedPieces where segProgress[p.segment] == nil && !records.contains(where: { $0.segmentID == area.segments[p.segment].id }) {
             let seg = area.segments[p.segment]
@@ -255,17 +299,17 @@ public struct GameEngine: Sendable {
 
     // MARK: Decay
 
-    /// Neutralises faded streets. Returns how many of the player's streets faded.
+    /// Neutralises faded coins. Returns how many of the player's streets lost coins.
     @discardableResult
     public func sweepDecay(state: inout GameState, now: Date) -> Int {
-        var faded: [SegmentID] = []
+        var faded = Set<SegmentID>()
         for (id, o) in state.ownership where o.strength(at: now, decay: rules.decayInterval) <= 0 {
             state.ownership[id] = nil
-            if o.owner == state.me { faded.append(id) }
+            if o.owner == state.me { faded.insert(Coins.segment(of: id)) }
         }
         state.lastDecaySweep = now
         if !faded.isEmpty {
-            state.log(GameEvent(date: now, kind: .decayed, actor: nil, segmentIDs: faded,
+            state.log(GameEvent(date: now, kind: .decayed, actor: nil, segmentIDs: faded.sorted(),
                                 message: "\(faded.count) of your street\(faded.count == 1 ? "" : "s") faded back to neutral"))
         }
         return faded.count
@@ -278,24 +322,28 @@ public struct GameEngine: Sendable {
         return o.strength(at: now, decay: rules.decayInterval) > 0
     }
 
+    /// Blocks where `owner` holds every coin on every side.
     public func completedBlocks(for owner: OwnerRef, state: GameState, now: Date) -> [BlockID] {
         guard rules.blocks.isEnabled else { return [] }
         return area.blocks.filter { b in
             b.segmentIDs.allSatisfy { id in
-                guard let o = state.ownership[id] else { return false }
-                return o.owner == owner && o.strength(at: now, decay: rules.decayInterval) > 0
+                guard let s = area.segment(id) else { return false }
+                let c = coinsHeld(s, by: owner, state: state, now: now)
+                return c.held == c.total
             }
         }.map(\.id)
     }
 
+    /// Streets count once you hold at least one coin on them; distance is
+    /// weighted by the share of coins held.
     public func progress(for owner: OwnerRef, state: GameState, now: Date) -> TownProgress {
         var held = 0
         var metres = 0.0
         for s in area.segments {
-            if let o = state.ownership[s.id], o.owner == owner, o.strength(at: now, decay: rules.decayInterval) > 0 {
-                held += 1
-                metres += s.length
-            }
+            let c = coinsHeld(s, by: owner, state: state, now: now)
+            guard c.held > 0 else { continue }
+            held += 1
+            metres += s.length * Double(c.held) / Double(c.total)
         }
         let explored = owner == state.me
             ? state.coverage.keys.reduce(0.0) { $0 + (area.segment($1)?.length ?? 0) }
@@ -307,27 +355,30 @@ public struct GameEngine: Sendable {
                             totalSegments: area.segments.count)
     }
 
-    /// Share of a tile's street length the owner holds.
+    /// Share of a tile's street length the owner holds (by coins).
     public func tileHeldFraction(_ tile: TileKey, owner: OwnerRef, state: GameState, now: Date) -> Double {
         guard let total = area.lengthByTile[tile], total > 0 else { return 0 }
         var held = 0.0
         for s in area.segments(in: tile) {
-            if let o = state.ownership[s.id], o.owner == owner, o.strength(at: now, decay: rules.decayInterval) > 0 { held += s.length }
+            let c = coinsHeld(s, by: owner, state: state, now: now)
+            held += s.length * Double(c.held) / Double(c.total)
         }
         return held / total
     }
 
-    /// Streets the owner holds anywhere, loaded or not.
+    /// Streets the owner holds at least one coin on, anywhere, loaded or not.
     public func heldEverywhere(by owner: OwnerRef, state: GameState, now: Date) -> Int {
-        state.ownership.values.filter { $0.owner == owner && $0.strength(at: now, decay: rules.decayInterval) > 0 }.count
+        Set(state.ownership.filter { $0.value.owner == owner && $0.value.strength(at: now, decay: rules.decayInterval) > 0 }
+            .map { Coins.segment(of: $0.key) }).count
     }
 
     public func standings(state: GameState, playerName: String, playerColorHex: String, now: Date) -> [Standing] {
         var by: [OwnerRef: (Int, Double)] = [:]
         for s in area.segments {
-            if let o = state.ownership[s.id], o.strength(at: now, decay: rules.decayInterval) > 0 {
-                by[o.owner, default: (0, 0)].0 += 1
-                by[o.owner, default: (0, 0)].1 += s.length
+            let owners = coinOwners(s, state: state, now: now)
+            for (o, n) in Dictionary(grouping: owners.compactMap { $0 }, by: { $0 }).mapValues(\.count) {
+                by[o, default: (0, 0)].0 += 1
+                by[o, default: (0, 0)].1 += s.length * Double(n) / Double(owners.count)
             }
         }
         var owners = Set(by.keys)

@@ -72,12 +72,14 @@ public struct GhostSimulator: Sendable {
         let me = state.me
         let ghostRef = OwnerRef.ghost(state.ghosts[g].id)
         let decay = engine.rules.decayInterval
-        let cap = Int(Double(area.segments.count) * 0.06)
+        let rules = engine.rules
+        let cap = Int(Double(area.segments.reduce(0) { $0 + rules.coinCount($1) }) * 0.06)  // in coins
         var held = state.ownership.values.filter { $0.owner == ghostRef && $0.strength(at: end, decay: decay) > 0 }.count
         var stolen: [SegmentID] = []
         var node = state.ghosts[g].cursorNode
         let aggression = state.ghosts[g].aggression
-        let mine = state.ownership.filter { $0.value.owner == me && $0.value.strength(at: end, decay: decay) > 0 }.map(\.key).sorted()
+        let mine = Set(state.ownership.filter { $0.value.owner == me && $0.value.strength(at: end, decay: decay) > 0 }
+            .map { Coins.segment(of: $0.key) }).sorted()
 
         for step in 0..<steps {
             // Occasionally jump to the edge of the player's territory for a raid.
@@ -91,12 +93,10 @@ public struct GhostSimulator: Sendable {
                 continue
             }
             let weights: [Double] = options.map { e in
-                let s = area.segments[e.segment]
-                guard let o = state.ownership[s.id], o.strength(at: end, decay: decay) > 0 else {
-                    return held >= cap ? 0.15 : 1.5
-                }
-                if o.owner == me { return 1 + 4 * aggression }
-                if o.owner == ghostRef { return 0.35 }
+                let owners = engine.coinOwners(area.segments[e.segment], state: state, now: end).compactMap { $0 }
+                if owners.isEmpty { return held >= cap ? 0.15 : 1.5 }
+                if owners.contains(me) { return 1 + 4 * aggression }
+                if owners.allSatisfy({ $0 == ghostRef }) { return 0.35 }
                 return 0.6
             }
             let total = weights.reduce(0, +)
@@ -108,14 +108,22 @@ public struct GhostSimulator: Sendable {
             }
             let seg = area.segments[pick.segment]
             let t = start.addingTimeInterval(end.timeIntervalSince(start) * Double(step + 1) / Double(steps))
-            let prev = state.ownership[seg.id]
-            if prev?.owner == ghostRef {
-                state.ownership[seg.id]?.lastVisitedAt = t
-            } else {
-                if prev?.owner == me, prev!.strength(at: t, decay: decay) > 0 { stolen.append(seg.id) }
-                state.ownership[seg.id] = Ownership(owner: ghostRef, capturedAt: t, lastVisitedAt: t)
-                state.addTokens(engine.rules.tokens(forLength: seg.length), to: ghostRef)
-                held += 1
+            // A bot runs the whole street, so it takes every coin on it.
+            var raided = false, gained = 0
+            for id in rules.coinIDs(seg) {
+                let prev = state.ownership[id]
+                if prev?.owner == ghostRef {
+                    state.ownership[id]?.lastVisitedAt = t
+                    continue
+                }
+                if prev?.owner == me, prev!.strength(at: t, decay: decay) > 0 { raided = true }
+                state.ownership[id] = Ownership(owner: ghostRef, capturedAt: t, lastVisitedAt: t)
+                gained += 1
+            }
+            if raided { stolen.append(seg.id) }
+            if gained > 0 {
+                state.addTokens(gained, to: ghostRef)
+                held += gained
             }
             node = pick.other
         }

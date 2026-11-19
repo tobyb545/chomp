@@ -6,20 +6,39 @@
    {
     "segmentID": "sd4de9985f78",
     "streetName": "Sheerwater Road",
-    "kind": "partial",
+    "kind": "captured",
     "coverage": 0.020930599885211194,
-    "points": 0,
+    "points": 9,
     "multiplier": 1,
-    "at": "2026-09-21T14:13:20Z"
+    "at": "2026-09-21T14:13:20Z",
+    "tokens": 1,
+    "coins": [
+     0
+    ]
    },
    {
     "segmentID": "sec45004968d",
     "streetName": "Sheerwater Road",
     "kind": "captured",
     "coverage": 1,
-    "points": 120,
+    "points": 119,
     "multiplier": 1,
-    "at": "2026-09-21T14:13:55Z"
+    "at": "2026-09-21T14:13:22Z",
+    "tokens": 12,
+    "coins": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11
+    ]
    },
    {
     "segmentID": "sf84b4ed9c2d",
@@ -28,7 +47,23 @@
     "coverage": 1,
     "points": 126,
     "multiplier": 1,
-    "at": "2026-09-21T14:14:40Z"
+    "at": "2026-09-21T14:14:05Z",
+    "tokens": 13,
+    "coins": [
+     12,
+     11,
+     10,
+     9,
+     8,
+     7,
+     6,
+     5,
+     4,
+     3,
+     2,
+     1,
+     0
+    ]
    },
    {
     "segmentID": "sb2a2b995509",
@@ -37,7 +72,12 @@
     "coverage": 1,
     "points": 24,
     "multiplier": 1,
-    "at": "2026-09-21T14:14:54Z"
+    "at": "2026-09-21T14:14:49Z",
+    "tokens": 2,
+    "coins": [
+     1,
+     0
+    ]
    },
    {
     "segmentID": "s87fe58a647c",
@@ -46,7 +86,19 @@
     "coverage": 0.9955957191740678,
     "points": 95,
     "multiplier": 1,
-    "at": "2026-09-21T14:15:18Z"
+    "at": "2026-09-21T14:14:57Z",
+    "tokens": 9,
+    "coins": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8
+    ]
    },
    {
     "segmentID": "scabdffff1ea",
@@ -55,7 +107,11 @@
     "coverage": 1,
     "points": 11,
     "multiplier": 1,
-    "at": "2026-09-21T14:15:51Z"
+    "at": "2026-09-21T14:15:48Z",
+    "tokens": 1,
+    "coins": [
+     0
+    ]
    },
    {
     "segmentID": "s7e594f76e25",
@@ -64,7 +120,12 @@
     "coverage": 1,
     "points": 24,
     "multiplier": 1,
-    "at": "2026-09-21T14:15:56Z"
+    "at": "2026-09-21T14:15:52Z",
+    "tokens": 2,
+    "coins": [
+     0,
+     1
+    ]
    },
    {
     "segmentID": "scb7daa1e4b4",
@@ -73,7 +134,11 @@
     "coverage": 1,
     "points": 11,
     "multiplier": 1,
-    "at": "2026-09-21T14:16:00Z"
+    "at": "2026-09-21T14:15:59Z",
+    "tokens": 1,
+    "coins": [
+     0
+    ]
    },
    {
     "segmentID": "sf36bd9272d3",
@@ -82,7 +147,17 @@
     "coverage": 1,
     "points": 71,
     "multiplier": 1,
-    "at": "2026-09-21T14:20:20Z"
+    "at": "2026-09-21T14:20:01Z",
+    "tokens": 7,
+    "coins": [
+     6,
+     5,
+     4,
+     3,
+     2,
+     1,
+     0
+    ]
    },
    {
     "segmentID": "s3fc76331328",
@@ -91,7 +166,23 @@
     "coverage": 1,
     "points": 127,
     "multiplier": 1,
-    "at": "2026-09-21T14:20:58Z"
+    "at": "2026-09-21T14:20:24Z",
+    "tokens": 13,
+    "coins": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12
+    ]
    },
    {
     "segmentID": "se032166c0d5",
@@ -100,7 +191,15 @@
     "coverage": 1,
     "points": 46,
     "multiplier": 1,
-    "at": "2026-09-21T14:21:18Z"
+    "at": "2026-09-21T14:21:08Z",
+    "tokens": 5,
+    "coins": [
+     4,
+     3,
+     2,
+     1,
+     0
+    ]
    },
    {
     "segmentID": "sfc734661093",
@@ -109,7 +208,29 @@
     "coverage": 1,
     "points": 186,
     "multiplier": 1,
-    "at": "2026-09-21T14:22:04Z"
+    "at": "2026-09-21T14:21:21Z",
+    "tokens": 19,
+    "coins": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15,
+     16,
+     17,
+     18
+    ]
    },
    {
     "segmentID": "s1320a1d1dfc",
@@ -118,7 +239,12 @@
     "coverage": 1,
     "points": 19,
     "multiplier": 1,
-    "at": "2026-09-21T14:22:20Z"
+    "at": "2026-09-21T14:22:16Z",
+    "tokens": 2,
+    "coins": [
+     1,
+     0
+    ]
    },
    {
     "segmentID": "s082c5084d66",
@@ -127,7 +253,13 @@
     "coverage": 1,
     "points": 32,
     "multiplier": 1,
-    "at": "2026-09-21T14:22:29Z"
+    "at": "2026-09-21T14:22:22Z",
+    "tokens": 3,
+    "coins": [
+     2,
+     1,
+     0
+    ]
    },
    {
     "segmentID": "s869001ebb50",
@@ -136,7 +268,13 @@
     "coverage": 1,
     "points": 33,
     "multiplier": 1,
-    "at": "2026-09-21T14:22:38Z"
+    "at": "2026-09-21T14:22:31Z",
+    "tokens": 3,
+    "coins": [
+     0,
+     1,
+     2
+    ]
    },
    {
     "segmentID": "s698f6c91c49",
@@ -145,7 +283,14 @@
     "coverage": 1,
     "points": 39,
     "multiplier": 1,
-    "at": "2026-09-21T14:22:58Z"
+    "at": "2026-09-21T14:22:50Z",
+    "tokens": 4,
+    "coins": [
+     0,
+     1,
+     2,
+     3
+    ]
    },
    {
     "segmentID": "sd2ed5ebdb04",
@@ -154,7 +299,18 @@
     "coverage": 1,
     "points": 82,
     "multiplier": 1,
-    "at": "2026-09-21T14:23:21Z"
+    "at": "2026-09-21T14:23:02Z",
+    "tokens": 8,
+    "coins": [
+     7,
+     6,
+     5,
+     4,
+     3,
+     2,
+     1,
+     0
+    ]
    },
    {
     "segmentID": "sfb63a697abd",
@@ -163,7 +319,11 @@
     "coverage": 1,
     "points": 11,
     "multiplier": 1,
-    "at": "2026-09-21T14:23:31Z"
+    "at": "2026-09-21T14:23:29Z",
+    "tokens": 1,
+    "coins": [
+     0
+    ]
    },
    {
     "segmentID": "sf45ceda9c0d",
@@ -172,7 +332,31 @@
     "coverage": 1,
     "points": 212,
     "multiplier": 1,
-    "at": "2026-09-21T14:24:26Z"
+    "at": "2026-09-21T14:23:31Z",
+    "tokens": 21,
+    "coins": [
+     20,
+     19,
+     18,
+     17,
+     16,
+     15,
+     14,
+     13,
+     12,
+     11,
+     10,
+     9,
+     8,
+     7,
+     6,
+     5,
+     4,
+     3,
+     2,
+     1,
+     0
+    ]
    },
    {
     "segmentID": "sa97c5741582",
@@ -181,7 +365,13 @@
     "coverage": 1,
     "points": 33,
     "multiplier": 1,
-    "at": "2026-09-21T14:24:55Z"
+    "at": "2026-09-21T14:24:44Z",
+    "tokens": 3,
+    "coins": [
+     0,
+     1,
+     2
+    ]
    },
    {
     "segmentID": "se702ec7f311",
@@ -190,7 +380,18 @@
     "coverage": 1,
     "points": 75,
     "multiplier": 1,
-    "at": "2026-09-21T14:25:22Z"
+    "at": "2026-09-21T14:24:57Z",
+    "tokens": 8,
+    "coins": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7
+    ]
    },
    {
     "segmentID": "s58f5ac5c415",
@@ -199,7 +400,14 @@
     "coverage": 0.9609060994891983,
     "points": 43,
     "multiplier": 1,
-    "at": "2026-09-21T14:25:39Z"
+    "at": "2026-09-21T14:25:28Z",
+    "tokens": 4,
+    "coins": [
+     3,
+     2,
+     1,
+     0
+    ]
    },
    {
     "segmentID": "s2047699a795",
@@ -208,7 +416,14 @@
     "coverage": 0.9685872177011368,
     "points": 45,
     "multiplier": 1,
-    "at": "2026-09-21T14:26:06Z"
+    "at": "2026-09-21T14:25:53Z",
+    "tokens": 4,
+    "coins": [
+     0,
+     1,
+     2,
+     3
+    ]
    },
    {
     "segmentID": "s5b63b57d8b7",
@@ -217,7 +432,21 @@
     "coverage": 1,
     "points": 109,
     "multiplier": 1,
-    "at": "2026-09-21T14:27:12Z"
+    "at": "2026-09-21T14:26:43Z",
+    "tokens": 11,
+    "coins": [
+     10,
+     9,
+     8,
+     7,
+     6,
+     5,
+     4,
+     3,
+     2,
+     1,
+     0
+    ]
    },
    {
     "segmentID": "s72ac48108d4",
@@ -226,7 +455,11 @@
     "coverage": 1,
     "points": 9,
     "multiplier": 1,
-    "at": "2026-09-21T14:27:22Z"
+    "at": "2026-09-21T14:27:20Z",
+    "tokens": 1,
+    "coins": [
+     0
+    ]
    },
    {
     "segmentID": "se9b2e6cdf0d",
@@ -235,7 +468,14 @@
     "coverage": 1,
     "points": 41,
     "multiplier": 1,
-    "at": "2026-09-21T14:27:33Z"
+    "at": "2026-09-21T14:27:24Z",
+    "tokens": 4,
+    "coins": [
+     0,
+     1,
+     2,
+     3
+    ]
    },
    {
     "segmentID": "sd892b832b34",
@@ -244,7 +484,16 @@
     "coverage": 0.9716957326457509,
     "points": 62,
     "multiplier": 1,
-    "at": "2026-09-21T14:27:51Z"
+    "at": "2026-09-21T14:27:36Z",
+    "tokens": 6,
+    "coins": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5
+    ]
    },
    {
     "segmentID": "sc584f396608",
@@ -253,20 +502,31 @@
     "coverage": 1,
     "points": 44,
     "multiplier": 1,
-    "at": "2026-09-21T14:28:23Z"
+    "at": "2026-09-21T14:28:11Z",
+    "tokens": 4,
+    "coins": [
+     3,
+     2,
+     1,
+     0
+    ]
    },
    {
     "segmentID": "steal",
     "streetName": "Sheerwater Road",
     "kind": "stolen",
     "coverage": 0.020930599885211194,
-    "points": 0,
+    "points": 9,
     "multiplier": 2,
     "previousOwner": {
      "kind": "ghost",
      "id": "bot-dusk"
     },
-    "at": "2026-09-21T14:13:20Z"
+    "at": "2026-09-21T14:13:20Z",
+    "tokens": 1,
+    "coins": [
+     0
+    ]
    },
    {
     "segmentID": "reject",
@@ -276,10 +536,14 @@
     "points": 0,
     "multiplier": 1,
     "at": "2026-09-21T14:13:20Z",
-    "reason": "Too fast to be running"
+    "reason": "Too fast to be running",
+    "tokens": 1,
+    "coins": [
+     0
+    ]
    }
   ],
-  "points": 1730,
+  "points": 1738,
   "blockBonus": 0,
   "blocksCompleted": [],
   "pelletsCollected": [],

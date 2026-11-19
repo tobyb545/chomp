@@ -3,7 +3,7 @@
 // places stay lively and empty ones cost nothing. Always named and shown as bots.
 import { admin, hasSecret, json } from "../_shared/http.ts";
 import { districtTiles, loadTiles } from "../_shared/world.ts";
-import { Area, type Ghost, makeGhosts, type Ownership, rules, SeededRandom, walkGhost } from "../_shared/chomp/mod.ts";
+import { Area, coinSegment, type Ghost, makeGhosts, type Ownership, rules, SeededRandom, walkGhost } from "../_shared/chomp/mod.ts";
 
 const TICK_S = 3600;
 const MAX_DISTRICTS_PER_TICK = 40;
@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
         return { user, message: `${g.name} ate ${segs.length} of your street${segs.length === 1 ? "" : "s"}${top ? ` on ${top}` : ""}` };
       });
 
-      const tileOf = (id: string) => { const s = area.segment(id); return s ? area.segmentTile[s.index] : null; };
+      const tileOf = (id: string) => { const s = area.segment(coinSegment(id)); return s ? area.segmentTile[s.index] : null; };
       const { error } = await db.rpc("apply_ghost_moves", { p: {
         ghost: g.id, cursor: result.cursor, nextTick: now + TICK_S,
         moves: [...result.writes].map(([s, o]) => ({ s, t: tileOf(s), c: o.capturedAt, v: o.lastVisitedAt })), raids,

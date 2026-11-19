@@ -4,6 +4,7 @@ import type { Area } from "./area.ts";
 import { type Ownership, type OwnerRef, sameOwner, strength } from "./engine.ts";
 import { type Rules, decaySeconds } from "./rules.ts";
 import { SeededRandom } from "./spawns.ts";
+import { coinCount, coinSegment, coinsOf } from "./coins.ts";
 
 export interface Ghost { id: string; name: string; colorHex: string; aggression: number; segmentsPerDay: number; cursorNode: number }
 
@@ -36,10 +37,10 @@ export function walkGhost(area: Area, rules: Rules, ghost: Ghost, steps: number,
   const rng = new SeededRandom(seed);
   const decay = decaySeconds(rules);
   const me: OwnerRef = { kind: "ghost", id: ghost.id };
-  const cap = Math.trunc(area.segments.length * 0.06);
+  const cap = Math.trunc(area.segments.reduce((n, s) => n + coinCount(s.length, rules.tokens.metresPerToken), 0) * 0.06); // in coins
   const liveAt = (o: Ownership | undefined) => !!o && strength(o, end, decay) > 0;
   let held = [...ownership.values()].filter((o) => sameOwner(o.owner, me) && liveAt(o)).length;
-  const players = [...ownership.entries()].filter(([, o]) => o.owner.kind === "player" && liveAt(o)).map(([k]) => k).sort();
+  const players = [...new Set([...ownership.entries()].filter(([, o]) => o.owner.kind === "player" && liveAt(o)).map(([k]) => coinSegment(k)))].sort();
   const writes = new Map<string, Ownership>();
   const raids: Raid[] = [];
   const nodes = [...area.graph.adjacency.keys()].sort((a, b) => a - b);
@@ -53,10 +54,10 @@ export function walkGhost(area: Area, rules: Rules, ghost: Ghost, steps: number,
     const options = area.graph.neighbours(node);
     if (!options.length) { node = nodes[rng.int(nodes.length)]; continue; }
     const weights = options.map((e) => {
-      const o = ownership.get(area.segments[e.segment].id);
-      if (!liveAt(o)) return held >= cap ? 0.15 : 1.5;
-      if (o!.owner.kind === "player") return 1 + 4 * ghost.aggression;
-      if (sameOwner(o!.owner, me)) return 0.35;
+      const owners = coinsOf(rules, area.segments[e.segment]).map((id) => ownership.get(id)).filter(liveAt).map((o) => o!.owner);
+      if (!owners.length) return held >= cap ? 0.15 : 1.5;
+      if (owners.some((o) => o.kind === "player")) return 1 + 4 * ghost.aggression;
+      if (owners.every((o) => sameOwner(o, me))) return 0.35;
       return 0.6;
     });
     let x = rng.unit() * weights.reduce((a, b) => a + b, 0);
@@ -64,17 +65,22 @@ export function walkGhost(area: Area, rules: Rules, ghost: Ghost, steps: number,
     for (let i = 0; i < options.length; i++) { x -= weights[i]; if (x <= 0) { pick = options[i]; break; } }
     const seg = area.segments[pick.segment];
     const t = start + (end - start) * (step + 1) / steps;
-    const prev = ownership.get(seg.id);
-    let next: Ownership;
-    if (prev && sameOwner(prev.owner, me)) {
-      next = { ...prev, lastVisitedAt: t };
-    } else {
-      if (prev && prev.owner.kind === "player" && strength(prev, t, decay) > 0) raids.push({ segmentID: seg.id, from: prev.owner, at: t });
-      next = { owner: me, capturedAt: t, lastVisitedAt: t };
-      held++;
+    // A bot runs the whole street, so it takes every coin on it.
+    let raidedFrom: OwnerRef | undefined;
+    for (const id of coinsOf(rules, seg)) {
+      const prev = ownership.get(id);
+      let next: Ownership;
+      if (prev && sameOwner(prev.owner, me)) {
+        next = { ...prev, lastVisitedAt: t };
+      } else {
+        if (prev && prev.owner.kind === "player" && strength(prev, t, decay) > 0) raidedFrom ??= prev.owner;
+        next = { owner: me, capturedAt: t, lastVisitedAt: t };
+        held++;
+      }
+      ownership.set(id, next);
+      writes.set(id, next);
     }
-    ownership.set(seg.id, next);
-    writes.set(seg.id, next);
+    if (raidedFrom) raids.push({ segmentID: seg.id, from: raidedFrom, at: t });
     node = pick.other;
   }
   return { writes, raids, cursor: node };
