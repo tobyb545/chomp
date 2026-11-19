@@ -1,31 +1,38 @@
-// Hourly (pg_cron → this function): moves each town's bots a few streets.
-// Bots are always named "Bot …" and shown as bots; they keep quiet towns lively.
+// Hourly (pg_cron → this function): moves the bots a few streets. Bots live per
+// district (4x4 map tiles, about 6 km) wherever players hold streets, so busy
+// places stay lively and empty ones cost nothing. Always named and shown as bots.
 import { admin, hasSecret, json } from "../_shared/http.ts";
-import { loadArea } from "../_shared/areas.ts";
-import { type Ghost, makeGhosts, type Ownership, rules, SeededRandom, walkGhost } from "../_shared/chomp/mod.ts";
+import { districtTiles, loadTiles } from "../_shared/world.ts";
+import { Area, type Ghost, makeGhosts, type Ownership, rules, SeededRandom, walkGhost } from "../_shared/chomp/mod.ts";
 
 const TICK_S = 3600;
+const MAX_DISTRICTS_PER_TICK = 40;
 
 Deno.serve(async (req) => {
   if (!hasSecret(req, "CRON_SECRET")) return json({ error: "forbidden" }, 403);
   const db = admin();
   const now = Date.now() / 1000;
-  const { data: areas } = await db.from("areas").select("slug");
+  // Districts with live player territory (from the active_districts view).
+  const { data: districts } = await db.from("active_districts").select("district").limit(MAX_DISTRICTS_PER_TICK);
   const summary: Record<string, number> = {};
 
-  for (const { slug } of areas ?? []) {
-    const area = await loadArea(db, slug);
-    if (!area) continue;
-    let { data: ghosts } = await db.from("ai_ghosts").select("*").eq("area_slug", slug);
+  for (const { district } of districts ?? []) {
+    const keys = districtTiles(district);
+    // Bots only walk tiles that already exist; they never trigger Overpass downloads.
+    const tiles = await loadTiles(db, keys, 0);
+    if (!tiles.length) continue;
+    const area = Area.fromTiles(tiles);
+    const tileKeys = tiles.map((t) => t.key);
+    let { data: ghosts } = await db.from("ai_ghosts").select("*").eq("district", district);
     if (!ghosts?.length) {
-      const fresh = makeGhosts(area, rules).map((g) => ({
-        id: g.id, area_slug: slug, name: g.name, color_hex: g.colorHex, cursor_node: g.cursorNode,
+      const fresh = makeGhosts(area, rules, district).map((g) => ({
+        id: g.id, district, name: g.name, color_hex: g.colorHex, cursor_node: g.cursorNode,
         personality: { aggression: g.aggression, segmentsPerDay: g.segmentsPerDay }, next_tick_at: new Date(now * 1000).toISOString(),
       }));
       await db.from("ai_ghosts").insert(fresh);
       ghosts = fresh;
     }
-    const { data: rows } = await db.from("segment_ownership").select("segment_id, owner_kind, owner_id, captured_at, last_visited_at").eq("area_slug", slug);
+    const { data: rows } = await db.from("segment_ownership").select("segment_id, owner_kind, owner_id, captured_at, last_visited_at").in("tile", tileKeys);
     const ownership = new Map<string, Ownership>((rows ?? []).map((r) => [r.segment_id, {
       owner: { kind: r.owner_kind, id: r.owner_id }, capturedAt: Date.parse(r.captured_at) / 1000, lastVisitedAt: Date.parse(r.last_visited_at) / 1000,
     }]));
@@ -54,14 +61,15 @@ Deno.serve(async (req) => {
         return { user, message: `${g.name} ate ${segs.length} of your street${segs.length === 1 ? "" : "s"}${top ? ` on ${top}` : ""}` };
       });
 
+      const tileOf = (id: string) => { const s = area.segment(id); return s ? area.segmentTile[s.index] : null; };
       const { error } = await db.rpc("apply_ghost_moves", { p: {
-        ghost: g.id, area: slug, cursor: result.cursor, nextTick: now + TICK_S,
-        moves: [...result.writes].map(([s, o]) => ({ s, c: o.capturedAt, v: o.lastVisitedAt })), raids,
+        ghost: g.id, cursor: result.cursor, nextTick: now + TICK_S,
+        moves: [...result.writes].map(([s, o]) => ({ s, t: tileOf(s), c: o.capturedAt, v: o.lastVisitedAt })), raids,
       } });
-      if (error) console.error("apply_ghost_moves", slug, g.id, error.message);
+      if (error) console.error("apply_ghost_moves", district, g.id, error.message);
       moved += result.writes.size;
     }
-    summary[slug] = moved;
+    summary[district] = moved;
   }
   return json({ ok: true, moved: summary });
 });

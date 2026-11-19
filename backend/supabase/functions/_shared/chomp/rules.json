@@ -15,10 +15,13 @@
     "collectRadiusMetres": 30
   },
   "powerPellets": {
-    "perDay": 3
+    "perDay": 1
   },
   "bonusStreets": {
-    "perDay": 2
+    "perDay": 1
+  },
+  "imports": {
+    "captureWindowHours": 168
   },
   "blocks": {
     "bonusBasePoints": 250,

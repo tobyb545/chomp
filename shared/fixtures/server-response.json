@@ -4,300 +4,288 @@
   "runID": "6F9619FF-8B86-4D11-B42D-00C04FC964FF",
   "captures": [
    {
-    "segmentID": "s93d651a56a5",
-    "streetName": "Acacia Close",
-    "kind": "captured",
-    "coverage": 0.980127110004075,
-    "points": 66,
-    "multiplier": 1,
-    "at": "2026-09-21T14:13:42Z"
-   },
-   {
-    "segmentID": "s01f4c8d5c58",
-    "streetName": "Acacia Drive",
-    "kind": "captured",
-    "coverage": 0.9583697972183524,
-    "points": 25,
-    "multiplier": 1,
-    "at": "2026-09-21T14:13:52Z"
-   },
-   {
-    "segmentID": "s4a7299427a7",
-    "streetName": "Acacia Drive",
-    "kind": "captured",
-    "coverage": 1,
-    "points": 70,
-    "multiplier": 1,
-    "at": "2026-09-21T14:14:21Z"
-   },
-   {
-    "segmentID": "s7b812e47baa",
-    "streetName": "Acacia Drive",
-    "kind": "captured",
-    "coverage": 1,
-    "points": 57,
-    "multiplier": 1,
-    "at": "2026-09-21T14:14:44Z"
-   },
-   {
-    "segmentID": "s3d4a2b60779",
-    "streetName": "Acacia Drive",
-    "kind": "captured",
-    "coverage": 1,
-    "points": 116,
-    "multiplier": 1,
-    "at": "2026-09-21T14:15:30Z"
-   },
-   {
-    "segmentID": "sb89b976f48e",
-    "streetName": "Woodham Park Way",
+    "segmentID": "sd4de9985f78",
+    "streetName": "Sheerwater Road",
     "kind": "partial",
-    "coverage": 0.000493921781608656,
+    "coverage": 0.020930599885211194,
     "points": 0,
     "multiplier": 1,
-    "at": "2026-09-21T14:15:36Z"
+    "at": "2026-09-21T14:13:20Z"
    },
    {
-    "segmentID": "s09f48561bd7",
-    "streetName": "Woodham Park Way",
+    "segmentID": "sec45004968d",
+    "streetName": "Sheerwater Road",
     "kind": "captured",
     "coverage": 1,
-    "points": 99,
+    "points": 120,
     "multiplier": 1,
-    "at": "2026-09-21T14:15:58Z"
+    "at": "2026-09-21T14:13:55Z"
    },
    {
-    "segmentID": "sebc20f77d3f",
-    "streetName": "Woodham Park Way",
+    "segmentID": "sf84b4ed9c2d",
+    "streetName": "Old Avenue",
     "kind": "captured",
     "coverage": 1,
-    "points": 25,
+    "points": 126,
     "multiplier": 1,
-    "at": "2026-09-21T14:16:10Z"
+    "at": "2026-09-21T14:14:40Z"
    },
    {
-    "segmentID": "s68ab2bd2084",
-    "streetName": "Amberley Drive",
+    "segmentID": "sb2a2b995509",
+    "streetName": "Old Avenue",
     "kind": "captured",
     "coverage": 1,
-    "points": 44,
+    "points": 24,
     "multiplier": 1,
-    "at": "2026-09-21T14:16:23Z"
+    "at": "2026-09-21T14:14:54Z"
    },
    {
-    "segmentID": "s6b30b7a194e",
-    "streetName": "Footpath",
+    "segmentID": "s87fe58a647c",
+    "streetName": "Old Avenue",
+    "kind": "captured",
+    "coverage": 0.9955957191740678,
+    "points": 95,
+    "multiplier": 1,
+    "at": "2026-09-21T14:15:18Z"
+   },
+   {
+    "segmentID": "scabdffff1ea",
+    "streetName": "Old Avenue",
     "kind": "captured",
     "coverage": 1,
-    "points": 57,
+    "points": 11,
     "multiplier": 1,
-    "at": "2026-09-21T14:16:42Z"
+    "at": "2026-09-21T14:15:51Z"
    },
    {
-    "segmentID": "sa6f12f53d94",
-    "streetName": "Woodham Park Road",
+    "segmentID": "s7e594f76e25",
+    "streetName": "Old Avenue",
     "kind": "captured",
     "coverage": 1,
-    "points": 35,
+    "points": 24,
     "multiplier": 1,
-    "at": "2026-09-21T14:16:56Z"
+    "at": "2026-09-21T14:15:56Z"
    },
    {
-    "segmentID": "sda33ea6abd9",
-    "streetName": "Woodham Park Way",
+    "segmentID": "scb7daa1e4b4",
+    "streetName": "Old Avenue",
     "kind": "captured",
     "coverage": 1,
-    "points": 34,
+    "points": 11,
     "multiplier": 1,
-    "at": "2026-09-21T14:17:05Z"
+    "at": "2026-09-21T14:16:00Z"
    },
    {
-    "segmentID": "sbe919a7fbe6",
-    "streetName": "Amberley Drive",
+    "segmentID": "sf36bd9272d3",
+    "streetName": "Sheerwater Road",
     "kind": "captured",
     "coverage": 1,
-    "points": 78,
+    "points": 71,
     "multiplier": 1,
-    "at": "2026-09-21T14:17:36Z"
+    "at": "2026-09-21T14:20:20Z"
    },
    {
-    "segmentID": "s81abfd4e131",
-    "streetName": "Amberley Drive",
+    "segmentID": "s3fc76331328",
+    "streetName": "Sheerwater Road",
     "kind": "captured",
-    "coverage": 0.9996923579421488,
+    "coverage": 1,
+    "points": 127,
+    "multiplier": 1,
+    "at": "2026-09-21T14:20:58Z"
+   },
+   {
+    "segmentID": "se032166c0d5",
+    "streetName": "Sheerwater Road",
+    "kind": "captured",
+    "coverage": 1,
+    "points": 46,
+    "multiplier": 1,
+    "at": "2026-09-21T14:21:18Z"
+   },
+   {
+    "segmentID": "sfc734661093",
+    "streetName": "Sheerwater Road",
+    "kind": "captured",
+    "coverage": 1,
+    "points": 186,
+    "multiplier": 1,
+    "at": "2026-09-21T14:22:04Z"
+   },
+   {
+    "segmentID": "s1320a1d1dfc",
+    "streetName": "Sheerwater Road",
+    "kind": "captured",
+    "coverage": 1,
     "points": 19,
     "multiplier": 1,
-    "at": "2026-09-21T14:17:45Z"
+    "at": "2026-09-21T14:22:20Z"
    },
    {
-    "segmentID": "s66338589c3d",
-    "streetName": "Amberley Drive",
+    "segmentID": "s082c5084d66",
+    "streetName": "Sheerwater Road",
     "kind": "captured",
     "coverage": 1,
-    "points": 40,
+    "points": 32,
     "multiplier": 1,
-    "at": "2026-09-21T14:18:02Z"
+    "at": "2026-09-21T14:22:29Z"
    },
    {
-    "segmentID": "s0ae5f88db31",
-    "streetName": "Amberley Drive",
+    "segmentID": "s869001ebb50",
+    "streetName": "Sheerwater Road",
+    "kind": "captured",
+    "coverage": 1,
+    "points": 33,
+    "multiplier": 1,
+    "at": "2026-09-21T14:22:38Z"
+   },
+   {
+    "segmentID": "s698f6c91c49",
+    "streetName": "Old Woking Road",
+    "kind": "captured",
+    "coverage": 1,
+    "points": 39,
+    "multiplier": 1,
+    "at": "2026-09-21T14:22:58Z"
+   },
+   {
+    "segmentID": "sd2ed5ebdb04",
+    "streetName": "Old Woking Road",
+    "kind": "captured",
+    "coverage": 1,
+    "points": 82,
+    "multiplier": 1,
+    "at": "2026-09-21T14:23:21Z"
+   },
+   {
+    "segmentID": "sfb63a697abd",
+    "streetName": "Old Woking Road",
+    "kind": "captured",
+    "coverage": 1,
+    "points": 11,
+    "multiplier": 1,
+    "at": "2026-09-21T14:23:31Z"
+   },
+   {
+    "segmentID": "sf45ceda9c0d",
+    "streetName": "Old Woking Road",
+    "kind": "captured",
+    "coverage": 1,
+    "points": 212,
+    "multiplier": 1,
+    "at": "2026-09-21T14:24:26Z"
+   },
+   {
+    "segmentID": "sa97c5741582",
+    "streetName": "Old Woking Road",
+    "kind": "captured",
+    "coverage": 1,
+    "points": 33,
+    "multiplier": 1,
+    "at": "2026-09-21T14:24:55Z"
+   },
+   {
+    "segmentID": "se702ec7f311",
+    "streetName": "Rivey Close",
+    "kind": "captured",
+    "coverage": 1,
+    "points": 75,
+    "multiplier": 1,
+    "at": "2026-09-21T14:25:22Z"
+   },
+   {
+    "segmentID": "s58f5ac5c415",
+    "streetName": "Rivey Close",
+    "kind": "captured",
+    "coverage": 0.9609060994891983,
+    "points": 43,
+    "multiplier": 1,
+    "at": "2026-09-21T14:25:39Z"
+   },
+   {
+    "segmentID": "s2047699a795",
+    "streetName": "Rivey Close",
+    "kind": "captured",
+    "coverage": 0.9685872177011368,
+    "points": 45,
+    "multiplier": 1,
+    "at": "2026-09-21T14:26:06Z"
+   },
+   {
+    "segmentID": "s5b63b57d8b7",
+    "streetName": "Old Woking Road",
+    "kind": "captured",
+    "coverage": 1,
+    "points": 109,
+    "multiplier": 1,
+    "at": "2026-09-21T14:27:12Z"
+   },
+   {
+    "segmentID": "s72ac48108d4",
+    "streetName": "Old Woking Road",
+    "kind": "captured",
+    "coverage": 1,
+    "points": 9,
+    "multiplier": 1,
+    "at": "2026-09-21T14:27:22Z"
+   },
+   {
+    "segmentID": "se9b2e6cdf0d",
+    "streetName": "Hurst Way",
     "kind": "captured",
     "coverage": 1,
     "points": 41,
     "multiplier": 1,
-    "at": "2026-09-21T14:18:16Z"
+    "at": "2026-09-21T14:27:33Z"
    },
    {
-    "segmentID": "sbab3dba9595",
-    "streetName": "Amberley Drive",
-    "kind": "captured",
-    "coverage": 1,
-    "points": 48,
-    "multiplier": 1,
-    "at": "2026-09-21T14:18:29Z"
-   },
-   {
-    "segmentID": "s3e473dcc28c",
-    "streetName": "Amberley Drive",
-    "kind": "captured",
-    "coverage": 1,
-    "points": 113,
-    "multiplier": 1,
-    "at": "2026-09-21T14:19:15Z"
-   },
-   {
-    "segmentID": "sd3cfa99d34e",
-    "streetName": "Woodham Park Road",
-    "kind": "partial",
-    "coverage": 0.00010873700417364994,
-    "points": 0,
-    "multiplier": 1,
-    "at": "2026-09-21T14:19:20Z"
-   },
-   {
-    "segmentID": "s4f119528358",
-    "streetName": "Woodham Park Road",
-    "kind": "captured",
-    "coverage": 1,
-    "points": 201,
-    "multiplier": 1,
-    "at": "2026-09-21T14:20:11Z"
-   },
-   {
-    "segmentID": "s098864b78ba",
-    "streetName": "Nursery Close",
-    "kind": "captured",
-    "coverage": 1,
-    "points": 63,
-    "multiplier": 1,
-    "at": "2026-09-21T14:20:40Z"
-   },
-   {
-    "segmentID": "s3f77163be33",
-    "streetName": "Footpath",
-    "kind": "captured",
-    "coverage": 1,
-    "points": 63,
-    "multiplier": 1,
-    "at": "2026-09-21T14:21:01Z"
-   },
-   {
-    "segmentID": "scd1cfe8ff2b",
-    "streetName": "Queen Mary's Drive",
-    "kind": "captured",
-    "coverage": 1,
-    "points": 37,
-    "multiplier": 1,
-    "at": "2026-09-21T14:21:16Z"
-   },
-   {
-    "segmentID": "s1632662a797",
-    "streetName": "Queen Mary's Drive",
-    "kind": "captured",
-    "coverage": 1,
-    "points": 52,
-    "multiplier": 1,
-    "at": "2026-09-21T14:21:28Z"
-   },
-   {
-    "segmentID": "s3fe39ab09f5",
-    "streetName": "Woodham Park Road",
-    "kind": "captured",
-    "coverage": 1,
-    "points": 139,
-    "multiplier": 1,
-    "at": "2026-09-21T14:22:05Z"
-   },
-   {
-    "segmentID": "scbe4fefdf50",
-    "streetName": "Woodham Park Road",
-    "kind": "captured",
-    "coverage": 1,
-    "points": 13,
-    "multiplier": 1,
-    "at": "2026-09-21T14:22:17Z"
-   },
-   {
-    "segmentID": "sa1c3333d483",
-    "streetName": "Woodham Park Road",
-    "kind": "captured",
-    "coverage": 1,
-    "points": 94,
-    "multiplier": 1,
-    "at": "2026-09-21T14:22:40Z"
-   },
-   {
-    "segmentID": "s37a265941a3",
-    "streetName": "Woodham Park Road",
-    "kind": "captured",
-    "coverage": 1,
-    "points": 200,
-    "multiplier": 1,
-    "at": "2026-09-21T14:23:35Z"
-   },
-   {
-    "segmentID": "s46679dcf031",
+    "segmentID": "sd892b832b34",
     "streetName": "Service road",
     "kind": "captured",
-    "coverage": 0.9808698034206729,
-    "points": 103,
+    "coverage": 0.9716957326457509,
+    "points": 62,
     "multiplier": 1,
-    "at": "2026-09-21T14:25:31Z"
+    "at": "2026-09-21T14:27:51Z"
+   },
+   {
+    "segmentID": "sc584f396608",
+    "streetName": "Hurst Way",
+    "kind": "captured",
+    "coverage": 1,
+    "points": 44,
+    "multiplier": 1,
+    "at": "2026-09-21T14:28:23Z"
    },
    {
     "segmentID": "steal",
-    "streetName": "Acacia Close",
+    "streetName": "Sheerwater Road",
     "kind": "stolen",
-    "coverage": 0.980127110004075,
-    "points": 66,
+    "coverage": 0.020930599885211194,
+    "points": 0,
     "multiplier": 2,
     "previousOwner": {
      "kind": "ghost",
      "id": "bot-dusk"
     },
-    "at": "2026-09-21T14:13:42Z"
+    "at": "2026-09-21T14:13:20Z"
    },
    {
     "segmentID": "reject",
-    "streetName": "Acacia Close",
+    "streetName": "Sheerwater Road",
     "kind": "rejected",
-    "coverage": 0.980127110004075,
+    "coverage": 0.020930599885211194,
     "points": 0,
     "multiplier": 1,
-    "at": "2026-09-21T14:13:42Z",
+    "at": "2026-09-21T14:13:20Z",
     "reason": "Too fast to be running"
    }
   ],
-  "points": 1932,
-  "blockBonus": 689,
-  "blocksCompleted": [
-   "b4c82c2abd9c",
-   "bf69941a31d7"
-  ],
+  "points": 1730,
+  "blockBonus": 0,
+  "blocksCompleted": [],
   "pelletsCollected": [],
   "frenzyWindows": [
    {
-    "start": "2026-09-21T14:13:42Z",
+    "start": "2026-09-21T14:13:20Z",
     "duration": 600
    }
   ],

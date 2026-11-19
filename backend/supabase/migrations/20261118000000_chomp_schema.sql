@@ -5,37 +5,47 @@
 create extension if not exists postgis with schema extensions;
 create extension if not exists pg_cron;
 
+-- "14/x/y" → parent "12/x/y" (district) and "10/x/y" (region).
+create or replace function public.tile_parent(p_tile text, p_zoom int) returns text
+language sql immutable as $$
+  select p_zoom || '/' || (split_part(p_tile, '/', 2)::int >> (14 - p_zoom)) || '/' || (split_part(p_tile, '/', 3)::int >> (14 - p_zoom))
+$$;
+create or replace function public.tile_region(p_tile text) returns text language sql immutable as $$ select public.tile_parent(p_tile, 10) $$;
+
 -- ---------------------------------------------------------------------------
--- Map data (loaded by backend/supabase/seed/<slug>.sql from the ingest script)
+-- Map data: zoom-14 tiles (~1.5 km) built on demand from OpenStreetMap by the
+-- Edge Functions' StreetBuilder (same code as the app) and stored via
+-- store_map_tile(). The game works anywhere; there are no fixed towns.
 -- ---------------------------------------------------------------------------
-create table public.areas (
-  slug            text primary key,
-  name            text not null,
-  long_name       text not null default '',
-  county          text not null default '',
-  country         text not null default '',
-  boundary        geometry(MultiPolygon, 4326) not null,
+create table public.map_tiles (
+  key             text primary key,                 -- "14/x/y"
+  district        text not null,                    -- "12/x/y": bots live per district (~6 km)
+  region          text not null,                    -- "10/x/y": "Nearby" leaderboards (~25 km)
+  boundary        geometry(Polygon, 4326) not null,
+  data            jsonb not null,                   -- the TileFile, served to the matcher
+  segment_count   int not null default 0,
   total_length_m  double precision not null default 0,
   osm_timestamp   timestamptz,
-  created_at      timestamptz not null default now()
+  built_at        timestamptz not null default now()
 );
-create index areas_boundary_gix on public.areas using gist (boundary);
+create index map_tiles_boundary_gix on public.map_tiles using gist (boundary);
+create index map_tiles_district_idx on public.map_tiles (district);
+create index map_tiles_region_idx on public.map_tiles (region);
 
 create table public.segments (
   id           text primary key,
-  area_slug    text not null references public.areas(slug) on delete cascade,
+  tile         text not null references public.map_tiles(key) on delete cascade,
   geom         geometry(LineString, 4326) not null,
   length_m     double precision not null,
   name         text not null default '',
   highway      text not null,
   kind         text not null check (kind in ('road', 'path')),
-  osm_way_ids  bigint[] not null default '{}',
   start_node   bigint not null,
   end_node     bigint not null,
   active       boolean not null default true
 );
 create index segments_geom_gix on public.segments using gist (geom);
-create index segments_area_idx on public.segments (area_slug) where active;
+create index segments_tile_idx on public.segments (tile) where active;
 
 create table public.segment_lineage (
   old_id      text primary key,
@@ -45,20 +55,20 @@ create table public.segment_lineage (
 
 create table public.blocks (
   id         text primary key,
-  area_slug  text not null references public.areas(slug) on delete cascade,
+  tile       text not null references public.map_tiles(key) on delete cascade,
   geom       geometry(Polygon, 4326) not null,
   area_m2    double precision not null
 );
 create table public.block_segments (
   block_id    text not null references public.blocks(id) on delete cascade,
-  segment_id  text not null references public.segments(id) on delete cascade,
+  segment_id  text not null,  -- may belong to a neighbouring tile not built yet
   primary key (block_id, segment_id)
 );
 create index block_segments_segment_idx on public.block_segments (segment_id);
 
 create table public.pois (
   id         text primary key,
-  area_slug  text not null references public.areas(slug) on delete cascade,
+  tile       text not null references public.map_tiles(key) on delete cascade,
   name       text not null,
   kind       text not null,
   location   geometry(Point, 4326) not null
@@ -71,7 +81,6 @@ create table public.profiles (
   id            uuid primary key references auth.users(id) on delete cascade,
   display_name  text not null check (char_length(display_name) between 2 and 20),
   color_hex     text not null default 'C6FF00' check (color_hex ~ '^[0-9A-Fa-f]{6}$'),
-  home_area     text references public.areas(slug),
   is_private    boolean not null default false,
   created_at    timestamptz not null default now()
 );
@@ -127,7 +136,7 @@ create type public.owner_kind as enum ('player', 'ghost');
 
 create table public.ai_ghosts (
   id            text primary key,
-  area_slug     text not null references public.areas(slug) on delete cascade,
+  district      text not null,
   name          text not null,
   color_hex     text not null,
   personality   jsonb not null default '{}',
@@ -137,7 +146,7 @@ create table public.ai_ghosts (
 
 create table public.segment_ownership (
   segment_id       text primary key references public.segments(id) on delete cascade,
-  area_slug        text not null references public.areas(slug) on delete cascade,
+  tile             text not null,
   owner_kind       public.owner_kind not null,
   owner_id         text not null,           -- profiles.id::text or ai_ghosts.id
   club_id          uuid references public.clubs(id) on delete set null,
@@ -145,7 +154,7 @@ create table public.segment_ownership (
   last_visited_at  timestamptz not null
 );
 create index segment_ownership_owner_idx on public.segment_ownership (owner_kind, owner_id);
-create index segment_ownership_area_idx on public.segment_ownership (area_slug);
+create index segment_ownership_tile_idx on public.segment_ownership (tile);
 
 -- Strength is derived, never stored: 1 when fresh, 0 at the decay horizon.
 create or replace function public.ownership_strength(last_visited timestamptz, decay_days double precision default 21)
@@ -156,7 +165,7 @@ $$;
 create table public.ownership_events (
   id          bigint generated always as identity primary key,
   segment_id  text not null references public.segments(id) on delete cascade,
-  area_slug   text not null,
+  tile        text not null,
   from_kind   public.owner_kind,
   from_id     text,
   to_kind     public.owner_kind,
@@ -181,7 +190,6 @@ create table public.personal_coverage (
 create table public.runs (
   id               uuid primary key,
   user_id          uuid not null references public.profiles(id) on delete cascade,
-  area_slug        text not null references public.areas(slug),
   source           text not null check (source in ('live', 'health_import', 'strava_import')),
   started_at       timestamptz not null,
   ended_at         timestamptz not null,
@@ -219,30 +227,14 @@ create table public.captures (
 create index captures_run_idx on public.captures (run_id);
 create index captures_user_day_idx on public.captures (user_id, at);
 
--- Daily spawns are deterministic (same seed on client and server); these
--- tables record collections and allow manual overrides for events.
-create table public.power_pellets (
-  id            text primary key,          -- "<yyyy-mm-dd>|<poi id>"
-  area_slug     text not null references public.areas(slug) on delete cascade,
-  poi_id        text not null references public.pois(id) on delete cascade,
-  active_from   timestamptz not null,
-  active_until  timestamptz not null
-);
+-- Daily spawns are deterministic per tile (same seed on client and server),
+-- so they aren't stored; only collections are.
 create table public.pellet_collections (
   pellet_id     text not null,
   user_id       uuid not null references public.profiles(id) on delete cascade,
   run_id        uuid references public.runs(id) on delete set null,
   collected_at  timestamptz not null,
   primary key (pellet_id, user_id)
-);
-
-create table public.bonus_streets (
-  id          bigint generated always as identity primary key,
-  area_slug   text not null references public.areas(slug) on delete cascade,
-  street_name text not null,
-  multiplier  double precision not null check (multiplier between 1 and 5),
-  starts_at   timestamptz not null,
-  ends_at     timestamptz not null
 );
 
 create table public.block_awards (
@@ -253,12 +245,12 @@ create table public.block_awards (
   primary key (user_id, block_id, awarded_at)
 );
 
-create table public.town_bosses (
-  area_slug   text not null references public.areas(slug) on delete cascade,
+create table public.local_bosses (
+  region      text not null,             -- "10/x/y"
   week_start  date not null,
   user_id     uuid references public.profiles(id) on delete set null,
   streets     int not null,
-  primary key (area_slug, week_start)
+  primary key (region, week_start)
 );
 
 -- ---------------------------------------------------------------------------
@@ -325,7 +317,7 @@ create table public.game_config (
 -- finer than the hour.
 -- ---------------------------------------------------------------------------
 create or replace view public.segment_ownership_public with (security_invoker = false) as
-  select so.segment_id, so.area_slug, so.owner_kind::text as owner_kind, so.owner_id,
+  select so.segment_id, so.tile, so.owner_kind::text as owner_kind, so.owner_id,
          coalesce(p.display_name, g.name, 'Rival') as owner_name,
          coalesce(p.color_hex, g.color_hex, '8888AA') as owner_color,
          date_trunc('hour', so.captured_at) as captured_at,
@@ -346,7 +338,7 @@ grant select on public.segment_ownership_public to anon, authenticated;
 -- ---------------------------------------------------------------------------
 -- RLS
 -- ---------------------------------------------------------------------------
-alter table public.areas enable row level security;
+alter table public.map_tiles enable row level security;
 alter table public.segments enable row level security;
 alter table public.segment_lineage enable row level security;
 alter table public.blocks enable row level security;
@@ -365,11 +357,9 @@ alter table public.personal_coverage enable row level security;
 alter table public.runs enable row level security;
 alter table public.run_traces enable row level security;
 alter table public.captures enable row level security;
-alter table public.power_pellets enable row level security;
 alter table public.pellet_collections enable row level security;
-alter table public.bonus_streets enable row level security;
 alter table public.block_awards enable row level security;
-alter table public.town_bosses enable row level security;
+alter table public.local_bosses enable row level security;
 alter table public.flags enable row level security;
 alter table public.reports enable row level security;
 alter table public.user_trust enable row level security;
@@ -377,16 +367,14 @@ alter table public.admins enable row level security;
 alter table public.game_config enable row level security;
 
 -- Map data and config: readable by everyone, written only by the service role.
-create policy "Map areas are public" on public.areas for select using (true);
+create policy "Map tiles are public" on public.map_tiles for select using (true);
 create policy "Segments are public" on public.segments for select using (true);
 create policy "Segment lineage is public" on public.segment_lineage for select using (true);
 create policy "Blocks are public" on public.blocks for select using (true);
 create policy "Block segments are public" on public.block_segments for select using (true);
 create policy "Landmarks are public" on public.pois for select using (true);
-create policy "Power pellets are public" on public.power_pellets for select using (true);
-create policy "Bonus streets are public" on public.bonus_streets for select using (true);
 create policy "Bots are public" on public.ai_ghosts for select using (true);
-create policy "Town bosses are public" on public.town_bosses for select using (true);
+create policy "Local bosses are public" on public.local_bosses for select using (true);
 create policy "Game config is public" on public.game_config for select using (true);
 
 -- Ownership itself is read through segment_ownership_public; the raw table is admin-only.
@@ -447,12 +435,12 @@ create policy "Admins see the admin list" on public.admins for select using (pub
 -- RPCs used by the app
 -- ---------------------------------------------------------------------------
 
--- Re-points ownership/coverage after the ingest script re-splits segments.
+-- Re-points ownership/coverage after a tile rebuild re-splits segments.
 create or replace function public.apply_segment_lineage() returns void
 language plpgsql security definer set search_path = public, extensions as $$
 begin
-  insert into public.segment_ownership (segment_id, area_slug, owner_kind, owner_id, club_id, captured_at, last_visited_at)
-  select l.new_id, s.area_slug, so.owner_kind, so.owner_id, so.club_id, so.captured_at, so.last_visited_at
+  insert into public.segment_ownership (segment_id, tile, owner_kind, owner_id, club_id, captured_at, last_visited_at)
+  select l.new_id, s.tile, so.owner_kind, so.owner_id, so.club_id, so.captured_at, so.last_visited_at
     from public.segment_lineage l
     join public.segment_ownership so on so.segment_id = l.old_id
     join public.segments s on s.id = l.new_id
@@ -470,23 +458,20 @@ begin
 end $$;
 
 -- Leaderboards by scope. Strength > 0 only; private and shadow-restricted players excluded.
-create or replace function public.leaderboard(p_scope text, p_area text)
+create or replace function public.leaderboard(p_scope text, p_tile text)
 returns table (user_id text, display_name text, color_hex text, streets_held int, metres_held double precision, blocks_held int)
 language sql stable security definer set search_path = public, extensions as $$
   with live as (
-    select so.owner_id, so.segment_id, s.length_m, s.area_slug, a.county, a.country
+    select so.owner_id, so.segment_id, s.length_m, public.tile_region(so.tile) as region
       from public.segment_ownership so
       join public.segments s on s.id = so.segment_id
-      join public.areas a on a.slug = s.area_slug
      where so.owner_kind = 'player' and public.ownership_strength(so.last_visited_at) > 0
   ),
-  target as (select county, country from public.areas where slug = p_area),
   scoped as (
-    select l.* from live l, target t
+    select l.* from live l
      where case p_scope
-             when 'town' then l.area_slug = p_area
-             when 'county' then l.county = t.county
-             when 'country' then l.country = t.country
+             when 'nearby' then l.region = public.tile_region(p_tile)
+             when 'global' then true
              when 'friends' then l.owner_id = auth.uid()::text or exists (
                select 1 from public.friendships f where f.status = 'accepted'
                   and ((f.user_a = auth.uid() and f.user_b::text = l.owner_id) or (f.user_b = auth.uid() and f.user_a::text = l.owner_id)))
@@ -607,31 +592,41 @@ begin
     delete from public.segment_ownership so
      where public.ownership_strength(so.last_visited_at,
              coalesce((select (value->>'days')::double precision from public.game_config where key = 'decay'), 21)) <= 0
-    returning so.segment_id, so.area_slug, so.owner_kind, so.owner_id
+    returning so.segment_id, so.tile, so.owner_kind, so.owner_id
   )
-  insert into public.ownership_events (segment_id, area_slug, from_kind, from_id, cause)
-  select segment_id, area_slug, owner_kind, owner_id, 'decay' from gone;
+  insert into public.ownership_events (segment_id, tile, from_kind, from_id, cause)
+  select segment_id, tile, owner_kind, owner_id, 'decay' from gone;
   get diagnostics n = row_count;
   return n;
 end $$;
 
--- Weekly Town Boss: most streets held at Monday 00:00 UK time.
-create or replace function public.crown_town_bosses() returns void
+-- Weekly local boss per region (~25 km): most streets held at Monday 00:00 UK time.
+create or replace function public.crown_local_bosses() returns void
 language sql security definer set search_path = public, extensions as $$
-  insert into public.town_bosses (area_slug, week_start, user_id, streets)
-  select distinct on (so.area_slug) so.area_slug, (now() at time zone 'Europe/London')::date, so.owner_id::uuid, count(*)::int
-    from public.segment_ownership so
-    join public.profiles p on p.id::text = so.owner_id and not p.is_private
-   where so.owner_kind = 'player' and public.ownership_strength(so.last_visited_at) > 0
-   group by so.area_slug, so.owner_id
-   order by so.area_slug, count(*) desc
-  on conflict (area_slug, week_start) do update set user_id = excluded.user_id, streets = excluded.streets
+  insert into public.local_bosses (region, week_start, user_id, streets)
+  select distinct on (r.region) r.region, (now() at time zone 'Europe/London')::date, r.owner_id::uuid, r.n
+    from (select public.tile_region(so.tile) as region, so.owner_id, count(*)::int as n
+            from public.segment_ownership so
+            join public.profiles p on p.id::text = so.owner_id and not p.is_private
+           where so.owner_kind = 'player' and public.ownership_strength(so.last_visited_at) > 0
+           group by 1, 2) r
+   order by r.region, r.n desc
+  on conflict (region, week_start) do update set user_id = excluded.user_id, streets = excluded.streets
 $$;
 
 select cron.schedule('chomp-decay', '15 * * * *', $$select public.decay_sweep()$$);
-select cron.schedule('chomp-town-boss', '0 0 * * 1', $$select public.crown_town_bosses()$$);
+select cron.schedule('chomp-local-boss', '0 0 * * 1', $$select public.crown_local_bosses()$$);
 
 insert into public.game_config (key, value) values
   ('decay', '{"days": 21}'),
   ('capture', '{"coverageThreshold": 0.8, "frenzyRivalCoverageThreshold": 0.4}')
 on conflict (key) do nothing;
+
+-- Districts where players hold live streets: where the server runs bots.
+create or replace view public.active_districts with (security_invoker = false) as
+  select public.tile_parent(so.tile, 12) as district, count(*) as player_streets
+    from public.segment_ownership so
+   where so.owner_kind = 'player' and public.ownership_strength(so.last_visited_at) > 0
+   group by 1
+   order by 2 desc;
+revoke all on public.active_districts from anon, authenticated;

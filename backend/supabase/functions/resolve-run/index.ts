@@ -2,7 +2,7 @@
 // re-matches it, runs anti-cheat, applies the game rules and writes the result
 // atomically (apply_run_result). The app replaces its provisional captures with this answer.
 import { admin, caller, cors, json } from "../_shared/http.ts";
-import { loadArea } from "../_shared/areas.ts";
+import { areaForTrace } from "../_shared/world.ts";
 import { dayWindow, resolveUpload, toWorld, type Upload, validate, type WorldRow } from "../_shared/resolve.ts";
 
 Deno.serve(async (req) => {
@@ -25,11 +25,12 @@ Deno.serve(async (req) => {
     return json({ status: existing.status, outcome: existing.stats?.outcome ?? null });
   }
 
-  const area = await loadArea(db, u.areaSlug);
-  if (!area) return json({ error: "Unknown area" }, 404);
+  // The streets around the trace, built from OpenStreetMap on first use.
+  const { area, keys } = await areaForTrace(db, v.trace.map((p) => p.coordinate));
+  if (!area.segments.length) return json({ error: "Couldn't load the streets for this run, try again shortly" }, 503);
   const [dayStart, dayEnd] = dayWindow(v.endedAt);
-  const { data: w, error: werr } = await db.rpc("run_world", { p_area: area.slug, p_user: userId, p_day_start: dayStart, p_day_end: dayEnd });
-  if (werr || !w) return json({ error: "Couldn't load the town" }, 500);
+  const { data: w, error: werr } = await db.rpc("run_world", { p_tiles: keys.map(String), p_user: userId, p_day_start: dayStart, p_day_end: dayEnd });
+  if (werr || !w) return json({ error: "Couldn't load the map state" }, 500);
   // Shadow-restricted players play on, but their runs never reach the shared map.
   const { data: trust } = await db.from("user_trust").select("shadow_restricted").eq("user_id", userId).maybeSingle();
 

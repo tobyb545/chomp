@@ -210,8 +210,9 @@ public final class Area: Sendable {
             center = Coordinate(latitude: 51.5, longitude: -0.12)
         } else {
             let cs = keys.map(\.center)
-            center = Coordinate(latitude: cs.map(\.latitude).reduce(0, +) / Double(cs.count),
-                                longitude: cs.map(\.longitude).reduce(0, +) / Double(cs.count))
+            // Rounded so the server (different maths library) gets the identical projection.
+            center = Coordinate(latitude: ((cs.map(\.latitude).reduce(0, +) / Double(cs.count)) * 1e6).rounded() / 1e6,
+                                longitude: ((cs.map(\.longitude).reduce(0, +) / Double(cs.count)) * 1e6).rounded() / 1e6)
         }
         let boundary = keys.map { k in
             [[Coordinate(latitude: k.south, longitude: k.west), Coordinate(latitude: k.south, longitude: k.east),

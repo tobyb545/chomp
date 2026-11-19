@@ -4,18 +4,18 @@
 import assert from "node:assert/strict";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { test } from "node:test";
-import { Area, type AreaFile, encodePolyline } from "../supabase/functions/_shared/chomp/mod.ts";
+import { Area, encodePolyline, type TileFile } from "../supabase/functions/_shared/chomp/mod.ts";
 import { iso, resolveUpload, toWorld, type Upload, validate } from "../supabase/functions/_shared/resolve.ts";
 
 const root = new URL("../../", import.meta.url);
-const area = new Area(JSON.parse(readFileSync(new URL("data/areas/west-byfleet.json", root), "utf8")) as AreaFile);
+const area = Area.fromTiles(JSON.parse(readFileSync(new URL("shared/fixtures/tiles-west-byfleet.json", root), "utf8")) as TileFile[]);
 const fx = JSON.parse(readFileSync(new URL("shared/fixtures/parity.json", root), "utf8"));
 const rows: number[][] = fx.runs[0].trace;
-const emptyWorld = { ownership: [], pellets: [], capturesToday: 0, blockAwards: {}, conquered: false };
+const emptyWorld = { ownership: [], pellets: [], capturesToday: 0, blockAwards: {}, conquered: [] as string[] };
 
 function upload(overrides: Partial<Upload> = {}): Upload {
   return {
-    runId: "6F9619FF-8B86-4D11-B42D-00C04FC964FF", areaSlug: area.slug,
+    runId: "6F9619FF-8B86-4D11-B42D-00C04FC964FF",
     startedAt: iso(rows[0][2]), endedAt: iso(rows[rows.length - 1][2]), source: "live",
     polyline: encodePolyline(rows.map(([lat, lon]) => ({ lat, lon }))),
     timestamps: rows.map((r) => r[2]), accuracies: rows.map((r) => r[3]), speeds: rows.map((r) => r[4]),
@@ -52,10 +52,29 @@ test("resolves a clean run and writes the client fixture", () => {
   writeFileSync(new URL("shared/fixtures/server-response.json", root), JSON.stringify({ status: r.status, outcome: sample }, null, 1));
 });
 
-test("late uploads count for exploration only", () => {
-  const u = upload(), v = validate(u, now + 3 * 86_400);
+test("every ownership write carries its tile", () => {
+  const u = upload(), v = validate(u, now);
   assert.ok(v.ok);
-  const r = resolveUpload(area, u, v, "user-1", toWorld("user-1", emptyWorld), { now: now + 3 * 86_400, shadowRestricted: false, tracePath: "x" });
+  const r = resolveUpload(area, u, v, "user-1", toWorld("user-1", emptyWorld), { now, shadowRestricted: false, tracePath: "x" });
+  assert.ok(r.payload.ownership.length > 0);
+  for (const w of r.payload.ownership) assert.match(w.t ?? "", /^14\/\d+\/\d+$/);
+});
+
+test("a Health import within the window captures; Strava history never does", () => {
+  const later = now + 3 * 86_400;
+  const h = upload({ source: "health_import" }), hv = validate(h, later);
+  assert.ok(hv.ok);
+  assert.ok(resolveUpload(area, h, hv, "user-1", toWorld("user-1", emptyWorld), { now: later, shadowRestricted: false, tracePath: "x" }).payload.ownership.length > 0);
+  const st = upload({ source: "strava_import" }), sv = validate(st, now);
+  assert.ok(sv.ok);
+  assert.equal(resolveUpload(area, st, sv, "user-1", toWorld("user-1", emptyWorld), { now, shadowRestricted: false, tracePath: "x" }).payload.ownership.length, 0);
+});
+
+test("late uploads count for exploration only", () => {
+  const late = now + 8 * 86_400;
+  const u = upload(), v = validate(u, late);
+  assert.ok(v.ok);
+  const r = resolveUpload(area, u, v, "user-1", toWorld("user-1", emptyWorld), { now: late, shadowRestricted: false, tracePath: "x" });
   assert.equal(r.payload.ownership.length, 0);
   assert.ok(r.payload.coverage.length > 0);
   assert.equal(r.payload.stats.late, true);

@@ -130,7 +130,8 @@ public struct MapMatcher: Sendable {
                 out.append(Candidate(segment: s, offset: pr.offset, distance: pr.distance, point: pr.point))
             }
         }
-        out.sort { $0.distance < $1.distance }
+        // Ties (a point exactly at a junction) broken by index: deterministic, and the same on the server.
+        out.sort { ($0.distance, $0.segment) < ($1.distance, $1.segment) }
         return Array(out.prefix(rules.maxCandidatesPerPoint))
     }
 

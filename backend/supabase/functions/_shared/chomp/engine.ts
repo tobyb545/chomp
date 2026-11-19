@@ -25,7 +25,8 @@ export interface World {
   capturesToday: number;
   /** Block → last time this player was awarded it. */
   blockAwards: Map<string, number>;
-  hasConqueredBadge: boolean;
+  /** Tiles this player has already conquered ("14/x/y"). */
+  conqueredTiles: Set<string>;
 }
 
 export interface RunContext { runID: string; startedAt: number; endedAt: number; isImport: boolean }
@@ -56,7 +57,8 @@ export interface Writes {
   pellets: { id: string; t: number }[];
   blockAwards: { id: string; t: number; points: number }[];
   capturesToday: number;
-  conquered: boolean;
+  /** Tiles conquered by this run. */
+  conqueredTiles: string[];
 }
 
 export class GameEngine {
@@ -78,20 +80,22 @@ export class GameEngine {
     })).map((b) => b.id);
   }
 
-  heldFraction(owner: OwnerRef, ownership: Map<string, Ownership>, now: number): number {
+  tileHeldFraction(tile: string, owner: OwnerRef, ownership: Map<string, Ownership>, now: number): number {
+    const total = this.area.lengthByTile.get(tile) ?? 0;
+    if (total <= 0) return 0;
     let metres = 0;
-    for (const s of this.area.segments) {
+    for (const s of this.area.segmentsIn(tile)) {
       const o = this.live(ownership.get(s.id), now);
       if (o && sameOwner(o.owner, owner)) metres += s.length;
     }
-    return this.area.totalLength > 0 ? metres / this.area.totalLength : 0;
+    return metres / total;
   }
 
   resolve(run: RunContext, trace: TracePoint[], match: MatchResult, report: AntiCheatReport, world: World): { outcome: RunOutcome; writes: Writes } {
     const r = this.rules, me: OwnerRef = { kind: "player", id: world.playerID };
     const decay = decaySeconds(r), threshold = r.capture.coverageThreshold;
     const ownership = new Map(world.ownership);
-    const writes: Writes = { ownership: new Map(), coverage: new Map(), pellets: [], blockAwards: [], capturesToday: world.capturesToday, conquered: false };
+    const writes: Writes = { ownership: new Map(), coverage: new Map(), pellets: [], blockAwards: [], capturesToday: world.capturesToday, conqueredTiles: [] };
     const pieces = match.pieces.filter((p) => !isExcluded(report, p));
     const excludedPieces = match.pieces.filter((p) => isExcluded(report, p));
 
@@ -156,6 +160,8 @@ export class GameEngine {
       if (!(pr.crossed !== undefined || (isRival && pr.frenzyCrossed !== undefined))) { record("partial"); continue; }
       if (run.isImport) { record("rejected", 0, 1, "Imported runs count for exploration only"); continue; }
       if (report.verdict === "underReview") { record("rejected", 0, 1, "Run is under review"); continue; }
+      // Later capture wins: an after-the-fact run can't retake a street run since.
+      if (isRival && currentLive!.capturedAt > at) { record("rejected", 0, 1, "Someone ran it more recently"); continue; }
       if (isMine) {
         const o = { ...current!, lastVisitedAt: Math.max(current!.lastVisitedAt, at) };
         ownership.set(seg.id, o);
@@ -204,12 +210,20 @@ export class GameEngine {
       writes.blockAwards.push({ id: b, t: run.endedAt, points: bonus });
     }
 
-    if (!world.hasConqueredBadge && this.heldFraction(me, ownership, run.endedAt) >= 0.999) writes.conquered = true;
+    const touched = new Set<string>();
+    for (const c of records) {
+      if (c.kind !== "captured" && c.kind !== "stolen") continue;
+      const seg = this.area.segment(c.segmentID);
+      if (seg) touched.add(this.area.segmentTile[seg.index]);
+    }
+    for (const tile of [...touched].sort()) {
+      if (!world.conqueredTiles.has(tile) && this.tileHeldFraction(tile, me, ownership, run.endedAt) >= 0.999) writes.conqueredTiles.push(tile);
+    }
 
     return {
       outcome: {
         runID: run.runID, captures: records, points, blockBonus, blocksCompleted: newBlocks, pelletsCollected: pellets,
-        frenzyWindows: frenzy, verdict: report.verdict, flags: report.flags, conqueredTown: writes.conquered,
+        frenzyWindows: frenzy, verdict: report.verdict, flags: report.flags, conqueredTown: writes.conqueredTiles.length > 0,
       },
       writes,
     };

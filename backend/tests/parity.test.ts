@@ -5,18 +5,41 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
-  Area, type AreaFile, bonusStreets, evaluate, GameEngine, MapMatcher, powerPellets, rules, SeededRandom, coverageOf,
+  Area, bonusStreets, buildTile, subset, TileKey, type TileFile, type OverpassResponse, evaluate, GameEngine, MapMatcher, powerPellets, rules, SeededRandom, coverageOf,
   type TracePoint, makeGhosts, walkGhost, type Ownership, decodePolyline, encodePolyline,
 } from "../supabase/functions/_shared/chomp/mod.ts";
 
 const root = new URL("../../", import.meta.url);
-const area = new Area(JSON.parse(readFileSync(new URL("data/areas/west-byfleet.json", root), "utf8")) as AreaFile);
+const osm = JSON.parse(readFileSync(new URL("shared/fixtures/osm-west-byfleet.json", root), "utf8")) as OverpassResponse;
+const swiftTiles = JSON.parse(readFileSync(new URL("shared/fixtures/tiles-west-byfleet.json", root), "utf8")) as TileFile[];
+const area = Area.fromTiles(swiftTiles, "West Byfleet");
 const fx = JSON.parse(readFileSync(new URL("shared/fixtures/parity.json", root), "utf8"));
 const toTrace = (rows: number[][]): TracePoint[] => rows.map(([lat, lon, t, accuracy, speed]) => ({ coordinate: { lat, lon }, t, accuracy, speed }));
 
 test("rules.json copy matches shared/rules.json", () => {
   const shared = JSON.parse(readFileSync(new URL("shared/rules.json", root), "utf8"));
   assert.deepEqual(rules, shared, "run tools/sync-rules.sh");
+});
+
+test("StreetBuilder builds exactly the tiles Swift builds", () => {
+  const centre = new TileKey(8168, 5460);
+  const built = centre.neighbourhood().map((k) => buildTile(k, subset(osm, k)));
+  assert.equal(built.length, swiftTiles.length);
+  for (const [i, t] of built.entries()) {
+    const s = swiftTiles[i];
+    assert.equal(t.key, s.key);
+    assert.deepEqual(t.segments.map((x) => x.id), s.segments.map((x) => x.id), `segment ids in ${t.key}`);
+    assert.deepEqual(t.segments, s.segments, `segments in ${t.key}`);
+    assert.deepEqual(t.blocks, s.blocks, `blocks in ${t.key}`);
+    assert.deepEqual(t.pois, s.pois, `landmarks in ${t.key}`);
+  }
+});
+
+test("tile math matches", () => {
+  const k = TileKey.containing({ lat: 51.3392, lon: -0.5063 });
+  assert.equal(k.toString(), "14/8168/5460");
+  assert.deepEqual(TileKey.parse(k.toString()), k);
+  assert.ok(TileKey.covering([{ lat: 51.3392, lon: -0.5063 }]).length >= 1);
 });
 
 test("SeededRandom matches Swift bit for bit", () => {
@@ -53,7 +76,7 @@ for (const run of fx.runs) {
     const engine = new GameEngine(area, rules);
     const { outcome } = engine.resolve(
       { runID: "r", startedAt: trace[0].t, endedAt: trace[trace.length - 1].t, isImport: false }, trace, match, report,
-      { playerID: "p1", ownership: new Map(), collectedPellets: new Set(), capturesToday: 0, blockAwards: new Map(), hasConqueredBadge: false });
+      { playerID: "p1", ownership: new Map(), collectedPellets: new Set(), capturesToday: 0, blockAwards: new Map(), conqueredTiles: new Set<string>() });
     assert.deepEqual(Object.fromEntries(outcome.captures.map((c) => [c.segmentID, c.kind])), run.captures);
     assert.equal(outcome.points, run.points);
     assert.equal(outcome.blockBonus, run.blockBonus);
@@ -71,7 +94,7 @@ test("a stolen street needs the rival to hold it", () => {
   const { outcome, writes } = new GameEngine(area, rules).resolve(
     { runID: "r", startedAt: t0, endedAt: trace[trace.length - 1].t, isImport: false }, trace, match,
     { verdict: "accepted", flags: [], excluded: [] },
-    { playerID: "p1", ownership, collectedPellets: new Set(), capturesToday: 0, blockAwards: new Map(), hasConqueredBadge: false });
+    { playerID: "p1", ownership, collectedPellets: new Set(), capturesToday: 0, blockAwards: new Map(), conqueredTiles: new Set<string>() });
   const rec = outcome.captures.find((c) => c.segmentID === target)!;
   assert.equal(rec.kind, "stolen");
   assert.equal(rec.previousOwner?.id, "rival");
@@ -82,7 +105,7 @@ test("imports and runs under review never change ownership", () => {
   const trace = toTrace(fx.runs[0].trace);
   const match = new MapMatcher(area, rules.matching).match(trace);
   const engine = new GameEngine(area, rules);
-  const world = () => ({ playerID: "p1", ownership: new Map(), collectedPellets: new Set<string>(), capturesToday: 0, blockAwards: new Map(), hasConqueredBadge: false });
+  const world = () => ({ playerID: "p1", ownership: new Map(), collectedPellets: new Set<string>(), capturesToday: 0, blockAwards: new Map(), conqueredTiles: new Set<string>() });
   const ctx = { runID: "r", startedAt: trace[0].t, endedAt: trace[trace.length - 1].t, isImport: true };
   assert.equal(engine.resolve(ctx, trace, match, { verdict: "accepted", flags: [], excluded: [] }, world()).writes.ownership.size, 0);
   assert.equal(engine.resolve({ ...ctx, isImport: false }, trace, match, { verdict: "underReview", flags: [], excluded: [] }, world()).writes.ownership.size, 0);
@@ -94,7 +117,7 @@ test("daily capture limit holds across runs", () => {
   const { outcome, writes } = new GameEngine(area, rules).resolve(
     { runID: "r", startedAt: trace[0].t, endedAt: trace[trace.length - 1].t, isImport: false }, trace, match,
     { verdict: "accepted", flags: [], excluded: [] },
-    { playerID: "p1", ownership: new Map(), collectedPellets: new Set(), capturesToday: rules.antiCheat.maxCapturesPerDay, blockAwards: new Map(), hasConqueredBadge: false });
+    { playerID: "p1", ownership: new Map(), collectedPellets: new Set(), capturesToday: rules.antiCheat.maxCapturesPerDay, blockAwards: new Map(), conqueredTiles: new Set<string>() });
   assert.equal(writes.ownership.size, 0);
   assert.ok(outcome.captures.some((c) => c.reason === "Daily capture limit reached"));
 });

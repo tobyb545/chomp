@@ -21,8 +21,5 @@ secret = ""
 [functions.ghost-tick]
 verify_jwt = false
 
-[functions.spawn-daily]
-verify_jwt = false
-
 [functions.revenuecat-webhook]
 verify_jwt = false

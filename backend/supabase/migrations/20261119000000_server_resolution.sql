@@ -1,5 +1,5 @@
--- Support for the Edge Functions: area bundles, atomic run application,
--- a public realtime feed, bots, badges, Strava tokens and the trace bucket.
+-- Support for the Edge Functions: map tile storage, atomic run application,
+-- a public realtime feed, bots, badges, Strava tokens and the trace/tile buckets.
 
 -- ---------------------------------------------------------------------------
 -- Public ownership feed for Realtime. Realtime honours RLS, and the raw
@@ -8,7 +8,7 @@
 -- ---------------------------------------------------------------------------
 create table public.segment_ownership_feed (
   segment_id       text primary key references public.segments(id) on delete cascade,
-  area_slug        text not null,
+  tile             text not null,
   owner_kind       text not null,
   owner_id         text not null,
   owner_name       text not null,
@@ -16,7 +16,7 @@ create table public.segment_ownership_feed (
   captured_at      timestamptz not null,
   last_visited_at  timestamptz not null
 );
-create index segment_ownership_feed_area_idx on public.segment_ownership_feed (area_slug);
+create index segment_ownership_feed_tile_idx on public.segment_ownership_feed (tile);
 alter table public.segment_ownership_feed enable row level security;
 create policy "Ownership feed is public" on public.segment_ownership_feed for select using (true);
 
@@ -39,7 +39,7 @@ begin
   if coalesce(v_hidden, false) then
     delete from public.segment_ownership_feed where segment_id = new.segment_id;
   else
-    insert into public.segment_ownership_feed values (new.segment_id, new.area_slug, new.owner_kind::text, new.owner_id,
+    insert into public.segment_ownership_feed values (new.segment_id, new.tile, new.owner_kind::text, new.owner_id,
       coalesce(v_name, 'Rival'), coalesce(v_color, '8888AA'),
       date_trunc('hour', new.captured_at), date_trunc('hour', new.last_visited_at))
     on conflict (segment_id) do update set owner_kind = excluded.owner_kind, owner_id = excluded.owner_id,
@@ -90,41 +90,79 @@ insert into storage.buckets (id, name, public) values ('traces', 'traces', false
 create policy "Players read their own traces" on storage.objects for select
   using (bucket_id = 'traces' and (storage.foldername(name))[1] = auth.uid()::text);
 
--- ---------------------------------------------------------------------------
--- Area bundle in the same JSON shape as data/areas/<slug>.json, for the matcher.
--- ---------------------------------------------------------------------------
-create or replace function public.area_bundle(p_slug text) returns jsonb
-language sql stable security definer set search_path = public, extensions as $$
-  select jsonb_build_object(
-    'slug', a.slug, 'name', a.name, 'longName', a.long_name, 'county', a.county, 'country', a.country,
-    'center', jsonb_build_array(ST_X(ST_Centroid(a.boundary)), ST_Y(ST_Centroid(a.boundary))),
-    'boundary', (ST_AsGeoJSON(a.boundary)::jsonb)->'coordinates',
-    'segments', coalesce((select jsonb_agg(jsonb_build_object(
-        'id', s.id, 'name', s.name, 'kind', s.kind, 'highway', s.highway, 'length', s.length_m,
-        'a', s.start_node, 'b', s.end_node, 'coords', (ST_AsGeoJSON(s.geom)::jsonb)->'coordinates') order by s.id)
-      from public.segments s where s.area_slug = a.slug and s.active), '[]'::jsonb),
-    'blocks', coalesce((select jsonb_agg(jsonb_build_object('id', b.id, 'areaM2', b.area_m2,
-        'segments', (select jsonb_agg(bs.segment_id) from public.block_segments bs where bs.block_id = b.id)))
-      from public.blocks b where b.area_slug = a.slug), '[]'::jsonb),
-    'pois', coalesce((select jsonb_agg(jsonb_build_object('id', p.id, 'name', p.name, 'kind', p.kind,
-        'lon', ST_X(p.location), 'lat', ST_Y(p.location))) from public.pois p where p.area_slug = a.slug), '[]'::jsonb))
-  from public.areas a where a.slug = p_slug
-$$;
+-- Public bucket of built street tiles ("14_x_y.json"). The app reads it before
+-- asking Overpass, so each place is downloaded from OpenStreetMap only once.
+-- Only the service role (Edge Functions) writes to it.
+insert into storage.buckets (id, name, public) values ('tiles', 'tiles', true) on conflict (id) do nothing;
 
--- Everything the engine needs to know about a town and a player, in one call.
-create or replace function public.run_world(p_area text, p_user uuid, p_day_start timestamptz, p_day_end timestamptz)
+-- ---------------------------------------------------------------------------
+-- Stores a tile built by the Edge Functions (TileFile JSON) and mirrors its
+-- streets into segments/blocks/pois, which ownership and leaderboards join on.
+-- Streets that vanished from OSM are kept but marked inactive, so nobody's
+-- ownership history is deleted by a map edit.
+-- ---------------------------------------------------------------------------
+create or replace function public.store_map_tile(p_key text, p_data jsonb) returns void
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_x int := split_part(p_key, '/', 2)::int;
+  v_y int := split_part(p_key, '/', 3)::int;
+  n float8 := 16384;
+  v_w float8 := v_x / n * 360 - 180;
+  v_e float8 := (v_x + 1) / n * 360 - 180;
+  v_n float8 := degrees(atan(sinh(pi() * (1 - 2 * v_y / n))));
+  v_s float8 := degrees(atan(sinh(pi() * (1 - 2 * (v_y + 1) / n))));
+begin
+  if split_part(p_key, '/', 1) <> '14' then raise exception 'bad tile key %', p_key; end if;
+  insert into public.map_tiles (key, district, region, boundary, data, segment_count, total_length_m, osm_timestamp, built_at)
+  values (p_key, public.tile_parent(p_key, 12), public.tile_region(p_key), ST_MakeEnvelope(v_w, v_s, v_e, v_n, 4326), p_data,
+          jsonb_array_length(p_data->'segments'),
+          coalesce((select sum((x->>'length')::float8) from jsonb_array_elements(p_data->'segments') x), 0),
+          nullif(p_data->>'osmTimestamp', '')::timestamptz, now())
+  on conflict (key) do update set data = excluded.data, segment_count = excluded.segment_count,
+    total_length_m = excluded.total_length_m, osm_timestamp = excluded.osm_timestamp, built_at = now();
+
+  insert into public.segments (id, tile, geom, length_m, name, highway, kind, start_node, end_node, active)
+  select x->>'id', p_key, ST_SetSRID(ST_GeomFromGeoJSON(jsonb_build_object('type', 'LineString', 'coordinates', x->'coords')::text), 4326),
+         (x->>'length')::float8, x->>'name', x->>'highway', x->>'kind', (x->>'a')::bigint, (x->>'b')::bigint, true
+    from jsonb_array_elements(p_data->'segments') x
+  on conflict (id) do update set tile = excluded.tile, geom = excluded.geom, length_m = excluded.length_m, name = excluded.name,
+    highway = excluded.highway, kind = excluded.kind, active = true;
+  update public.segments set active = false
+   where tile = p_key and active
+     and id not in (select x->>'id' from jsonb_array_elements(p_data->'segments') x);
+
+  delete from public.blocks where tile = p_key;
+  insert into public.blocks (id, tile, geom, area_m2)
+  select x->>'id', p_key, ST_SetSRID(ST_GeomFromGeoJSON(jsonb_build_object('type', 'Polygon', 'coordinates', jsonb_build_array(x->'ring'))::text), 4326),
+         (x->>'areaM2')::float8
+    from jsonb_array_elements(p_data->'blocks') x
+  on conflict (id) do nothing;
+  insert into public.block_segments (block_id, segment_id)
+  select x->>'id', sid from jsonb_array_elements(p_data->'blocks') x, jsonb_array_elements_text(x->'segments') sid
+  on conflict do nothing;
+
+  delete from public.pois where tile = p_key;
+  insert into public.pois (id, tile, name, kind, location)
+  select x->>'id', p_key, x->>'name', x->>'kind', ST_SetSRID(ST_MakePoint((x->>'lon')::float8, (x->>'lat')::float8), 4326)
+    from jsonb_array_elements(p_data->'pois') x
+  on conflict (id) do nothing;
+end $$;
+
+-- Everything the engine needs to know about some tiles and a player, in one call.
+create or replace function public.run_world(p_tiles text[], p_user uuid, p_day_start timestamptz, p_day_end timestamptz)
 returns jsonb language sql stable security definer set search_path = public, extensions as $$
   select jsonb_build_object(
     'ownership', coalesce((select jsonb_agg(jsonb_build_object('s', so.segment_id, 'k', so.owner_kind, 'o', so.owner_id,
         'c', extract(epoch from so.captured_at), 'v', extract(epoch from so.last_visited_at)))
-      from public.segment_ownership so where so.area_slug = p_area), '[]'::jsonb),
+      from public.segment_ownership so where so.tile = any(p_tiles)), '[]'::jsonb),
     'pellets', coalesce((select jsonb_agg(pc.pellet_id) from public.pellet_collections pc
       where pc.user_id = p_user and pc.collected_at > now() - interval '3 days'), '[]'::jsonb),
     'capturesToday', (select count(*) from public.captures c
       where c.user_id = p_user and c.kind in ('captured', 'stolen') and c.at >= p_day_start and c.at < p_day_end),
     'blockAwards', coalesce((select jsonb_object_agg(block_id, extract(epoch from last)) from (
         select ba.block_id, max(ba.awarded_at) as last from public.block_awards ba where ba.user_id = p_user group by ba.block_id) x), '{}'::jsonb),
-    'conquered', exists (select 1 from public.badges b where b.user_id = p_user and b.badge = 'conquered:' || p_area)
+    'conquered', coalesce((select jsonb_agg(substr(b.badge, 11)) from public.badges b
+      where b.user_id = p_user and b.badge = any(array(select 'conquered:' || t from unnest(p_tiles) t))), '[]'::jsonb)
   )
 $$;
 
@@ -135,12 +173,12 @@ language plpgsql security definer set search_path = public, extensions as $$
 declare
   v_run uuid := (p->>'runId')::uuid;
   v_user uuid := (p->>'userId')::uuid;
-  v_area text := p->>'area';
   w jsonb;
+  v_tile text;
   v_old public.segment_ownership;
 begin
-  insert into public.runs (id, user_id, area_slug, source, started_at, ended_at, distance_m, status, matched_polyline, stats, points, client_version)
-  values (v_run, v_user, v_area, p->>'source', to_timestamp((p->>'startedAt')::float8), to_timestamp((p->>'endedAt')::float8),
+  insert into public.runs (id, user_id, source, started_at, ended_at, distance_m, status, matched_polyline, stats, points, client_version)
+  values (v_run, v_user, p->>'source', to_timestamp((p->>'startedAt')::float8), to_timestamp((p->>'endedAt')::float8),
           (p->>'distance')::float8, p->>'status', p->>'matchedPolyline', p->'stats', (p->>'points')::int, p->>'clientVersion')
   on conflict (id) do nothing;
   if not found then return; end if;  -- idempotent: already applied
@@ -157,12 +195,13 @@ begin
     from jsonb_array_elements(p->'flags') f;
 
   for w in select * from jsonb_array_elements(p->'ownership') loop
+    v_tile := coalesce(w->>'t', (select tile from public.segments where id = w->>'s'));
     select * into v_old from public.segment_ownership where segment_id = w->>'s' for update;
     if v_old.segment_id is null then
-      insert into public.segment_ownership values (w->>'s', v_area, 'player', v_user::text, null,
+      insert into public.segment_ownership values (w->>'s', v_tile, 'player', v_user::text, null,
         to_timestamp((w->>'c')::float8), to_timestamp((w->>'v')::float8));
-      insert into public.ownership_events (segment_id, area_slug, to_kind, to_id, cause, run_id)
-      values (w->>'s', v_area, 'player', v_user::text, case when (p->>'frenzy')::boolean then 'frenzy' else 'capture' end, v_run);
+      insert into public.ownership_events (segment_id, tile, to_kind, to_id, cause, run_id)
+      values (w->>'s', v_tile, 'player', v_user::text, case when (p->>'frenzy')::boolean then 'frenzy' else 'capture' end, v_run);
     elsif v_old.owner_kind = 'player' and v_old.owner_id = v_user::text then
       update public.segment_ownership set last_visited_at = greatest(last_visited_at, to_timestamp((w->>'v')::float8))
        where segment_id = w->>'s';
@@ -170,8 +209,8 @@ begin
       update public.segment_ownership set owner_kind = 'player', owner_id = v_user::text, club_id = null,
              captured_at = to_timestamp((w->>'c')::float8), last_visited_at = to_timestamp((w->>'v')::float8)
        where segment_id = w->>'s';
-      insert into public.ownership_events (segment_id, area_slug, from_kind, from_id, to_kind, to_id, cause, run_id)
-      values (w->>'s', v_area, v_old.owner_kind, v_old.owner_id, 'player', v_user::text, 'flip', v_run);
+      insert into public.ownership_events (segment_id, tile, from_kind, from_id, to_kind, to_id, cause, run_id)
+      values (w->>'s', v_tile, v_old.owner_kind, v_old.owner_id, 'player', v_user::text, 'flip', v_run);
       if v_old.owner_kind = 'player' then
         insert into public.notification_outbox (user_id, kind, title, body)
         select v_old.owner_id::uuid, 'lost', 'Street lost', (select display_name from public.profiles where id = v_user)
@@ -200,22 +239,23 @@ begin
   select v_user, x->>'id', to_timestamp((x->>'t')::float8), (x->>'points')::int from jsonb_array_elements(p->'blockAwards') x
   on conflict do nothing;
 
-  if (p->>'conquered')::boolean then
-    insert into public.badges (user_id, badge) values (v_user, 'conquered:' || v_area) on conflict do nothing;
-  end if;
+  insert into public.badges (user_id, badge)
+  select v_user, 'conquered:' || t from jsonb_array_elements_text(coalesce(p->'conquered', '[]'::jsonb)) t
+  on conflict do nothing;
 end $$;
 
 -- Bot moves from ghost-tick. Bots only take a player's street if they got there later.
 create or replace function public.apply_ghost_moves(p jsonb) returns void
 language plpgsql security definer set search_path = public, extensions as $$
-declare w jsonb; v_old public.segment_ownership;
+declare w jsonb; v_old public.segment_ownership; v_tile text;
 begin
   update public.ai_ghosts set cursor_node = (p->>'cursor')::bigint, next_tick_at = to_timestamp((p->>'nextTick')::float8)
    where id = p->>'ghost';
   for w in select * from jsonb_array_elements(p->'moves') loop
+    v_tile := coalesce(w->>'t', (select tile from public.segments where id = w->>'s'));
     select * into v_old from public.segment_ownership where segment_id = w->>'s' for update;
     if v_old.segment_id is null then
-      insert into public.segment_ownership values (w->>'s', p->>'area', 'ghost', p->>'ghost', null,
+      insert into public.segment_ownership values (w->>'s', v_tile, 'ghost', p->>'ghost', null,
         to_timestamp((w->>'c')::float8), to_timestamp((w->>'v')::float8));
     elsif v_old.owner_kind = 'ghost' and v_old.owner_id = p->>'ghost' then
       update public.segment_ownership set last_visited_at = greatest(last_visited_at, to_timestamp((w->>'v')::float8)) where segment_id = w->>'s';
@@ -223,15 +263,15 @@ begin
       update public.segment_ownership set owner_kind = 'ghost', owner_id = p->>'ghost', club_id = null,
              captured_at = to_timestamp((w->>'c')::float8), last_visited_at = to_timestamp((w->>'v')::float8)
        where segment_id = w->>'s';
-      insert into public.ownership_events (segment_id, area_slug, from_kind, from_id, to_kind, to_id, cause)
-      values (w->>'s', p->>'area', v_old.owner_kind, v_old.owner_id, 'ghost', p->>'ghost', 'ghost');
+      insert into public.ownership_events (segment_id, tile, from_kind, from_id, to_kind, to_id, cause)
+      values (w->>'s', v_tile, v_old.owner_kind, v_old.owner_id, 'ghost', p->>'ghost', 'ghost');
     end if;
   end loop;
   insert into public.notification_outbox (user_id, kind, title, body)
   select (r->>'user')::uuid, 'raid', 'Bot raid', r->>'message' from jsonb_array_elements(p->'raids') r;
 end $$;
 
-revoke execute on function public.area_bundle(text), public.run_world(text, uuid, timestamptz, timestamptz),
+revoke execute on function public.store_map_tile(text, jsonb), public.run_world(text[], uuid, timestamptz, timestamptz),
   public.apply_run_result(jsonb), public.apply_ghost_moves(jsonb) from public, anon, authenticated;
 
 -- ---------------------------------------------------------------------------
@@ -252,4 +292,3 @@ end $$;
 revoke execute on function public.call_chomp_function(text) from public, anon, authenticated;
 
 select cron.schedule('chomp-ghost-tick', '5 * * * *', $$select public.call_chomp_function('ghost-tick')$$);
-select cron.schedule('chomp-spawn-daily', '5 0 * * *', $$select public.call_chomp_function('spawn-daily')$$);

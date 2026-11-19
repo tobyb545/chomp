@@ -102,7 +102,7 @@ public struct OverpassResponse: Decodable, Sendable {
 /// Turns OpenStreetMap highways into game segments: stretches of runnable street
 /// between two junctions, each with a stable ID derived from its OSM nodes. Also
 /// traces city blocks and picks landmark POIs. A straight port of
-/// tools/ingest/ingest.py, so IDs match the ones the old town files used.
+/// the original town ingest script, so IDs match the ones the old town files used.
 public enum StreetBuilder {
     public static let bufferMetres = 400.0
     static let roadClasses: Set<String> = [
@@ -175,9 +175,14 @@ public enum StreetBuilder {
         return true
     }
 
-    // MARK: Geometry (mirrors ingest.py exactly)
+    // MARK: Geometry (mirrored exactly by backend/.../chomp/tiles.ts)
 
-    static func dist(_ a: Vec2, _ b: Vec2) -> Double { hypot(a.x - b.x, a.y - b.y) }
+    /// Plain sqrt, not hypot: sqrt is exactly rounded everywhere, so the server's
+    /// TypeScript port gets bit-identical lengths.
+    static func dist(_ a: Vec2, _ b: Vec2) -> Double {
+        let dx = a.x - b.x, dy = a.y - b.y
+        return (dx * dx + dy * dy).squareRoot()
+    }
 
     static func polylineLength(_ p: [Vec2]) -> Double {
         var s = 0.0
@@ -243,6 +248,8 @@ public enum StreetBuilder {
         }
         return xy[0]
     }
+
+    static func nonEmpty(_ s: String?) -> String? { s.flatMap { $0.isEmpty ? nil : $0 } }
 
     static func r6(_ v: Double) -> Double { (v * 1e6).rounded() / 1e6 }
     static func r1(_ v: Double) -> Double { (v * 10).rounded() / 10 }
@@ -426,7 +433,7 @@ public enum StreetBuilder {
             while used.contains(sid) { sid = "s" + sha11(key + sid) }
             used.insert(sid)
             out.append(BuiltSegment(id: sid, nodes: ch, ll: ll, xy: xy, length: length,
-                                    name: tags["name"] ?? tags["ref"] ?? "", highway: tags["highway"]!, kind: kind(tags["highway"]!)))
+                                    name: nonEmpty(tags["name"]) ?? nonEmpty(tags["ref"]) ?? "", highway: tags["highway"]!, kind: kind(tags["highway"]!)))
         }
         // Drop tiny dead-end stubs (the last few metres of a footway into a hedge).
         return out.filter { s in

@@ -62,35 +62,46 @@ export function nextDay(dayStart: number): number {
 export interface PowerPellet { id: string; landmark: Landmark; activeFrom: number; activeUntil: number }
 export interface BonusStreet { segmentIDs: string[]; streetName: string; multiplier: number; startsAt: number; endsAt: number }
 
+const byID = <T extends { id: string }>(a: T, b: T) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+
+/** Per tile, seeded only by tile and date (see Swift's DailySpawns). */
 export function powerPellets(area: Area, t: number, rules: Rules): PowerPellet[] {
   const key = dayKey(t);
-  const rng = new SeededRandom(`pellets|${area.slug}|${key}`);
-  const pool = [...area.landmarks].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const start = startOfDay(t), end = nextDay(start);
   const out: PowerPellet[] = [];
-  const n = Math.min(rules.powerPellets.perDay, pool.length);
-  for (let k = 0; k < n; k++) {
-    const lm = pool.splice(rng.int(pool.length), 1)[0];
-    out.push({ id: `${key}|${lm.id}`, landmark: lm, activeFrom: start, activeUntil: end });
+  for (const tile of area.tiles) {
+    const pool = [...(area.landmarksByTile.get(tile) ?? [])].sort(byID);
+    if (!pool.length) continue;
+    const rng = new SeededRandom(`pellets|${tile}|${key}`);
+    const n = Math.min(rules.powerPellets.perDay, pool.length);
+    for (let k = 0; k < n; k++) {
+      const lm = pool.splice(rng.int(pool.length), 1)[0];
+      out.push({ id: `${key}|${lm.id}`, landmark: lm, activeFrom: start, activeUntil: end });
+    }
   }
   return out;
 }
 
+const WINDOWS: [number, number, number][] = [[6, 8, 3], [17, 20, 2], [12, 14, 2]];
+
 export function bonusStreets(area: Area, t: number, rules: Rules): BonusStreet[] {
   const key = dayKey(t);
-  const rng = new SeededRandom(`bonus|${area.slug}|${key}`);
-  const pool = area.segments.filter((s) => s.name && s.length >= 80 && !s.isPath).sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  if (!pool.length) return [];
   const day = startOfDay(t);
-  const windows: [number, number, number][] = [[6, 8, 3], [17, 20, 2], [12, 14, 2]];
-  const used = new Set<string>();
-  return windows.slice(0, rules.bonusStreets.perDay).map(([h0, h1, mult]) => {
-    let s = pool[rng.int(pool.length)];
-    for (let tries = 0; used.has(s.name) && tries < 10; tries++) s = pool[rng.int(pool.length)];
-    used.add(s.name);
-    return {
-      segmentIDs: area.segments.filter((x) => x.name === s.name).map((x) => x.id),
-      streetName: s.name, multiplier: mult, startsAt: day + h0 * 3600, endsAt: day + h1 * 3600,
-    };
-  });
+  const out: BonusStreet[] = [];
+  for (const tile of area.tiles) {
+    const inTile = area.segmentsIn(tile);
+    const pool = inTile.filter((s) => s.name && s.length >= 80 && !s.isPath).sort(byID);
+    if (!pool.length) continue;
+    const rng = new SeededRandom(`bonus|${tile}|${key}`);
+    const used = new Set<string>();
+    for (let i = 0; i < rules.bonusStreets.perDay; i++) {
+      let s = pool[rng.int(pool.length)];
+      for (let tries = 0; used.has(s.name) && tries < 10; tries++) s = pool[rng.int(pool.length)];
+      used.add(s.name);
+      const [h0, h1, mult] = WINDOWS[rng.int(WINDOWS.length)];
+      out.push({ segmentIDs: inTile.filter((x) => x.name === s.name).map((x) => x.id), streetName: s.name, multiplier: mult,
+        startsAt: day + h0 * 3600, endsAt: day + h1 * 3600 });
+    }
+  }
+  return out;
 }

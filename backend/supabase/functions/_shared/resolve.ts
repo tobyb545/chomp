@@ -6,13 +6,13 @@ import {
 
 export const MAX_POINTS = 30_000;
 export const MAX_DURATION_S = 12 * 3600;
-/** Runs uploaded long after they ended only count for exploration (no backdated captures). */
-export const LATE_UPLOAD_S = 48 * 3600;
+/** Runs added long after they ended (late upload, Health import) only count for exploration. */
+export const LATE_UPLOAD_S = rules.imports.captureWindowHours * 3600;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** RunUpload as encoded by the iOS app (JSONEncoder, .iso8601 dates). */
 export interface Upload {
-  runId: string; areaSlug: string; startedAt: string; endedAt: string; source: string; polyline: string;
+  runId: string; startedAt: string; endedAt: string; source: string; polyline: string;
   timestamps: number[]; accuracies: number[]; speeds: number[]; clientVersion?: string;
   signals?: {
     motion?: { start: string; end: string; activity: string; confidence: number }[];
@@ -23,7 +23,7 @@ export interface Upload {
 
 export interface WorldRow {
   ownership: { s: string; k: "player" | "ghost"; o: string; c: number; v: number }[];
-  pellets: string[]; capturesToday: number; blockAwards: Record<string, number>; conquered: boolean;
+  pellets: string[]; capturesToday: number; blockAwards: Record<string, number>; conquered: string[];
 }
 
 const secs = (iso: string) => Date.parse(iso) / 1000;
@@ -75,18 +75,21 @@ export function toWorld(userId: string, w: WorldRow): World {
     collectedPellets: new Set(w.pellets),
     capturesToday: Number(w.capturesToday ?? 0),
     blockAwards: new Map(Object.entries(w.blockAwards ?? {}).map(([k, v]) => [k, Number(v)])),
-    hasConqueredBadge: !!w.conquered,
+    conqueredTiles: new Set(w.conquered ?? []),
   };
 }
 
 /** Resolves a validated upload against a world snapshot. Returns the response and the apply_run_result payload. */
 export function resolveUpload(area: Area, u: Upload, v: Extract<Validated, { ok: true }>, userId: string, world: World,
   opts: { now: number; shadowRestricted: boolean; tracePath: string }) {
-  const isImport = u.source !== "live" || opts.now - v.endedAt > LATE_UPLOAD_S;
+  // Strava history is exploration only; live runs and single Health imports
+  // capture streets if they ended recently enough.
+  const isImport = u.source === "strava_import" || opts.now - v.endedAt > LATE_UPLOAD_S;
   const report = evaluate(v.trace, v.signals, rules.antiCheat, rules.matching);
   const match = new MapMatcher(area, rules.matching).match(v.trace);
   const { outcome, writes } = new GameEngine(area, rules).resolve({ runID: v.runId, startedAt: v.startedAt, endedAt: v.endedAt, isImport }, v.trace, match, report, world);
   const shadow = opts.shadowRestricted;
+  const tileOf = (id: string) => { const seg = area.segment(id); return seg ? area.segmentTile[seg.index] : null; };
 
   let dist = 0;
   for (let i = 1; i < v.trace.length; i++) {
@@ -97,16 +100,17 @@ export function resolveUpload(area: Area, u: Upload, v: Extract<Validated, { ok:
   const status = report.verdict === "underReview" ? "under_review" : "resolved";
   const clientOutcome = forClient(outcome);
   const payload = {
-    runId: v.runId, userId, area: area.slug,
+    runId: v.runId, userId,
     source: u.source === "live" ? "live" : u.source === "strava_import" ? "strava_import" : "health_import",
     startedAt: v.startedAt, endedAt: v.endedAt, distance: dist, status, clientVersion: u.clientVersion ?? null,
     matchedPolyline: encodePolyline(match.path.map((m) => m.snapped)),
-    stats: { outcome: clientOutcome, matchedChunks: match.chunks, unmatchedPoints: match.unmatchedPoints, late: isImport && u.source === "live" },
+    stats: { outcome: clientOutcome, matchedChunks: match.chunks, unmatchedPoints: match.unmatchedPoints, late: isImport && u.source !== "strava_import" },
     points: outcome.points + outcome.blockBonus, tracePath: opts.tracePath, pointCount: v.trace.length,
     captures: outcome.captures, flags: outcome.flags, frenzy: outcome.frenzyWindows.length > 0,
-    ownership: shadow ? [] : [...writes.ownership].map(([s, o]) => ({ s, c: o.capturedAt, v: o.lastVisitedAt })),
+    // Each write carries its segment's tile, which the database keys ownership by.
+    ownership: shadow ? [] : [...writes.ownership].map(([s, o]) => ({ s, t: tileOf(s), c: o.capturedAt, v: o.lastVisitedAt })),
     coverage: [...writes.coverage].map(([s, t]) => ({ s, t })),
-    pellets: writes.pellets, blockAwards: writes.blockAwards, conquered: writes.conquered && !shadow,
+    pellets: writes.pellets, blockAwards: writes.blockAwards, conquered: shadow ? [] : writes.conqueredTiles,
   };
   return { status, clientOutcome, payload };
 }

@@ -6,3 +6,4 @@ export * from "./spawns.ts";
 export * from "./engine.ts";
 export * from "./ghosts.ts";
 export * from "./rules.ts";
+export * from "./tiles.ts";

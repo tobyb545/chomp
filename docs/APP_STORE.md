@@ -1,37 +1,37 @@
 # App Store listing (draft)
 
 **Name:** Chomp: Run Your Streets
-**Subtitle:** Claim your town, one run at a time
+**Subtitle:** Claim your streets, one run at a time
 **Category:** Health & Fitness (secondary: Games)
 **Age rating:** 4+ (user-generated content limited to display names. Report and block are built in.)
 
 ## Promotional text (170)
-Every street in town is covered in pellets. Run one to eat them and paint it your colour. Your rivals will want it back.
+Every street, wherever you are, is covered in pellets. Run one to eat them and paint it your colour. Your rivals will want it back.
 
 ## Description
 Chomp turns your runs into a game of territory.
 
-Every street in your town is lined with pellets. Run a street and you eat them, and the street turns your colour. Keep running and you'll fill whole blocks, climb your town's leaderboard and push towards conquering the whole map.
+Every street around you is lined with pellets, at home or on holiday. Run a street and you eat them, and the street turns your colour. Keep running and you'll fill whole blocks, climb the local leaderboard and conquer your neighbourhood.
 
 But your streets don't stay yours by themselves. Rivals can run them and win them back, and any street you don't revisit fades to neutral after three weeks. So there's always a reason to head out the door, and a new route to try.
 
-• REAL STREETS: built from OpenStreetMap for your town. Run the pavement and the road counts.
+• REAL STREETS, ANYWHERE: built from OpenStreetMap wherever you run. Run the pavement and the road counts.
 • POWER PELLETS: three landmarks light up each day. Reach one to start a 10-minute frenzy and win rival streets twice as fast.
 • BONUS STREETS: daily streets worth double or triple at set times.
 • BLOCKS: claim every street around a block for a big bonus.
-• RIVALS AND CLUBS: leaderboards for your town, county, friends and club.
+• RIVALS AND CLUBS: leaderboards for nearby, worldwide, friends and club.
 • SOLO TOO: no one nearby yet? Clearly labelled bots keep the map moving.
 • FAIR PLAY: driving, cycling and GPS tricks don't count. Every run is checked.
 • PRIVATE BY DESIGN: privacy zones hide where your runs start and end. No one ever sees your live location or your routes. Private mode keeps you off the shared map entirely.
 • LIVE ACTIVITY AND WIDGETS: streets and pellets on your Lock Screen as you run.
-• APPLE HEALTH: runs are saved as workouts. Import your past runs to see how much of town you've already explored.
+• APPLE HEALTH: runs are saved as workouts. Forgot to start Chomp? Add a run from Apple Health afterwards and it still counts.
 
 Chomp Pro (optional) adds trail styles and colours, run replays and GIF export, detailed stats, Strava import and club creation. Pro never helps you capture streets: everyone plays by the same rules.
 
 Map data © OpenStreetMap contributors.
 
 ## Keywords (100)
-running,run,territory,streets,map,game,conquer,town,fitness,jogging,gps,explore,city,club,leaderboard
+running,run,territory,streets,map,game,conquer,neighbourhood,fitness,jogging,gps,explore,city,club,leaderboard
 
 ## What's new (1.0)
 First release. Go and eat some streets.
@@ -41,7 +41,7 @@ First release. Go and eat some streets.
 2. **Mid-run HUD**, with the streets counter and a "just ate" toast. Caption: "Every street you run turns your colour."
 3. **Frenzy**: the power pellet hit, with the frenzy timer. Caption: "Hit a power pellet. Win streets back twice as fast."
 4. **Run summary**: +points, streets won back, block bonus. Caption: "Fill a block for a big bonus."
-5. **Leaderboard** (town / friends / club). Caption: "Take your town."
+5. **Leaderboard** (nearby / friends / club). Caption: "Take your neighbourhood."
 6. **Privacy zones** screen. Caption: "Your routes and home stay private."
 
 Capture them with the `-demo` launch argument, which seeds a week of runs (debug builds only).
@@ -64,4 +64,4 @@ Not collected: contacts, browsing history, advertising data. No third-party adve
 - Bots are always named "Bot …" and badged as bots.
 - No real-money wagering. Pro is a standard auto-renewing subscription.
 - To test without running: debug builds offer a simulated run. For review, use a TestFlight
-  build with a demo account, or run anywhere in West Byfleet, Surrey (UK).
+  build with a demo account, or run anywhere: streets load wherever you are.

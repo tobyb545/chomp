@@ -74,7 +74,8 @@ export class MapMatcher {
       const pr = this.area.segments[s].polyline.project(v);
       if (pr.distance <= this.rules.candidateRadiusMetres) out.push({ segment: s, offset: pr.offset, distance: pr.distance, point: pr.point });
     }
-    out.sort((a, b) => a.distance - b.distance);
+    // Ties (a point exactly at a junction) broken by index, as in Swift.
+    out.sort((a, b) => a.distance - b.distance || a.segment - b.segment);
     return out.slice(0, this.rules.maxCandidatesPerPoint);
   }
 

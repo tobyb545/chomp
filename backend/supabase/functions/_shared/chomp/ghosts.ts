@@ -10,12 +10,13 @@ export interface Ghost { id: string; name: string; colorHex: string; aggression:
 export const GHOST_NAMES = ["Dusk", "Rook", "Moth", "Fennel", "Pike", "Wren"];
 export const GHOST_COLOURS = ["7C8CFF", "FF6FA1", "5CE1E6", "FFB15C", "B58CFF", "9CFF7A"];
 
-export function makeGhosts(area: Area, rules: Rules): Ghost[] {
-  const rng = new SeededRandom(`ghosts|${area.slug}|server`);
+/** Bots for one district (`key`, e.g. "12/2042/1365"). */
+export function makeGhosts(area: Area, rules: Rules, key: string = area.slug): Ghost[] {
+  const rng = new SeededRandom(`ghosts|${key}|server`);
   const nodes = [...area.graph.adjacency.keys()].sort((a, b) => a - b);
   const g = rules.ghosts;
   return GHOST_NAMES.slice(0, g.perArea).map((n, i) => ({
-    id: `bot-${area.slug}-${n.toLowerCase()}`,
+    id: `bot-${key.replaceAll("/", "-")}-${n.toLowerCase()}`,
     name: `Bot ${n}`,
     colorHex: GHOST_COLOURS[i % GHOST_COLOURS.length],
     aggression: 0.3 + rng.unit() * 0.5,

@@ -2,6 +2,10 @@
 
 ## The model
 
+- **Tiles**: the world is cut into zoom-14 slippy-map tiles (~1.5 km). Each is built from an
+  Overpass query (with a 400 m buffer so streets crossing the edge are whole) and owns the
+  segments whose length-midpoint lies inside it. The app loads the 3×3 tiles around you and
+  more as you pan or run, so you can play anywhere with OSM streets.
 - **Segment**: a stretch of street between two junctions (or between name changes),
   from OSM. It has a stable ID (a hash of its end nodes). Pavements alongside a road are
   folded into that road, so running the pavement credits the road.
@@ -12,17 +16,17 @@
   It's derived from `last_visited_at` and never stored, and an hourly cron clears faded streets.
 - **Blocks**: faces of the street graph. Holding every bounding segment pays a one-off bonus
   (base plus area), with a 24-hour cooldown on re-awards.
-- **Power pellets**: 3 landmarks a day. Running within 30 m starts a 10-minute *frenzy*:
+- **Power pellets**: one landmark per tile a day. Running within 30 m starts a 10-minute *frenzy*:
   2× points, and a rival's street flips at 40% coverage.
-- **Bonus streets**: 2 named streets a day with 2–3× time windows.
+- **Bonus streets**: one named street per tile a day, with a 2–3× time window.
 - **Bots**: simulated rivals ("Bot Dusk" etc.), always labelled as bots. They walk the
   graph and raid near your territory. Locally they keep solo play lively; on the server
-  they keep quiet towns lively.
+  they live per district (4×4 tiles) wherever players hold streets.
 
 Every number lives in `shared/rules.json`. The app bundles it, and the Edge Functions get a
 copy (`tools/sync-rules.sh`; a test fails if the copies drift).
 
-Daily spawns are deterministic: SplitMix64 seeded by FNV-1a of `slug|Europe/London date`.
+Daily spawns are deterministic: SplitMix64 seeded by FNV-1a of `tile|Europe/London date`.
 So offline clients, online clients and the server all agree without a network round-trip.
 
 ## Map matching
@@ -57,7 +61,10 @@ The server re-matches, runs anti-cheat, applies the rules and writes everything 
 
 - Concurrent runs: ownership writes use *later capture wins* under a row lock.
 - Retries: idempotent on run ID.
-- Late uploads (over 48 h after the run) count for exploration only, so captures can't be backdated.
+- Late uploads and Apple Health imports capture streets if the run ended within 7 days
+  (`imports.captureWindowHours`); older runs, and Strava history, count for exploration only.
+- *Later capture wins* also applies to imports: an old run can't take a street from someone
+  who ran it more recently.
 
 Clients **never** write ownership, captures or runs. RLS has no insert or update policies on
 those tables, so only the service role can write them.

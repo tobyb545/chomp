@@ -1,7 +1,8 @@
 // Port of ChompKit/Map/Area.swift.
 import { type Coordinate, LocalProjection, MinHeap, Polyline, type Vec2, pointInRing } from "./geo.ts";
+import { TileKey, type TileFile } from "./tiles.ts";
 
-/** JSON written by tools/ingest/ingest.py (and by the area_bundle() SQL function). */
+/** A merged area of map tiles (see Area.fromTiles), in the old area-file shape. */
 export interface AreaFile {
   slug: string;
   name: string;
@@ -14,6 +15,9 @@ export interface AreaFile {
   blocks: { id: string; segments: string[]; areaM2: number; ring?: number[][] }[];
   pois: { id: string; name: string; kind: string; lon: number; lat: number }[];
   lineage?: Record<string, string>;
+  /** Tile key of each segment (merged tile areas only). */
+  segmentTiles?: string[];
+  tiles?: string[];
 }
 
 export interface Segment {
@@ -127,6 +131,13 @@ export class Area {
   readonly graph: SegmentGraph;
   readonly index: SpatialIndex;
   readonly blockByID: Map<string, Block>;
+  /** Tiles fully loaded, sorted by key. */
+  readonly tiles: string[];
+  /** Tile of each segment, indexed like `segments`. */
+  readonly segmentTile: string[];
+  readonly segmentsByTile = new Map<string, number[]>();
+  readonly landmarksByTile = new Map<string, Landmark[]>();
+  readonly lengthByTile = new Map<string, number>();
   private readonly indexByID: Map<string, number>;
   private readonly boundary: Vec2[][][];
 
@@ -142,20 +153,59 @@ export class Area {
         startNode: s.a, endNode: s.b, coordinates: coords, polyline: new Polyline(coords.map((c) => proj.project(c))),
       };
     });
-    this.indexByID = new Map(this.segments.map((s) => [s.id, s.index]));
+    this.segmentTile = this.segments.map((s, i) => file.segmentTiles?.[i] ?? TileKey.containing(s.coordinates[Math.trunc(s.coordinates.length / 2)]).toString());
+    this.segmentTile.forEach((t, i) => {
+      const l = this.segmentsByTile.get(t);
+      if (l) l.push(i); else this.segmentsByTile.set(t, [i]);
+      this.lengthByTile.set(t, (this.lengthByTile.get(t) ?? 0) + this.segments[i].length);
+    });
+    this.tiles = file.tiles ?? [...this.segmentsByTile.keys()].sort();
+    this.indexByID = new Map();
+    for (const s of this.segments) if (!this.indexByID.has(s.id)) this.indexByID.set(s.id, s.index);
     this.blocks = file.blocks.map((b) => ({ id: b.id, segmentIDs: b.segments, areaM2: b.areaM2 }));
-    this.blockByID = new Map(this.blocks.map((b) => [b.id, b]));
+    this.blockByID = new Map();
+    for (const b of this.blocks) if (!this.blockByID.has(b.id)) this.blockByID.set(b.id, b);
     this.landmarks = file.pois.map((p) => ({ id: p.id, name: p.name, kind: p.kind, coordinate: { lat: p.lat, lon: p.lon } }));
+    for (const l of this.landmarks) {
+      const t = TileKey.containing(l.coordinate).toString();
+      this.landmarksByTile.set(t, [...(this.landmarksByTile.get(t) ?? []), l]);
+    }
     this.totalLength = this.segments.reduce((s, x) => s + x.length, 0);
     this.graph = new SegmentGraph(this.segments);
     this.index = new SpatialIndex(this.segments, 60);
     this.boundary = file.boundary.map((poly) => poly.map((ring) => ring.map((c) => proj.project({ lat: c[1], lon: c[0] }))));
   }
 
+  /** Same merge as Swift's Area(tiles:): tiles sorted by key, first copy of each id wins. */
+  static fromTiles(files: TileFile[], name = "Nearby"): Area {
+    const sorted = files.filter((f) => TileKey.parse(f.key)).sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+    const seenS = new Set<string>(), seenB = new Set<string>(), seenP = new Set<string>();
+    const file: AreaFile = { slug: "world", name, longName: name, county: "", country: "", center: [0, 0], boundary: [],
+      segments: [], blocks: [], pois: [], segmentTiles: [], tiles: sorted.map((f) => f.key) };
+    for (const f of sorted) {
+      for (const s of f.segments) if (!seenS.has(s.id)) { seenS.add(s.id); file.segments.push(s); file.segmentTiles!.push(f.key); }
+      for (const b of f.blocks) if (!seenB.has(b.id)) { seenB.add(b.id); file.blocks.push(b); }
+      for (const p of f.pois) if (!seenP.has(p.id)) { seenP.add(p.id); file.pois.push(p); }
+    }
+    const keys = sorted.map((f) => TileKey.parse(f.key)!);
+    if (keys.length) {
+      const cs = keys.map((k) => k.center);
+      // Rounded (half away from zero, like Swift) so both sides get the identical projection.
+      const r6 = (v: number) => Math.sign(v) * Math.round(Math.abs(v) * 1e6) / 1e6;
+      file.center = [r6(cs.reduce((s, c) => s + c.lon, 0) / cs.length), r6(cs.reduce((s, c) => s + c.lat, 0) / cs.length)];
+    } else {
+      file.center = [-0.12, 51.5];
+    }
+    file.boundary = keys.map((k) => [[[k.west, k.south], [k.east, k.south], [k.east, k.north], [k.west, k.north], [k.west, k.south]]]);
+    return new Area(file);
+  }
+
   segment(id: string): Segment | undefined {
     const i = this.indexByID.get(id);
     return i === undefined ? undefined : this.segments[i];
   }
+
+  segmentsIn(tile: string): Segment[] { return (this.segmentsByTile.get(tile) ?? []).map((i) => this.segments[i]); }
 
   contains(c: Coordinate): boolean {
     const p = this.projection.project(c);

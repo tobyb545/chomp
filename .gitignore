@@ -8,7 +8,6 @@ xcuserdata/
 # Secrets (copy Secrets.example.xcconfig)
 ios/Config/Secrets.xcconfig
 # Ingest download cache
-tools/ingest/cache/
 __pycache__/
 # Supabase local
 backend/supabase/.temp/
