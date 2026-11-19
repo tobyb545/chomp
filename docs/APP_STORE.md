@@ -38,12 +38,12 @@ running,run,coins,collect,map,game,steal,neighbourhood,fitness,jogging,gps,club,
 ## What's new (1.0)
 First release. Go and grab some coins.
 
-## Screenshots (6.9", 1320x2868; App Store scales them for smaller iPhones)
-Ready to upload in `docs/screenshots/`, in this order:
+## Screenshots
+6.9" (1320x2868) in `docs/screenshots/`; 6.3" (1206x2622) in `docs/screenshots/6.3-inch/`. Same order:
 1. Map: "Make running fun again"
 2. Mid-run: "Run it. Own it."
 3. Leaderboard: "Compete with the world"
-4. Planned route: "Plan a loop, take the block"
+4. Planned route: "Plan a loop, grab the most"
 5. Run summary: "Every run counts"
 6. Goals and streak: "Keep your streak alive"
 

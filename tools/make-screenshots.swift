@@ -1,5 +1,6 @@
 // Frames raw simulator captures (1320x2868, iPhone 6.9") as App Store screenshots
-// with a caption. Original artwork only.
+// with a caption, plus a 1206x2622 copy of each for the 6.3" slot (in 6.3-inch/).
+// Original artwork only.
 //   swift tools/make-screenshots.swift <raw dir> <out dir>
 // Raw captures come from ChompUITests/ScreenshotTests (see docs/APP_STORE.md).
 import AppKit
@@ -10,11 +11,11 @@ let outDir = args.count > 2 ? args[2] : "docs/screenshots"
 
 // (raw file, output name, headline, accent line, subline)
 let shots: [(String, String, String, String, String)] = [
-    ("01-map",         "1-make-running-fun", "Make running",  "fun again",       "Every street is covered in coins."),
+    ("01-map",         "1-make-running-fun", "Make running",  "fun again",       "The map around you is covered in coins."),
     ("02-run",         "2-run-it-own-it",    "Run it.",       "Own it.",         "Grab every coin you pass. Steal your rivals' too."),
     ("05-leaderboard", "3-compete",          "Compete with",  "the world",       "Climb the global leaderboard."),
-    ("03-route",       "4-take-the-block",   "Plan a loop,",  "take the block",  "Routes that grab the most territory."),
-    ("04-summary",     "5-every-run-counts", "Every run",     "counts",          "Coins, new streets and a replay of your run."),
+    ("03-route",       "4-take-the-block",   "Plan a loop,",  "grab the most",   "Routes that pass the most coins."),
+    ("04-summary",     "5-every-run-counts", "Every run",     "counts",          "Coins collected, coins stolen and a replay."),
     ("06-goals",       "6-streaks",          "Keep your",     "streak alive",    "New goals every week. Same rules for everyone."),
 ]
 
@@ -88,4 +89,14 @@ for (i, shot) in shots.enumerated() {
     }())
     try! flat.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: "\(outDir)/\(shot.1).png"))
     print("wrote", "\(outDir)/\(shot.1).png")
+
+    // The 6.3" slot (iPhone 16/17 Pro) wants 1206x2622: the same shape, scaled.
+    let small = CGSize(width: 1206, height: 2622)
+    let c63 = CGContext(data: nil, width: Int(small.width), height: Int(small.height), bitsPerComponent: 8, bytesPerRow: 0,
+                        space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+    c63.interpolationQuality = .high
+    c63.draw(flat.cgImage!, in: CGRect(origin: .zero, size: small))
+    try? FileManager.default.createDirectory(atPath: "\(outDir)/6.3-inch", withIntermediateDirectories: true)
+    try! NSBitmapImageRep(cgImage: c63.makeImage()!).representation(using: .png, properties: [:])!
+        .write(to: URL(fileURLWithPath: "\(outDir)/6.3-inch/\(shot.1).png"))
 }
