@@ -201,6 +201,14 @@ final class HealthService {
         [HKObjectType.workoutType(), HKSeriesType.workoutRoute(), HKQuantityType(.heartRate)]
     }
 
+    /// True once the player has answered the Health permission sheet (so checking
+    /// for new runs never pops it up unasked).
+    func hasBeenAsked() async -> Bool {
+        guard isAvailable else { return false }
+        let status = try? await store.statusForAuthorizationRequest(toShare: share, read: read)
+        return status == .unnecessary
+    }
+
     func requestAuthorization() async -> Bool {
         guard isAvailable else { return false }
         do {

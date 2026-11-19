@@ -52,6 +52,43 @@ struct Club: Identifiable, Hashable, Codable {
     var inviteCode: String?
 }
 
+/// Your club: its tally (coins members collected while in it), rank and members.
+struct MyClub: Hashable, Decodable {
+    struct Member: Identifiable, Hashable, Decodable {
+        var id: String
+        var name: String
+        var color_hex: String
+        var role: String
+        var tokens: Int
+    }
+    var id: String
+    var name: String
+    var color_hex: String
+    var invite_code: String
+    var role: String
+    var tokens: Int
+    var rank: Int
+    var clubs: Int
+    var members: [Member]
+    var isOwner: Bool { role == "owner" }
+}
+
+enum ClubScope: String, CaseIterable, Identifiable {
+    case nearby, global
+    var id: String { rawValue }
+    var label: String { rawValue.capitalized }
+}
+
+struct ClubStanding: Identifiable, Hashable, Decodable {
+    var club_id: String
+    var name: String
+    var color_hex: String
+    var members: Int
+    var tokens: Int
+    var is_mine: Bool
+    var id: String { club_id }
+}
+
 struct Friend: Identifiable, Hashable, Codable {
     var id: String
     var name: String
@@ -255,6 +292,24 @@ final class SupabaseBackend: @unchecked Sendable {
         guard let client else { throw BackendError.notConfigured }
         struct P: Encodable { let p_name: String; let p_color: String }
         try await client.rpc("create_club", params: P(p_name: name, p_color: colorHex)).execute()
+    }
+
+    func myClub() async throws -> MyClub? {
+        guard let client, userID != nil else { return nil }
+        let c: MyClub? = try await client.rpc("my_club").execute().value
+        return c
+    }
+
+    func clubLeaderboard(scope: ClubScope, tile: String) async throws -> [ClubStanding] {
+        guard let client else { throw BackendError.notConfigured }
+        guard userID != nil else { throw BackendError.notSignedIn }
+        struct P: Encodable { let p_scope: String; let p_tile: String }
+        return try await client.rpc("club_leaderboard", params: P(p_scope: scope.rawValue, p_tile: tile)).execute().value
+    }
+
+    func leaveClub() async throws {
+        guard let client else { throw BackendError.notConfigured }
+        try await client.rpc("leave_club").execute()
     }
 
     func joinClub(code: String) async throws {

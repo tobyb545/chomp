@@ -128,3 +128,39 @@ struct PushTests {
         #expect(PushService.environment == "sandbox")
     }
 }
+
+@Suite("Club battles") @MainActor
+struct ClubTests {
+    @Test func decodesMyClubFromTheServer() throws {
+        let json = #"""
+        {"id":"c1","name":"Byfleet Harriers","color_hex":"3BA8FF","invite_code":"K7PQ2X","role":"owner","tokens":1840,
+         "rank":3,"clubs":41,"members":[{"id":"u1","name":"Toby","color_hex":"C6FF00","role":"owner","tokens":1200},
+                                          {"id":"u2","name":"Ana","color_hex":"FF6FA1","role":"member","tokens":640}]}
+        """#
+        let c = try JSONDecoder().decode(MyClub.self, from: Data(json.utf8))
+        #expect(c.isOwner && c.rank == 3 && c.members.count == 2)
+        #expect(c.members.reduce(0) { $0 + $1.tokens } == c.tokens)
+        let none = try JSONDecoder().decode(MyClub?.self, from: Data("null".utf8))
+        #expect(none == nil, "not in a club")
+    }
+
+    @Test func decodesClubLeaderboardRows() throws {
+        let json = #"[{"club_id":"c1","name":"A","color_hex":"112233","members":4,"tokens":900,"is_mine":true}]"#
+        let rows = try JSONDecoder().decode([ClubStanding].self, from: Data(json.utf8))
+        #expect(rows.first?.id == "c1" && rows.first?.is_mine == true)
+    }
+}
+
+@Suite("Health import prompt") @MainActor
+struct HealthPromptTests {
+    @Test func decliningRemembersTheRunsSoTheyAreNotOfferedAgain() async {
+        let model = AppModel()
+        let w = HealthService.WorkoutSummary(id: UUID(), start: .now.addingTimeInterval(-3600), end: .now.addingTimeInterval(-1800),
+                                             distance: 5000, source: "Workout")
+        model.healthPrompt = .init(runs: [w])
+        await model.answerHealthPrompt(importing: false)
+        #expect(model.healthPrompt == nil)
+        #expect(model.profile.healthOffered.contains(w.id))
+        model.profile.healthOffered.removeAll { $0 == w.id }
+    }
+}

@@ -27,6 +27,8 @@ struct PlayerProfile: Codable, Hashable {
     /// Push notifications when a rival takes your coins, and when bots raid.
     var pushLost = true
     var pushRaids = true
+    /// Health workouts already offered for import (so declined runs aren't offered again).
+    var healthOffered: [UUID] = []
     /// Invite code typed in (or opened from a link) before signing in.
     var pendingInviteCode: String?
 
@@ -56,7 +58,7 @@ struct PlayerProfile: Codable, Hashable {
         get(.trailStyle, &trailStyle); get(.privacyZones, &privacyZones); get(.dismissedZoneSuggestions, &dismissedZoneSuggestions)
         get(.blockedPlayers, &blockedPlayers); get(.mutedPlayers, &mutedPlayers); get(.debugPro, &debugPro)
         get(.mapLook, &mapLook); get(.voiceOn, &voiceOn); get(.voiceSplits, &voiceSplits)
-        get(.pushLost, &pushLost); get(.pushRaids, &pushRaids)
+        get(.pushLost, &pushLost); get(.pushRaids, &pushRaids); get(.healthOffered, &healthOffered)
         pendingInviteCode = try? c.decodeIfPresent(String.self, forKey: .pendingInviteCode)
         get(.seenIntro, &seenIntro)  // existing players see the cards once too
     }

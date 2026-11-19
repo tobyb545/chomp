@@ -1,0 +1,162 @@
+# Chomp → App Store Connect / TestFlight, with automatic code signing.
+# Based on the Kitchen Hub setup.
+#
+# codemagic-cli-tools authenticates to App Store Connect with the "Codemagic"
+# integration below, then on every build fetches (or, with --create, makes) a
+# distribution certificate AND matching App Store provisioning profiles as a
+# set, so they can never drift apart.
+#
+# ONE-TIME SETUP in Codemagic (Team settings > Environment variables):
+#
+#   Group "manual_code_signing" (the same group your other apps use):
+#     CERTIFICATE_PRIVATE_KEY  the PEM RSA private key behind your existing
+#                              "Apple Distribution" certificate, so it's reused.
+#
+#   Group "chomp_secrets" (mark each as secure):
+#     SUPABASE_URL        e.g. https://kboxrdjdwbhqxkqahmbx.supabase.co
+#     SUPABASE_ANON_KEY   the publishable key (safe to ship in the app)
+#     REVENUECAT_API_KEY  appl_... (optional; leave unset for no purchases)
+#     STRAVA_CLIENT_ID    optional
+#   Never put the Supabase secret key or an access token here.
+#
+# ALSO REQUIRED (developer.apple.com > Identifiers). fetch-signing-files does not
+# enable capabilities, and a profile only allows what its App ID has:
+#   - com.tobyb545.chomp          Sign in with Apple, HealthKit, App Groups, Push Notifications
+#   - com.tobyb545.chomp.widgets  App Groups
+#   - both App IDs assigned the SAME group: group.com.tobyb545.chomp
+# An app record for com.tobyb545.chomp must exist in App Store Connect (the
+# widget is embedded in it). Its numeric Apple ID is looked up automatically.
+
+workflows:
+  ios-app-store:
+    name: Chomp - App Store
+    max_build_duration: 90
+    instance_type: mac_mini_m2
+
+    integrations:
+      app_store_connect: Codemagic
+
+    environment:
+      groups:
+        - manual_code_signing   # CERTIFICATE_PRIVATE_KEY
+        - chomp_secrets         # SUPABASE_URL, SUPABASE_ANON_KEY, REVENUECAT_API_KEY, STRAVA_CLIENT_ID
+      vars:
+        XCODE_PROJECT: "ios/Chomp.xcodeproj"
+        XCODE_SCHEME: "Chomp"
+        APPLE_TEAM_ID: "7KYR2X9MJA"
+        BUNDLE_ID: "com.tobyb545.chomp"
+        WIDGET_BUNDLE_ID: "com.tobyb545.chomp.widgets"
+      xcode: latest
+
+    scripts:
+      - name: Write Secrets.xcconfig
+        script: |
+          set -e
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "Add SUPABASE_URL and SUPABASE_ANON_KEY to the chomp_secrets group (see the top of codemagic.yaml)."
+            exit 1
+          fi
+          # "//" starts a comment in xcconfig files, so the URL is written as https:/$()/host.
+          HOST="${SUPABASE_URL#https://}"
+          HOST="${HOST%/}"
+          cat > ios/Config/Secrets.xcconfig <<EOF
+          SUPABASE_URL = https:/\$()/$HOST
+          SUPABASE_ANON_KEY = $SUPABASE_ANON_KEY
+          REVENUECAT_API_KEY = ${REVENUECAT_API_KEY:-}
+          STRAVA_CLIENT_ID = ${STRAVA_CLIENT_ID:-}
+          EOF
+
+      - name: Generate Xcode project with XcodeGen
+        script: |
+          # The .xcodeproj is not committed: it's generated from ios/project.yml (which also
+          # writes the Info.plists and entitlements). The watch app stays out of store builds.
+          xcodegen --version >/dev/null 2>&1 || brew install xcodegen
+          cd ios && xcodegen generate --spec project.yml
+
+      - name: Fetch signing files
+        script: |
+          set -e
+          # --strict-match-identifier stops the app's ID also matching the widget's.
+          # --delete-stale-profiles replaces profiles made before a capability changed
+          # (e.g. Push Notifications being switched on).
+          for id in "$BUNDLE_ID" "$WIDGET_BUNDLE_ID"; do
+            app-store-connect fetch-signing-files "$id" \
+              --type IOS_APP_STORE \
+              --certificate-key "@env:CERTIFICATE_PRIVATE_KEY" \
+              --strict-match-identifier \
+              --delete-stale-profiles \
+              --create
+          done
+
+      - name: Add certificate to keychain
+        script: |
+          keychain initialize
+          keychain add-certificates
+
+      - name: Set up code signing for the Xcode project
+        script: |
+          # Writes each profile into the matching target (app and widget, by bundle ID) and
+          # generates ~/export_options.plist for the -exportArchive step.
+          xcode-project use-profiles --project "$XCODE_PROJECT"
+
+      - name: Resolve Swift packages
+        script: |
+          xcodebuild -resolvePackageDependencies -project "$XCODE_PROJECT" -scheme "$XCODE_SCHEME"
+
+      - name: Run tests
+        script: |
+          set -e
+          # Game logic only (fast, no simulator UI). The UI tests run locally.
+          SIM=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k,v in d.items() if 'iOS' in k for x in v if x['name'].startswith('iPhone')))")
+          xcodebuild test -project "$XCODE_PROJECT" -scheme "$XCODE_SCHEME" -destination "id=$SIM" \
+            -only-testing:ChompKitTests -only-testing:ChompAppTests CODE_SIGNING_ALLOWED=NO | xcpretty || exit 1
+
+      - name: Set build number
+        script: |
+          set -e
+          APP_ID=$(app-store-connect apps list --bundle-id-identifier "$BUNDLE_ID" --strict-match-identifier --json 2>/dev/null \
+            | python3 -c "import json,sys; a=json.load(sys.stdin); print(a[0]['id'] if a else '')" || true)
+          LATEST=0
+          if [ -n "$APP_ID" ]; then
+            LATEST=$(app-store-connect get-latest-build-number "$APP_ID" 2>/dev/null || echo 0)
+          else
+            echo "No App Store Connect record for $BUNDLE_ID yet: starting at build 1."
+          fi
+          BUILD_NUMBER=$(( ${LATEST:-0} + 1 ))
+          echo "Using build number $BUILD_NUMBER"
+          # Every Info.plist reads CFBundleVersion from $(CURRENT_PROJECT_VERSION), so passing it
+          # to xcodebuild sets the app and widget together (they must match).
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$CM_ENV"
+
+      - name: Build and export IPA
+        script: |
+          set -e
+          xcodebuild \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -destination "generic/platform=iOS" \
+            -archivePath /tmp/Chomp.xcarchive \
+            -configuration Release \
+            archive \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
+
+          xcodebuild \
+            -exportArchive \
+            -archivePath /tmp/Chomp.xcarchive \
+            -exportPath /tmp/ChompExport \
+            -exportOptionsPlist "$HOME/export_options.plist"
+
+    artifacts:
+      - /tmp/ChompExport/*.ipa
+      - /tmp/Chomp.xcarchive
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
+
+    publishing:
+      app_store_connect:
+        auth: integration
+        # Uploading is enough for TestFlight internal testing. submit_to_testflight is
+        # only needed for external testers (it triggers Beta App Review).
+        submit_to_testflight: false
+        submit_to_app_store: false

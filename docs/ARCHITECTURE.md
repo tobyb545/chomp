@@ -168,6 +168,28 @@ notifications to one per street per run, and counts "streets held" as streets wi
 your coins. Run it before deploying Edge Functions that write coin IDs. The app accepts both
 coin and street rows, and migrates local street ownership to coins on load.
 
+## Club battles
+
+One club per player (`memberships_one_club_idx`). Captures are stamped with the player's club
+when they're made (trigger `captures_stamp_club`), so a club's tally is the coins its members
+collected while in it, and switching clubs doesn't move old coins. `club_leaderboard('nearby'|
+'global', tile)` ranks clubs (nearby = same ~25 km region); `my_club()` returns the tally, rank
+and each member's contribution. Joining or starting a club leaves the current one; a captain
+who leaves hands over to the longest-standing member, and an empty club is deleted. Starting a
+club needs Pro; joining is free. Migration: `20261125000000_club_battles.sql`.
+
+## Health runs on launch
+
+On launch and when returning to the app, Chomp looks for running workouts recorded by other
+apps within the capture window (7 days) and offers to import them in one alert. Each workout
+is offered once (`PlayerProfile.healthOffered`), and it only checks after the player has
+already answered the Health permission sheet.
+
+## Builds
+
+`codemagic.yaml` builds, tests and uploads to App Store Connect (see its header for the
+one-time setup). The app icon is drawn by `swift tools/make-icon.swift`.
+
 ## On-device extras
 
 These run on the phone only and need no server:

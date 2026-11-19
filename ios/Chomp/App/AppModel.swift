@@ -63,6 +63,9 @@ final class AppModel {
     var presentedSummary: RunRecord?
     var showPaywall = false
     var showInvite = false
+    /// New runs found in Apple Health on launch, waiting for the player to say yes or no.
+    var healthPrompt: HealthPrompt?
+    private var lastHealthCheck: Date?
     var focusRequest: Coordinate?
     var toast: String?
 
@@ -302,6 +305,7 @@ final class AppModel {
 
     func onForeground() {
         NotificationService.cancelRaid()
+        Task { await checkForNewHealthRuns() }
         if case .failed = worldStatus, let f = savedFocus { focusWorld(on: f, force: true) }
         refreshDay()
         tickWorld()
@@ -701,6 +705,46 @@ final class AppModel {
 
     // MARK: Apple Health
 
+    struct HealthPrompt: Identifiable {
+        let id = UUID()
+        let runs: [HealthService.WorkoutSummary]
+    }
+
+    /// On launch: offers runs recorded by another app since you last opened Chomp,
+    /// while they can still capture coins. Each run is only offered once.
+    func checkForNewHealthRuns() async {
+        guard profile.onboarded, profile.seenIntro, run.phase == .idle, healthPrompt == nil, presentedSummary == nil else { return }
+        if let last = lastHealthCheck, Date().timeIntervalSince(last) < 600 { return }
+        lastHealthCheck = .now
+        guard await HealthService.shared.hasBeenAsked() else { return }
+        let since = Date().addingTimeInterval(-rules.imports.captureWindowHours * 3600)
+        let offered = Set(profile.healthOffered)
+        let fresh = await HealthService.shared.recentRuns(since: since).filter { w in
+            !offered.contains(w.id) && !runs.contains { abs($0.startedAt.timeIntervalSince(w.start)) < 120 }
+        }
+        guard !fresh.isEmpty else { return }
+        healthPrompt = HealthPrompt(runs: fresh.sorted { $0.start < $1.start })
+    }
+
+    /// The player answered the prompt. Either way these runs aren't offered again.
+    func answerHealthPrompt(importing: Bool) async {
+        guard let prompt = healthPrompt else { return }
+        healthPrompt = nil
+        profile.healthOffered = Array((profile.healthOffered + prompt.runs.map(\.id)).suffix(300))
+        guard importing else { return }
+        var coins = 0, added = 0
+        for w in prompt.runs {
+            presentedSummary = nil
+            _ = await importHealthRun(w)
+            if let r = presentedSummary, abs(r.startedAt.timeIntervalSince(w.start)) < 120 {
+                added += 1
+                coins += tokens(of: r.outcome, in: area)
+            }
+        }
+        toast = added == 0 ? "No streets Chomp knows about on \(prompt.runs.count == 1 ? "that run" : "those runs")"
+            : "Added \(added) run\(added == 1 ? "" : "s"): \(coins) coin\(coins == 1 ? "" : "s") collected"
+    }
+
     /// Runs in Health that Chomp hasn't seen yet (recorded by another app or watch).
     func healthRunsToImport() async -> [HealthService.WorkoutSummary] {
         guard await HealthService.shared.requestAuthorization() else { return [] }
@@ -757,6 +801,13 @@ final class AppModel {
             LeaderboardEntry(id: s.id, rank: i + 1, name: s.name, colorHex: s.colorHex, isBot: s.owner.kind == .ghost,
                              isMe: s.owner == state.me, tokens: s.tokens)
         }
+    }
+
+    /// Clubs ranked by the coins their members collected (nearby region or worldwide).
+    func clubLeaderboard(scope: ClubScope) async throws -> [ClubStanding] {
+        guard backend.isSignedIn, !profile.privateMode else { throw BackendError.notSignedIn }
+        let tile = (focusTile ?? TileKey(containing: area.center)).description
+        return try await backend.clubLeaderboard(scope: scope, tile: tile)
     }
 
     func resetAllData() async {

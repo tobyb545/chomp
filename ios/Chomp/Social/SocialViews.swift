@@ -2,10 +2,19 @@ import SwiftUI
 import ChompKit
 
 struct LeaderboardView: View {
+    enum Board: String, CaseIterable, Identifiable {
+        case runners, clubs
+        var id: String { rawValue }
+        var label: String { rawValue.capitalized }
+    }
+
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
+    @State private var board: Board = .runners
     @State private var scope: LeaderboardScope = .nearby
+    @State private var clubScope: ClubScope = .nearby
     @State private var entries: [LeaderboardEntry] = []
+    @State private var clubs: [ClubStanding] = []
     @State private var error: String?
     @State private var selected: LeaderboardEntry?
 
@@ -13,41 +22,85 @@ struct LeaderboardView: View {
         NavigationStack {
             List {
                 Section {
-                    Picker("Scope", selection: $scope) { ForEach(LeaderboardScope.allCases) { Text($0.label).tag($0) } }
+                    Picker("Board", selection: $board) { ForEach(Board.allCases) { Text($0.label).tag($0) } }
                         .pickerStyle(.segmented)
-                    Text("Ranked by tokens captured: every coin you run past.")
-                        .font(.footnote).foregroundStyle(Theme.textSecondary)
+                    if board == .runners {
+                        Picker("Scope", selection: $scope) { ForEach(LeaderboardScope.allCases) { Text($0.label).tag($0) } }
+                            .pickerStyle(.segmented)
+                        Text("Ranked by tokens captured: every coin you run past.")
+                            .font(.footnote).foregroundStyle(Theme.textSecondary)
+                    } else {
+                        Picker("Area", selection: $clubScope) { ForEach(ClubScope.allCases) { Text($0.label).tag($0) } }
+                            .pickerStyle(.segmented)
+                        Text(clubScope == .nearby
+                             ? "Clubs ranked by the coins their members collected around here (about 25 km)."
+                             : "Clubs ranked by every coin their members have collected.")
+                            .font(.footnote).foregroundStyle(Theme.textSecondary)
+                    }
                 }
                 .listRowBackground(Color.clear)
 
                 if let error {
                     Section { Text(error).foregroundStyle(Theme.textSecondary) }
                 }
-                let sorted = entries.sorted { $0.tokens > $1.tokens }
-                if let boss = sorted.first, scope == .nearby, boss.tokens > 0 {
-                    Section {
-                        HStack(spacing: 12) {
-                            Image(systemName: "crown.fill").font(.title).foregroundStyle(Color(hex: "FFD600"))
-                            VStack(alignment: .leading) {
-                                Text("Top chomper nearby").font(.caption.weight(.heavy)).textCase(.uppercase).foregroundStyle(Theme.textSecondary)
-                                Text(boss.name).font(Theme.display(.title3))
-                            }
-                            if boss.isBot { Chip(text: "Bot", colorHex: "8888AA") }
-                        }
-                        .accessibilityElement(children: .combine)
-                    }
-                }
-                Section(model.placeName) {
-                    ForEach(Array(sorted.enumerated()), id: \.element.id) { i, e in
-                        Button { if !e.isMe && !e.isBot { selected = e } } label: { row(rank: i + 1, e) }
-                            .buttonStyle(.plain)
-                    }
-                }
+                if board == .runners { runnersSections } else { clubSections }
             }
             .navigationTitle("Leaderboards")
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
-            .task(id: scope) { await load() }
+            .task(id: "\(board)-\(scope)-\(clubScope)") { await load() }
             .sheet(item: $selected) { e in PlayerSheet(playerID: e.id, name: e.name, colorHex: e.colorHex) }
+        }
+    }
+
+    @ViewBuilder private var runnersSections: some View {
+        let sorted = entries.sorted { $0.tokens > $1.tokens }
+        if let boss = sorted.first, scope == .nearby, boss.tokens > 0 {
+            Section {
+                HStack(spacing: 12) {
+                    Image(systemName: "crown.fill").font(.title).foregroundStyle(Color(hex: "FFD600"))
+                    VStack(alignment: .leading) {
+                        Text("Top chomper nearby").font(.caption.weight(.heavy)).textCase(.uppercase).foregroundStyle(Theme.textSecondary)
+                        Text(boss.name).font(Theme.display(.title3))
+                    }
+                    if boss.isBot { Chip(text: "Bot", colorHex: "8888AA") }
+                }
+                .accessibilityElement(children: .combine)
+            }
+        }
+        Section(model.placeName) {
+            ForEach(Array(sorted.enumerated()), id: \.element.id) { i, e in
+                Button { if !e.isMe && !e.isBot { selected = e } } label: { row(rank: i + 1, e) }
+                    .buttonStyle(.plain)
+            }
+        }
+    }
+
+    @ViewBuilder private var clubSections: some View {
+        if clubs.isEmpty, error == nil {
+            Section {
+                ContentUnavailableView("No club battles yet", systemImage: "person.3.fill",
+                                       description: Text("Start or join a club from your profile. Every coin members collect counts for the club."))
+            }
+        }
+        Section {
+            ForEach(Array(clubs.enumerated()), id: \.element.id) { i, c in
+                HStack(spacing: 12) {
+                    Text("\(i + 1)").font(Theme.number(.headline)).frame(width: 28).foregroundStyle(Theme.textSecondary)
+                    RoundedRectangle(cornerRadius: 4).fill(Color(hex: c.color_hex)).frame(width: 14, height: 14)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(c.name).font(.body.weight(c.is_mine ? .heavy : .semibold))
+                        Text("\(c.members) member\(c.members == 1 ? "" : "s")").font(.caption).foregroundStyle(Theme.textSecondary)
+                    }
+                    if c.is_mine { Chip(text: "Yours", colorHex: c.color_hex) }
+                    Spacer()
+                    HStack(spacing: 5) {
+                        Text(c.tokens.formatted()).font(Theme.number(.headline))
+                        Circle().fill(Color(hex: MapStyle.pelletColour)).frame(width: 8, height: 8).accessibilityHidden(true)
+                    }
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Rank \(i + 1), \(c.name), \(c.members) members, \(c.tokens) tokens\(c.is_mine ? ", your club" : "")")
+            }
         }
     }
 
@@ -70,10 +123,18 @@ struct LeaderboardView: View {
 
     private func load() async {
         error = nil
-        do { entries = try await model.leaderboard(scope: scope) } catch {
-            entries = []
-            self.error = scope == .nearby ? error.localizedDescription
-                : "\(scope.label) leaderboards need online play. Nearby rankings (you vs the bots) work offline."
+        switch board {
+        case .runners:
+            do { entries = try await model.leaderboard(scope: scope) } catch {
+                entries = []
+                self.error = scope == .nearby ? error.localizedDescription
+                    : "\(scope.label) leaderboards need online play. Nearby rankings (you vs the bots) work offline."
+            }
+        case .clubs:
+            do { clubs = try await model.clubLeaderboard(scope: clubScope) } catch {
+                clubs = []
+                self.error = "Club battles need online play. Sign in from Settings."
+            }
         }
     }
 }
@@ -325,43 +386,73 @@ struct PlayerSheet: View {
 
 struct ClubsView: View {
     @Environment(AppModel.self) private var model
-    @State private var clubs: [Club] = []
+    @State private var club: MyClub?
+    @State private var loaded = false
     @State private var friends: [Friend] = []
     @State private var newName = ""
     @State private var code = ""
     @State private var handle = ""
     @State private var error: String?
+    @State private var confirmLeave = false
+    @State private var confirmSwitch = false
+    @State private var showPaywall = false
 
     var body: some View {
         Form {
             if !model.backend.isSignedIn {
                 Section {
-                    Text("Clubs, friends and club-vs-club battles need online play. Sign in from Settings once the backend is connected.")
+                    Text("Clubs, friends and club battles need online play. Sign in from Settings.")
                         .foregroundStyle(Theme.textSecondary)
                 }
             }
-            Section("My clubs") {
-                if clubs.isEmpty { Text("No clubs yet").foregroundStyle(Theme.textSecondary) }
-                ForEach(clubs) { c in
-                    HStack {
-                        Circle().fill(Color(hex: c.colorHex)).frame(width: 14, height: 14)
-                        Text(c.name).font(.body.weight(.semibold))
-                        Spacer()
-                        Text("\(c.members) members").font(.caption).foregroundStyle(Theme.textSecondary)
+            if let club {
+                clubCard(club)
+                Section {
+                    ForEach(Array(club.members.sorted { $0.tokens > $1.tokens }.enumerated()), id: \.element.id) { i, m in
+                        HStack(spacing: 10) {
+                            Text("\(i + 1)").font(Theme.number(.subheadline)).foregroundStyle(Theme.textSecondary).frame(width: 22)
+                            Circle().fill(Color(hex: m.color_hex)).frame(width: 12, height: 12)
+                            Text(m.name).font(.body.weight(m.id == model.backend.userID ? .heavy : .regular))
+                            if m.role == "owner" { Chip(text: "Captain", colorHex: club.color_hex) }
+                            Spacer()
+                            Text(m.tokens.formatted()).font(Theme.number(.subheadline))
+                        }
+                        .accessibilityElement(children: .combine)
                     }
-                    if let code = c.inviteCode { Text("Invite code: \(code)").font(.caption.monospaced()).textSelection(.enabled) }
+                } header: { Text("Members") } footer: {
+                    Text("Coins each member has collected for the club since joining.")
+                }
+                Section {
+                    Button("Leave \(club.name)", role: .destructive) { confirmLeave = true }
+                }
+            } else if model.backend.isSignedIn, loaded {
+                Section {
+                    Text("Join a club and every coin you collect adds to its tally. Clubs battle on nearby and worldwide leaderboards.")
+                        .foregroundStyle(Theme.textSecondary)
                 }
             }
-            Section("Start a club") {
-                TextField("Club name", text: $newName)
-                Button("Create with my colour") {
-                    Task { await run { try await model.backend.createClub(name: newName, colorHex: model.profile.colorHex) } }
-                }.disabled(newName.count < 3)
+
+            Section {
+                TextField("Invite code", text: $code).textInputAutocapitalization(.characters).autocorrectionDisabled()
+                Button(club == nil ? "Join club" : "Switch to this club") {
+                    if club == nil { Task { await run { try await model.backend.joinClub(code: code) } } } else { confirmSwitch = true }
+                }
+                .disabled(code.trimmingCharacters(in: .whitespaces).count < 4)
+            } header: { Text(club == nil ? "Join a club" : "Join a different club") }
+
+            if club == nil {
+                Section {
+                    TextField("Club name", text: $newName)
+                    Button("Start club in my colour") {
+                        guard model.pro.isPro else { showPaywall = true; return }
+                        Task { await run { try await model.backend.createClub(name: newName, colorHex: model.profile.colorHex) } }
+                    }
+                    .disabled(newName.trimmingCharacters(in: .whitespaces).count < 3)
+                } header: { Text("Start a club") } footer: {
+                    Text("Starting a club is part of Chomp Pro. Anyone can join one for free.")
+                }
             }
-            Section("Join a club") {
-                TextField("Invite code", text: $code).textInputAutocapitalization(.characters)
-                Button("Join") { Task { await run { try await model.backend.joinClub(code: code) } } }.disabled(code.count < 4)
-            }
+
             Section("Friends") {
                 ForEach(friends) { f in
                     HStack { Circle().fill(Color(hex: f.colorHex)).frame(width: 12, height: 12); Text(f.name); Spacer(); Text("\(f.streets) streets").foregroundStyle(Theme.textSecondary) }
@@ -373,16 +464,64 @@ struct ClubsView: View {
         }
         .navigationTitle("Clubs & friends")
         .task { await reload() }
+        .refreshable { await reload() }
+        .confirmationDialog("Leave \(club?.name ?? "your club")?", isPresented: $confirmLeave, titleVisibility: .visible) {
+            Button("Leave club", role: .destructive) { Task { await run { try await model.backend.leaveClub() } } }
+        } message: {
+            Text("Coins you've already collected stay in its tally.\(club?.isOwner == true ? " The longest-standing member becomes captain." : "")")
+        }
+        .confirmationDialog("Switch clubs?", isPresented: $confirmSwitch, titleVisibility: .visible) {
+            Button("Leave \(club?.name ?? "my club") and join") { Task { await run { try await model.backend.joinClub(code: code) } } }
+        } message: {
+            Text("You can be in one club at a time. Coins you've collected stay with \(club?.name ?? "your current club").")
+        }
+        .sheet(isPresented: $showPaywall) { PaywallView() }
+    }
+
+    private func clubCard(_ c: MyClub) -> some View {
+        Section {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 12) {
+                    RoundedRectangle(cornerRadius: 10).fill(Color(hex: c.color_hex)).frame(width: 44, height: 44)
+                        .overlay(Image(systemName: "person.3.fill").foregroundStyle(.black.opacity(0.6)))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(c.name).font(Theme.display(.title3))
+                        Text("\(c.members.count) member\(c.members.count == 1 ? "" : "s")").font(.caption).foregroundStyle(Theme.textSecondary)
+                    }
+                }
+                HStack {
+                    VStack(alignment: .leading) {
+                        Text(c.tokens.formatted()).font(Theme.number(.title2))
+                        Text("club tokens").font(.caption).foregroundStyle(Theme.textSecondary)
+                    }
+                    Spacer()
+                    VStack(alignment: .trailing) {
+                        Text("#\(c.rank)").font(Theme.number(.title2))
+                        Text("of \(c.clubs) clubs").font(.caption).foregroundStyle(Theme.textSecondary)
+                    }
+                }
+                HStack {
+                    Text("Invite code").font(.caption).foregroundStyle(Theme.textSecondary)
+                    Text(c.invite_code).font(.body.monospaced().weight(.bold)).textSelection(.enabled)
+                    Spacer()
+                    ShareLink(item: "Join my Chomp club \(c.name) with code \(c.invite_code)") {
+                        Label("Share", systemImage: "square.and.arrow.up").font(.caption.weight(.semibold))
+                    }
+                }
+            }
+            .padding(.vertical, 4)
+        }
     }
 
     private func reload() async {
-        guard model.backend.isSignedIn else { return }
-        clubs = (try? await model.backend.clubs()) ?? []
+        guard model.backend.isSignedIn else { loaded = true; return }
+        club = try? await model.backend.myClub()
         friends = (try? await model.backend.friends()) ?? []
+        loaded = true
     }
 
     private func run(_ op: () async throws -> Void) async {
-        do { try await op(); error = nil; await reload() } catch { self.error = error.localizedDescription }
+        do { try await op(); error = nil; code = ""; newName = ""; await reload() } catch { self.error = error.localizedDescription }
     }
 }
 
