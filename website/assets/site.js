@@ -4,7 +4,7 @@ window.CHOMP = {
   // While empty, download buttons say "Coming soon to the App Store".
   appStoreUrl: "",
   // Where people can email you. While empty, the contact page lists the in-app options only.
-  contactEmail: "",
+  contactEmail: "rallyappuk@outlook.com",
 };
 
 (function () {
