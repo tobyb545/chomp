@@ -1,9 +1,10 @@
 import Foundation
 import ChompKit
 
-/// Street data for anywhere in the world, one map tile at a time. Tiles are
-/// built on device from OpenStreetMap (via the free Overpass API) and kept in
-/// Application Support, so places you've been keep working offline.
+/// Street data for anywhere in the world, one map tile at a time. Tiles come
+/// prebuilt from Cloudflare R2 where we have them (Great Britain), otherwise
+/// they're built on device from OpenStreetMap via the free Overpass API. Either
+/// way they're kept in Application Support, so places you've been work offline.
 actor WorldStore {
     static let shared = WorldStore()
 
@@ -83,7 +84,7 @@ actor WorldStore {
         for k in keys {
             if isFresh(k), let t = cached([k]).first { out[k] = t } else { missing.append(k) }
         }
-        // Our own tile cache first (filled by the server), then Overpass.
+        // Prebuilt tiles first (Cloudflare R2), then the server's cache, then Overpass.
         let toCheck = missing.filter { inFlight[$0] == nil }
         if !toCheck.isEmpty, let shared = await fromSharedCache(toCheck) {
             for (k, t) in shared { remember(t, k); out[k] = t }
@@ -124,10 +125,27 @@ actor WorldStore {
         if let d = try? JSONEncoder().encode(t) { try? d.write(to: url(k), options: .atomic) }
     }
 
-    /// Tiles the server already built, from the public `tiles` Storage bucket.
-    /// Same format and same builder, so they're interchangeable with our own.
+    /// Where prebuilt tiles live: built monthly from an OpenStreetMap extract by
+    /// tools/tiles (see .github/workflows/tiles.yml) and served from Cloudflare R2.
+    static let prebuiltTilesURL: URL? = {
+        guard let s = Bundle.main.infoDictionary?["ChompTilesURL"] as? String, s.hasPrefix("https://"),
+              let u = URL(string: s) else { return nil }
+        return u.appendingPathComponent("v\(TileFile.currentFormat)")
+    }()
+
+    /// Tiles built elsewhere with the same builder, so interchangeable with our
+    /// own: the prebuilt set first, then the server's public `tiles` bucket.
     private func fromSharedCache(_ keys: [TileKey]) async -> [TileKey: TileFile]? {
-        guard let base = SupabaseBackend.shared.publicTilesURL else { return nil }
+        var out: [TileKey: TileFile] = [:]
+        for base in [Self.prebuiltTilesURL, SupabaseBackend.shared.publicTilesURL].compactMap({ $0 }) {
+            let left = keys.filter { out[$0] == nil }
+            if left.isEmpty { break }
+            out.merge(await fetchTiles(left, from: base)) { a, _ in a }
+        }
+        return out.isEmpty ? nil : out
+    }
+
+    private func fetchTiles(_ keys: [TileKey], from base: URL) async -> [TileKey: TileFile] {
         var out: [TileKey: TileFile] = [:]
         await withTaskGroup(of: (TileKey, TileFile?).self) { g in
             for k in keys {
@@ -142,7 +160,7 @@ actor WorldStore {
             }
             for await (k, t) in g { if let t { out[k] = t } }
         }
-        return out.isEmpty ? nil : out
+        return out
     }
 
     private func download(_ keys: [TileKey]) async throws -> [TileKey: TileFile] {

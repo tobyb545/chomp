@@ -49,6 +49,20 @@ in [SETUP.md](SETUP.md).
   testing but not for launch.
 - [ ] **Add yourself as an admin**: `insert into admins values ('<your auth user id>');`
 
+## Street tiles (Cloudflare R2)
+
+Coins load from prebuilt tiles instead of the public Overpass servers, which are slow
+and often down. `.github/workflows/tiles.yml` builds the UK monthly from a Geofabrik
+extract (`tools/tiles/`) and uploads about 0.7 GB, gzipped, to R2's free tier.
+
+- [ ] **R2 bucket** `chomp-tiles` with public access turned on (r2.dev URL to start;
+      a custom domain before launch, since r2.dev is rate-limited).
+- [ ] **R2 API token**: Object Read & Write, this bucket only.
+- [ ] **GitHub secrets**: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`.
+- [ ] **Run the workflow** once: Actions → Street tiles → Run workflow.
+- [ ] **Point the app and server at it**: `CHOMP_TILES_URL` in `ios/Config/App.xcconfig`
+      (written `https:/$()/host`), and `supabase secrets set CHOMP_TILES_URL=https://host`.
+
 ## Importing runs
 
 - **Run file import** (GPX/TCX/FIT, Settings → History → Import a run file, or Share → Chomp) is the

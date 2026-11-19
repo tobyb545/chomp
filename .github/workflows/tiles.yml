@@ -1,0 +1,100 @@
+# Builds Chomp's street tiles from an OpenStreetMap extract and uploads them to
+# Cloudflare R2, so the app and server rarely need the (slow, often down) public
+# Overpass servers. Runs monthly and on demand (Actions > Street tiles > Run workflow).
+#
+# Repository secrets (Settings > Secrets and variables > Actions):
+#   R2_ACCOUNT_ID         Cloudflare account ID
+#   R2_ACCESS_KEY_ID      R2 API token's access key (Object Read & Write, this bucket only)
+#   R2_SECRET_ACCESS_KEY  R2 API token's secret key
+#   R2_BUCKET             bucket name, e.g. chomp-tiles
+name: Street tiles
+
+on:
+  workflow_dispatch:
+    inputs:
+      region:
+        description: Geofabrik extract path (e.g. europe/united-kingdom, or europe/united-kingdom/england/surrey to test)
+        default: europe/united-kingdom
+  schedule:
+    - cron: "0 3 2 * *"  # 03:00 UTC on the 2nd of each month
+
+permissions:
+  contents: read
+
+concurrency:
+  group: street-tiles
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      REGION: ${{ inputs.region || 'europe/united-kingdom' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install pyosmium
+        run: pip install osmium==4.3.2
+
+      - name: Download the OpenStreetMap extract
+        run: |
+          curl -fsSL --retry 3 -o region.osm.pbf "https://download.geofabrik.de/${REGION}-latest.osm.pbf"
+          ls -lh region.osm.pbf
+
+      - name: Cut it into tiles
+        run: python3 tools/tiles/extract.py region.osm.pbf extract
+
+      - name: Build the tiles
+        run: |
+          node --experimental-strip-types --no-warnings tools/tiles/build.ts extract out
+          rm -rf extract region.osm.pbf
+          du -sh out
+
+      - name: Check the build
+        run: |
+          # A build that found almost nothing means a bad download: keep last month's tiles.
+          COUNT=$(ls out/v1 | wc -l)
+          echo "$COUNT files"
+          if [ "$REGION" = "europe/united-kingdom" ] && [ "$COUNT" -lt 10000 ]; then
+            echo "Only $COUNT tiles for the UK: not uploading."; exit 1
+          fi
+
+      - name: Compress
+        run: |
+          # Stored gzipped and served with Content-Encoding: gzip; phones and Deno unzip it automatically.
+          find out/v1 -name '*.json' -print0 | xargs -0 -P 4 -n 200 gzip -9 -n
+          find out/v1 -name '*.json.gz' -exec sh -c 'for f; do mv "$f" "${f%.gz}"; done' _ {} +
+          du -sh out
+
+      - name: Upload to Cloudflare R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          if [ -z "$R2_ACCOUNT_ID" ] || [ -z "$R2_BUCKET" ] || [ -z "$AWS_ACCESS_KEY_ID" ]; then
+            echo "R2 secrets aren't set (see the top of this file): skipping the upload."; exit 1
+          fi
+          # The full UK run also removes tiles that no longer have streets. A test run of a
+          # smaller area only adds and replaces, so it never wipes the rest of the UK.
+          DELETE=""
+          [ "$REGION" = "europe/united-kingdom" ] && DELETE="--delete"
+          aws s3 sync out/v1 "s3://$R2_BUCKET/v1" \
+            --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" \
+            --content-type application/json --content-encoding gzip \
+            --cache-control "public, max-age=86400" \
+            $DELETE --only-show-errors
+          echo "Uploaded $(ls out/v1 | wc -l) files."
