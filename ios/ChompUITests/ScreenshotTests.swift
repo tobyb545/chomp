@@ -11,7 +11,7 @@ final class ScreenshotTests: XCTestCase {
         try XCTSkipUnless(ProcessInfo.processInfo.environment["CHOMP_SCREENSHOTS"] == "1", "screenshots only on request")
         continueAfterFailure = false
         app = XCUIApplication()
-        app.launchArguments = ["-demo", "-marketing"]
+        app.launchArguments = ["-demo", "-marketing", "-dumpStory"]  // -dumpStory: saves the share card (Documents/story.png) for the website
         dir = URL(fileURLWithPath: ProcessInfo.processInfo.environment["CHOMP_SHOTS_DIR"] ?? "/tmp/chomp-shots")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     }

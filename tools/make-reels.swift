@@ -97,7 +97,7 @@ func endCard(from: Double, total: Double) -> CALayer {
     icon.cornerRadius = 340 * 0.2237; icon.masksToBounds = true
     card.addSublayer(icon)
     card.addSublayer(textLayer("Chomp", nil, size: 150, y: 920, height: 190))
-    card.addSublayer(textLayer("", "Run your streets.", size: 68, y: 1080, height: 180))
+    card.addSublayer(textLayer("", "The running game.", size: 68, y: 1080, height: 180))
     let pill = CALayer(); pill.backgroundColor = rgb(0xD4FF3A); pill.cornerRadius = 55
     pill.frame = CGRect(x: W / 2 - 330, y: 1290, width: 660, height: 110)
     pill.shadowColor = rgb(0x140A40); pill.shadowOpacity = 0.4; pill.shadowRadius = 20; pill.shadowOffset = CGSize(width: 0, height: 8)

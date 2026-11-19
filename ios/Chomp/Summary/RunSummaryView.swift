@@ -519,7 +519,7 @@ struct StoryCard: View {
                     Image(uiImage: CoinIcon.render(colorHex: "FFC83D")).resizable().frame(width: 18, height: 18)
                     Text("CHOMP").font(.system(size: 15, weight: .black).width(.condensed)).tracking(2).foregroundStyle(.white)
                     Spacer()
-                    Text("Run your streets · App Store").font(.system(size: 11, weight: .semibold)).foregroundStyle(muted)
+                    Text("The running game · App Store").font(.system(size: 11, weight: .semibold)).foregroundStyle(muted)
                 }
                 .padding(.bottom, 86)
             }

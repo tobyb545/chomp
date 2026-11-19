@@ -139,7 +139,7 @@ canvas("post1-carousel-4") {
     background(3)
     appIcon(at: NSRect(x: W / 2 - 150, y: 230, width: 300, height: 300))
     text("Chomp", 120, .heavy, .white, in: NSRect(x: 0, y: 580, width: W, height: 150))
-    text("Run your streets.", 52, .bold, lime, in: NSRect(x: 0, y: 730, width: W, height: 70))
+    text("The running game.", 52, .bold, lime, in: NSRect(x: 0, y: 730, width: W, height: 70))
     text("Works anywhere, on any street.\nNo gym, no kit, just go.", 38, .semibold, rgb(0xFFFFFF, 0.88), in: NSRect(x: 100, y: 830, width: W - 200, height: 120))
     cta(y: 1040)
 }

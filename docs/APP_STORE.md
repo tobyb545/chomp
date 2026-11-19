@@ -1,12 +1,12 @@
 # App Store listing (draft)
 
-**Name:** Chomp: Run Your Streets
-**Subtitle (30):** Running, but it's a game
+**Name:** Chomp: The Running Game
+**Subtitle (30):** Grab coins. Steal from rivals.
 **Category:** Health & Fitness (secondary: Games)
 **Age rating:** 4+ (user-generated content limited to display names. Report and block are built in.)
 
 ## Promotional text (170)
-The map around you is covered in coins. Run past them to make them yours, steal your rivals' and climb the global leaderboard. Running, but it's a game.
+The map around you is covered in coins. Run past them to make them yours, steal your rivals' and climb the global leaderboard. Running, made into a game.
 
 ## Description
 Chomp makes running fun again by turning your runs into a coin hunt.
