@@ -117,8 +117,8 @@ final class AppModel {
     /// The map camera settled. Streets load once the player zooms in far enough
     /// to see them.
     func mapSettled(at c: Coordinate, zoom: Double) {
-        lastMapCentre = c
         guard zoom >= 12.5, !run.isActive else { return }
+        lastMapCentre = c
         focusWorld(on: c)
     }
 
@@ -591,7 +591,9 @@ final class AppModel {
     /// Where a planned loop starts: where you are, or the middle of the map.
     var routeStart: Coordinate {
         if let here = LocationPermission.shared.lastKnown, area.contains(here) { return here }
-        return lastMapCentre ?? savedFocus ?? area.center
+        // The map's camera starts somewhere generic before it flies to you, so only
+        // trust a centre that's inside the streets we have.
+        return [lastMapCentre, savedFocus].compactMap { $0 }.first { area.contains($0) } ?? area.center
     }
 
     func planRoute(goal: RouteGoal, distance: Double, seed: UInt64) async -> PlannedRoute? {

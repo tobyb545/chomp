@@ -76,19 +76,20 @@ public struct RoutePlanner: Sendable {
                 lastSeg = pick.segment
                 node = pick.other
             }
-            // Shortest way back to the start.
+            // Shortest way back to the start. Canals and railways can make that
+            // much longer than the straight line, so search well beyond the target.
             if node != startNode {
-                let tree = area.graph.shortestPaths(from: [(node: node, cost: 0)], segments: area.segments, limit: max(target, 3000))
+                let tree = area.graph.shortestPaths(from: [(node: node, cost: 0)], segments: area.segments, limit: max(target * 4, 10_000))
                 var back: [Int] = []
                 var n = startNode
                 var guardSteps = 0
-                while n != node, let (prevNode, seg) = tree.prev[n], guardSteps < 5000 {
+                while n != node, let (prevNode, seg) = tree.prev[n], guardSteps < 10_000 {
                     back.append(seg)
                     n = prevNode
                     guardSteps += 1
                 }
-                guard n == node else { continue }  // start unreachable from here
-                route.append(contentsOf: back.reversed())
+                // Always possible: retrace the walk itself.
+                route.append(contentsOf: n == node ? back.reversed() : route.reversed())
             }
             guard !route.isEmpty else { continue }
             let total = route.reduce(0) { $0 + area.segments[$1].length }

@@ -35,8 +35,11 @@ run, and `-summary` opens the last run summary.
 ## Tests
 
 ```sh
-# Swift: ChompKit (matching, rules, anti-cheat, bots, privacy, parity fixture)
+# Swift: ChompKit (matching, rules, anti-cheat, bots, privacy, routes, goals, parity fixture)
 cd ios && xcodebuild test -project Chomp.xcodeproj -scheme ChompKit -destination 'platform=iOS Simulator,name=iPhone 16'
+# Everything on iOS: ChompKit + app unit tests (profile migration, invites) + UI walkthrough
+# (intro, every sheet, route planner, settings, a simulated run to its summary; ~3 min)
+cd ios && xcodebuild test -project Chomp.xcodeproj -scheme Chomp -destination 'platform=iOS Simulator,name=iPhone 16'
 # TypeScript: server port parity and resolve-run core (Node 22.6+, no npm install)
 cd backend && npm test
 # SQL: RLS policies (needs `supabase start`)

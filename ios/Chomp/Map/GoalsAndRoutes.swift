@@ -143,19 +143,6 @@ struct RoutePlannerSheet: View {
                     Text("A loop that starts and ends \(LocationPermission.shared.lastKnown.map { model.area.contains($0) } == true ? "where you are" : "in the middle of the map").")
                 }
 
-                if let r = result {
-                    Section("Route") {
-                        LabeledContent("Distance", value: formatDistance(r.distance, miles: miles))
-                        LabeledContent("Streets to chomp", value: "\(r.targets)")
-                        LabeledContent("Tokens on them", value: r.tokens.formatted())
-                    }
-                } else if failed {
-                    Section {
-                        Text("Couldn't find a loop here. Try a shorter distance, or move the map onto some streets.")
-                            .foregroundStyle(Theme.textSecondary)
-                    }
-                }
-
                 Section {
                     Button {
                         Task { await plan(next: result != nil) }
@@ -181,6 +168,19 @@ struct RoutePlannerSheet: View {
                         }
                     }
                 }
+                if let r = result {
+                    Section("Route") {
+                        LabeledContent("Distance", value: formatDistance(r.distance, miles: miles))
+                        LabeledContent("Streets to chomp", value: "\(r.targets)")
+                        LabeledContent("Tokens on them", value: r.tokens.formatted())
+                    }
+                } else if failed {
+                    Section {
+                        Text("Couldn't find a loop here. Try a shorter distance, or move the map onto some streets.")
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                }
+
             }
             .navigationTitle("Plan a route")
             .navigationBarTitleDisplayMode(.inline)
@@ -188,7 +188,7 @@ struct RoutePlannerSheet: View {
             .onChange(of: goal) { _, _ in result = nil }
             .onChange(of: distanceKm) { _, _ in result = nil }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.large])
     }
 
     private func plan(next: Bool) async {

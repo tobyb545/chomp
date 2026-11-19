@@ -57,6 +57,32 @@ targets:
       base:
         GENERATE_INFOPLIST_FILE: YES
 
+  ChompAppTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [ChompAppTests]
+    dependencies:
+      - target: Chomp
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/Chomp.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Chomp
+        BUNDLE_LOADER: $(TEST_HOST)
+        PRODUCT_BUNDLE_IDENTIFIER: com.tobyb545.chomp.apptests
+
+  ChompUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [ChompUITests]
+    dependencies:
+      - target: Chomp
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Chomp
+        SWIFT_VERSION: "5.0"
+        PRODUCT_BUNDLE_IDENTIFIER: com.tobyb545.chomp.uitests
+
   Chomp:
     type: application
     platform: iOS
@@ -167,6 +193,8 @@ schemes:
     test:
       targets:
         - ChompKitTests
+        - ChompAppTests
+        - ChompUITests
     run:
       config: Debug
   ChompKit:

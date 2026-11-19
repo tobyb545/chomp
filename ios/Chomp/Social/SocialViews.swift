@@ -169,7 +169,10 @@ struct StreetListView: View {
         let decay = model.rules.decayInterval
         let me = model.state.me
         let here = model.routeStart
-        let grouped = Dictionary(grouping: model.area.segments) { "\($0.displayName)|\(model.state.ownership[$0.id]?.owner.id ?? "-")" }
+        // Named streets group by name and owner; unnamed paths and service roads stay separate.
+        let grouped = Dictionary(grouping: model.area.segments) { seg -> String in
+            seg.name.isEmpty ? seg.id : "\(seg.name)|\(model.state.ownership[seg.id]?.owner.id ?? "-")"
+        }
         let out = grouped.compactMap { _, segs -> Row? in
             let o = model.state.ownership[segs[0].id]
             let live = o.flatMap { $0.strength(at: now, decay: decay) > 0 ? $0 : nil }
@@ -213,7 +216,7 @@ struct StreetListView: View {
                         dismiss()
                     } label: {
                         HStack {
-                            Circle().fill(r.owner.map { Color(hex: model.ownerColor($0)) } ?? Theme.pellet).frame(width: 12, height: 12)
+                            Circle().fill(r.owner.map { Color(hex: model.ownerColor($0)) } ?? Color(hex: "E0A100")).frame(width: 12, height: 12)
                             VStack(alignment: .leading) {
                                 Text(r.name).font(.body.weight(.semibold))
                                 Text("\(formatDistance(r.away, miles: model.profile.useMiles)) away · \(formatDistance(r.metres, miles: model.profile.useMiles))"
@@ -225,7 +228,7 @@ struct StreetListView: View {
                                 Text("\(Int(r.strength * 100))%").font(Theme.number(.caption)).foregroundStyle(r.strength < 0.35 ? Theme.danger : Theme.textSecondary)
                                     .accessibilityLabel("strength \(Int(r.strength * 100)) percent")
                             } else {
-                                Text("\(r.tokens)").font(Theme.number(.caption)).foregroundStyle(Theme.pellet)
+                                Label("\(r.tokens)", systemImage: "circle.fill").labelStyle(TokenCountStyle())
                                     .accessibilityLabel("\(r.tokens) tokens")
                             }
                         }
@@ -364,5 +367,15 @@ struct ClubsView: View {
 
     private func run(_ op: () async throws -> Void) async {
         do { try await op(); error = nil; await reload() } catch { self.error = error.localizedDescription }
+    }
+}
+
+/// Token count readable on light and dark list backgrounds.
+private struct TokenCountStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 4) {
+            configuration.icon.font(.system(size: 6)).foregroundStyle(Color(hex: "E0A100"))
+            configuration.title.font(Theme.number(.caption)).foregroundStyle(Theme.textPrimary)
+        }
     }
 }

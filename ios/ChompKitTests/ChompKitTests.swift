@@ -545,3 +545,109 @@ struct RoutesGoalsTokens {
         #expect(state.tokens(of: state.me) == expected)
     }
 }
+
+@Suite("Routes, goals and tokens: edge cases")
+struct RoutesGoalsEdgeCases {
+    let cal = Goals.calendar
+    func at(_ y: Int, _ m: Int, _ d: Int, _ h: Int = 12, _ min: Int = 0) -> Date {
+        cal.date(from: DateComponents(year: y, month: m, day: d, hour: h, minute: min))!
+    }
+    func run(_ date: Date, streets: Int = 1) -> RunFacts {
+        RunFacts(date: date, distance: 1000, streets: streets, stolen: 0, tokens: 10, pellets: 0, blocks: 0)
+    }
+
+    @Test func plannerRefusesNoStreetsNearbyAndTinyDistances() {
+        let p = RoutePlanner(area: Fixtures.area)
+        let farAway = Coordinate(latitude: 52.2, longitude: 0.12)  // Cambridge: no streets loaded there
+        #expect(p.plan(from: farAway, distance: 4000, seed: 1, value: { _ in 1 }, tokens: { _ in 1 }) == nil)
+        #expect(p.plan(from: Fixtures.area.center, distance: 150, seed: 1, value: { _ in 1 }, tokens: { _ in 1 }) == nil)
+    }
+
+    @Test func plannerStillMakesALoopWhenNothingIsWanted() throws {
+        let p = RoutePlanner(area: Fixtures.area)
+        let r = try #require(p.plan(from: Fixtures.area.center, distance: 3000, seed: 2, value: { _ in 0 }, tokens: { _ in 1 }))
+        #expect(r.targets == 0 && r.tokens == 0)
+        #expect(r.coordinates.first!.distance(to: r.coordinates.last!) < 1)
+    }
+
+    @Test func plannerIsDeterministicPerSeedAndVariesAcrossSeeds() throws {
+        let p = RoutePlanner(area: Fixtures.area)
+        let a = try #require(p.plan(from: Fixtures.area.center, distance: 5000, seed: 11, value: { _ in 1 }, tokens: { _ in 1 }))
+        let b = try #require(p.plan(from: Fixtures.area.center, distance: 5000, seed: 11, value: { _ in 1 }, tokens: { _ in 1 }))
+        #expect(a == b)
+        let others = (12...16).compactMap { p.plan(from: Fixtures.area.center, distance: 5000, seed: UInt64($0), value: { _ in 1 }, tokens: { _ in 1 }) }
+        #expect(others.contains { $0.segments != a.segments }, "\"Try another\" must give a different loop")
+    }
+
+    @Test(arguments: [2000.0, 5000.0, 10000.0])
+    func plannerHitsTheDistanceAcrossSizes(target: Double) throws {
+        let p = RoutePlanner(area: Fixtures.area)
+        let r = try #require(p.plan(from: Fixtures.area.center, distance: target, seed: 5, value: { _ in 1 }, tokens: { _ in 1 }))
+        #expect(abs(r.distance - target) / target < 0.4, "asked \(target), got \(r.distance)")
+    }
+
+    @Test func goalsWeekStartsMondayMidnightUKTime() {
+        let monday = at(2026, 11, 16, 0, 0)
+        #expect(Goals.weekStart(at(2026, 11, 19)) == monday)
+        let sundayLate = run(at(2026, 11, 15, 23, 59), streets: 50)
+        let mondayEarly = run(at(2026, 11, 16, 0, 1), streets: 3)
+        let g = Goals.weekly(runs: [sundayLate, mondayEarly], now: at(2026, 11, 19))
+        if let s = g.first(where: { $0.kind == .streets }) { #expect(s.progress == 3) }
+        if let d = g.first(where: { $0.kind == .days }) { #expect(d.progress == 1) }
+    }
+
+    @Test func goalsChangeFromWeekToWeek() {
+        let weeks = (0..<8).map { Goals.weekly(runs: [], now: at(2026, 11, 2).addingTimeInterval(Double($0) * 7 * 86_400)).map(\.title) }
+        #expect(Set(weeks.map { $0.joined(separator: "|") }).count > 1)
+        #expect(weeks.allSatisfy { $0.count == 3 })
+    }
+
+    @Test func futureRunsDontCount() {
+        let now = at(2026, 11, 19)
+        let g = Goals.weekly(runs: [run(now.addingTimeInterval(3600), streets: 99)], now: now)
+        #expect(g.allSatisfy { $0.progress == 0 })
+    }
+
+    @Test func streakSurvivesTheClocksGoingBack() {
+        // BST ended at 02:00 on 25 October 2026.
+        let s = Goals.streak(runs: [run(at(2026, 10, 24, 7)), run(at(2026, 10, 25, 7)), run(at(2026, 10, 26, 7))], now: at(2026, 10, 26, 20))
+        #expect(s.current == 3 && s.ranToday && !s.atRisk)
+    }
+
+    @Test func streakIgnoresSeveralRunsOnOneDayAndKeepsTheBest() {
+        let now = at(2026, 11, 19, 20)
+        let runs = [run(at(2026, 11, 19, 7)), run(at(2026, 11, 19, 18)),
+                    run(at(2026, 11, 1)), run(at(2026, 11, 2)), run(at(2026, 11, 3)), run(at(2026, 11, 4))]
+        let s = Goals.streak(runs: runs, now: now)
+        #expect(s.current == 1 && s.best == 4)
+        #expect(Goals.streak(runs: [], now: now) == Goals.Streak(current: 0, best: 0, ranToday: false))
+    }
+
+    @Test func tokensRoundToTheNearestTenMetresWithAMinimumOfOne() {
+        let r = Fixtures.rules
+        #expect(r.tokens(forLength: 0) == 1)
+        #expect(r.tokens(forLength: 14.9) == 1)
+        #expect(r.tokens(forLength: 15) == 2)
+        #expect(r.tokens(forLength: 1000) == 100)
+    }
+}
+
+@Suite("Route planner robustness")
+struct RoutePlannerRobustness {
+    @Test func plansFromAnywhereWithStreets() {
+        let area = Fixtures.area
+        let p = RoutePlanner(area: area)
+        var rng = SeededRandom(seed: 99)
+        var failures: [String] = []
+        for _ in 0..<40 {
+            let seg = area.segments[rng.int(area.segments.count)]
+            // Somewhere near a street, not exactly on it.
+            let start = Coordinate(latitude: seg.midpoint.latitude + (rng.unit() - 0.5) * 0.001,
+                                   longitude: seg.midpoint.longitude + (rng.unit() - 0.5) * 0.0015)
+            if p.plan(from: start, distance: 5000, seed: 1, attempts: 1, value: { _ in 1 }, tokens: { _ in 1 }) == nil {
+                failures.append("\(seg.displayName) \(seg.isPath ? "path" : "road")")
+            }
+        }
+        #expect(failures.isEmpty, "no loop from: \(failures)")
+    }
+}
