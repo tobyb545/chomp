@@ -85,12 +85,18 @@ final class ScreenshotTests: XCTestCase {
     }
 
     func testReelFootage() {
+        // A planned loop, so the run follows a tidy route rather than a random wander.
+        // Set TEST_RUNNER_CHOMP_REEL_AT=lat,lon to film somewhere else.
+        let at = ProcessInfo.processInfo.environment["CHOMP_REEL_AT"] ?? "51.4690,-0.1625"  // Battersea, London: a grid of terraced streets
+        app.launchArguments += ["-demoAt", at, "-planRoute", "1400"]
         app.launch()
         XCTAssertTrue(app.buttons["START RUN"].waitForExistence(timeout: 60))
         let loading = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Loading the coins around you'")).firstMatch
         let noTokens = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH '0 coins held'")).firstMatch
         for _ in 0..<60 where loading.exists || noTokens.exists { sleep(3) }
-        sleep(6)
+        // The loop is planned once the demo week has been played.
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Route'")).firstMatch.waitForExistence(timeout: 120), "planned route")
+        sleep(4)
         mark("map")
         sleep(4)
         let mid = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.55))
@@ -112,6 +118,8 @@ final class ScreenshotTests: XCTestCase {
         done()
         XCTAssertTrue(app.buttons["START RUN"].waitForExistence(timeout: 10))
         sleep(1)
+        // A badge earned on the run pops up first.
+        if app.buttons["Nice"].waitForExistence(timeout: 3) { app.buttons["Nice"].tap(); sleep(1) }
         app.buttons["Leaderboards"].tap()
         XCTAssertTrue(app.navigationBars["Leaderboards"].waitForExistence(timeout: 5))
         mark("leaderboard")

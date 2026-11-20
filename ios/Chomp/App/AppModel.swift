@@ -297,10 +297,16 @@ final class AppModel {
         if let i = args.firstIndex(of: "-mapLook"), i + 1 < args.count, let look = PlayerProfile.MapLook(rawValue: args[i + 1]) {
             profile.mapLook = look
         }
-        if args.contains("-planRoute") {
+        // `-planRoute [metres]`: plans a loop (default 4 km). With a fresh -demo it's planned
+        // after the demo week, since finishing a run clears the planned route.
+        let planMetres: Double? = args.firstIndex(of: "-planRoute").map { i in
+            i + 1 < args.count ? Double(args[i + 1]) ?? 4000 : 4000
+        }
+        let willSeed = args.contains("-demo") && runs.isEmpty
+        if let metres = planMetres, !willSeed {
             Task {
                 for _ in 0..<60 where area.segments.isEmpty { try? await Task.sleep(for: .seconds(1)) }
-                plannedRoute = await planRoute(goal: .capture, distance: 4000, seed: 3)
+                plannedRoute = await planRoute(goal: .capture, distance: metres, seed: 3)
             }
         }
         guard args.contains("-demo"), runs.isEmpty else {
@@ -311,7 +317,12 @@ final class AppModel {
         p.name = "Alex"
         p.onboarded = true
         profile = p
-        let demoCentre = Coordinate(latitude: 51.3392, longitude: -0.5063)  // West Byfleet
+        // West Byfleet, or `-demoAt lat,lon` for somewhere else (marketing footage).
+        var demoCentre = Coordinate(latitude: 51.3392, longitude: -0.5063)
+        if let i = args.firstIndex(of: "-demoAt"), i + 1 < args.count {
+            let n = args[i + 1].split(separator: ",").compactMap { Double($0) }
+            if n.count == 2 { demoCentre = Coordinate(latitude: n[0], longitude: n[1]) }
+        }
         focusRequest = demoCentre
         focusWorld(on: demoCentre, force: true)
         await worldTask?.value
@@ -334,6 +345,7 @@ final class AppModel {
         pendingBadges = []
         if args.contains("-badge") { pendingBadges = Array(badges.filter(\.earned).suffix(1)) }
         if args.contains("-summary") { presentedSummary = runs.first }
+        if let metres = planMetres { plannedRoute = await planRoute(goal: .capture, distance: metres, seed: 3) }
         if args.contains("-autorun") { run.start(simulated: true) }
     }
     #endif
@@ -895,7 +907,7 @@ final class AppModel {
         let announce = profile.badgesSeeded
         for b in fresh { profile.badgesEarned[b.id] = .now }
         profile.badgesSeeded = true
-        if announce, !fresh.isEmpty {
+        if announce, !fresh.isEmpty, !quietRuns {   // not for the demo week's instant runs
             pendingBadges.append(contentsOf: fresh)
             Feedback.shared.play(.block)
         }

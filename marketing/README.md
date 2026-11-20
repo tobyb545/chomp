@@ -12,7 +12,10 @@ The leaderboard in these uses made-up runner names (the app's `-marketing` mode)
 ## Regenerating
 1. Raw stills: run `ChompUITests/ScreenshotTests/testAppStoreScreens` (see docs/APP_STORE.md).
 2. Posts: `swift tools/make-posts.swift <raw stills dir> marketing`
-3. Reel footage: record the 6.9" simulator while the footage test runs, noting when recording started:
+3. Reel footage: record the 6.9" simulator while the footage test runs, noting when recording started.
+   The test plays a demo week in Battersea, London, then runs a planned 1.4 km loop (so the route is
+   tidy). For somewhere else, add `TEST_RUNNER_CHOMP_REEL_AT=lat,lon` and set the simulator's location
+   there too (`xcrun simctl location <sim> set lat,lon`). Uninstall the app first for a fresh demo.
    ```
    xcrun simctl io <sim> recordVideo --codec h264 --force <dir>/raw.mp4 &
    sleep 2; python3 -c "import time;print(time.time())" > <dir>/recstart.txt
