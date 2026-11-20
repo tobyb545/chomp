@@ -71,8 +71,8 @@ extract (`tools/tiles/`) and uploads about 0.7 GB, gzipped, to R2's free tier.
 
 ## Push notifications
 
-- [ ] **Apple Developer → Keys**: create an APNs key and download the .p8 file.
-- [ ] **Set Supabase secrets**: `APNS_KEY` (the .p8 contents), `APNS_KEY_ID`,
+- [x] **Apple Developer → Keys**: create an APNs key and download the .p8 file.
+- [x] **Set Supabase secrets**: `APNS_KEY` (the .p8 contents), `APNS_KEY_ID`,
   `APNS_TEAM_ID=7KYR2X9MJA`, `APNS_TOPIC=com.tobyb545.chomp`.
 - [x] **Deploy `send-push`** (done; it sends nothing until the APNs secrets above are set).
 
