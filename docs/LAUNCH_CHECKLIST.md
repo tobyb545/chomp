@@ -11,7 +11,7 @@ in [SETUP.md](SETUP.md).
 - [x] **Set `CHOMP_WEB_URL`** in `ios/Config/App.xcconfig` (written `https:/$()/host/path`).
   Invite and club links then point at the website, and the paywall and Settings show the
   Terms, Privacy and Contact links that Apple requires for subscriptions.
-- [ ] **Set `contactEmail`** (and `appStoreUrl` once live) in `website/assets/site.js`.
+- [x] **Set `contactEmail`** in `website/assets/site.js`. Still to do: `appStoreUrl` once the app is live.
 - [ ] **Optional, custom domain only: universal links**, so links open the app directly.
   This needs the site at the domain root (it serves `.well-known/apple-app-site-association`)
   plus the Associated Domains capability (`applinks:<domain>`) in the app. Until then the
@@ -53,12 +53,12 @@ Coins load from prebuilt tiles instead of the public Overpass servers, which are
 and often down. `.github/workflows/tiles.yml` builds the UK monthly from a Geofabrik
 extract (`tools/tiles/`) and uploads about 0.7 GB, gzipped, to R2's free tier.
 
-- [ ] **R2 bucket** `chomp-tiles` with public access turned on (r2.dev URL to start;
+- [x] **R2 bucket** `chomp-tiles` with public access turned on (r2.dev URL to start;
       a custom domain before launch, since r2.dev is rate-limited).
-- [ ] **R2 API token**: Object Read & Write, this bucket only.
-- [ ] **GitHub secrets**: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`.
-- [ ] **Run the workflow** once: Actions → Street tiles → Run workflow.
-- [ ] **Point the app and server at it**: `CHOMP_TILES_URL` in `ios/Config/App.xcconfig`
+- [x] **R2 API token**: Object Read & Write, this bucket only.
+- [x] **GitHub secrets**: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`.
+- [x] **Run the workflow** once: Actions → Street tiles → Run workflow.
+- [x] **Point the app and server at it**: `CHOMP_TILES_URL` in `ios/Config/App.xcconfig`
       (written `https:/$()/host`), and `supabase secrets set CHOMP_TILES_URL=https://host`.
 
 ## Importing runs
