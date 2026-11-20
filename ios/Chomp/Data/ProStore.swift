@@ -35,7 +35,12 @@ final class ProStore {
     private(set) var isPro = false
     private(set) var packages: [Package] = []
     private(set) var isConfigured = false
+    /// A purchase or restore that failed, in words the user can act on.
     var lastError: String?
+    /// The App Store prices couldn't be loaded (offline, or the products aren't set up yet).
+    private(set) var pricesUnavailable = false
+    /// RevenueCat's own explanation, shown only in debug builds.
+    private(set) var pricesErrorDetail: String?
     /// Debug-only override so every screen can be checked without a sandbox purchase.
     var debugOverride = false { didSet { refreshDerived() } }
     private var purchasedPro = false
@@ -67,18 +72,24 @@ final class ProStore {
 
     func refresh() async {
         guard isConfigured else { refreshDerived(); return }
-        do {
-            let info = try await Purchases.shared.customerInfo()
+        pricesUnavailable = false
+        pricesErrorDetail = nil
+        if let info = try? await Purchases.shared.customerInfo() {
             purchasedPro = info.entitlements[Self.entitlement]?.isActive == true
+        }
+        do {
             let offerings = try await Purchases.shared.offerings()
             packages = offerings.current?.availablePackages ?? []
+            if packages.isEmpty { pricesUnavailable = true; pricesErrorDetail = "No current offering, or it has no packages." }
         } catch {
-            lastError = error.localizedDescription
+            pricesUnavailable = true
+            pricesErrorDetail = error.localizedDescription
         }
         refreshDerived()
     }
 
     func purchase(_ package: Package) async {
+        lastError = nil
         do {
             let result = try await Purchases.shared.purchase(package: package)
             if !result.userCancelled {
@@ -92,6 +103,7 @@ final class ProStore {
 
     func restore() async {
         guard isConfigured else { return }
+        lastError = nil
         do {
             let info = try await Purchases.shared.restorePurchases()
             purchasedPro = info.entitlements[Self.entitlement]?.isActive == true

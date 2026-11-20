@@ -9,6 +9,11 @@ struct PaywallView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
+                    // In the content rather than the toolbar, so it can never sit on top of the title.
+                    HStack {
+                        Button("Not now") { dismiss() }.font(.body.weight(.semibold))
+                        Spacer()
+                    }
                     Text("CHOMP PRO").font(Theme.display(.largeTitle)).foregroundStyle(Theme.readableTint(model.profile.colorHex))
                         .accessibilityAddTraits(.isHeader)
                     Text("More ways to show off. Never more power: Pro can't help you collect, steal or defend a single coin.")
@@ -22,9 +27,22 @@ struct PaywallView: View {
                     .padding(18)
                     .background(Theme.surface, in: RoundedRectangle(cornerRadius: 20))
 
-                    if model.pro.packages.isEmpty {
-                        Text(model.pro.isConfigured ? "Loading prices…" : "Purchases aren't configured in this build yet.")
+                    if !model.pro.isConfigured {
+                        Text("Purchases aren't configured in this build yet.")
                             .font(.footnote).foregroundStyle(Theme.textSecondary)
+                    } else if model.pro.pricesUnavailable {
+                        VStack(spacing: 8) {
+                            Text("Prices couldn't load from the App Store. Check your connection and try again.")
+                                .font(.footnote).foregroundStyle(Theme.textSecondary).multilineTextAlignment(.center)
+                            Button("Try again") { Task { await model.pro.refresh() } }.font(.footnote.weight(.semibold))
+                            #if DEBUG
+                            if let d = model.pro.pricesErrorDetail {
+                                Text(d).font(.caption2).foregroundStyle(Theme.danger).multilineTextAlignment(.leading)
+                            }
+                            #endif
+                        }
+                    } else if model.pro.packages.isEmpty {
+                        Text("Loading prices…").font(.footnote).foregroundStyle(Theme.textSecondary)
                     }
                     ForEach(model.pro.packages, id: \.identifier) { pkg in
                         Button { Task { await model.pro.purchase(pkg); if model.pro.isPro { dismiss() } } } label: {
@@ -56,7 +74,7 @@ struct PaywallView: View {
                 .padding(20)
             }
             .background(Theme.background)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Not now") { dismiss() } } }
+            .toolbar(.hidden, for: .navigationBar)
             .task { await model.pro.refresh() }
         }
     }
