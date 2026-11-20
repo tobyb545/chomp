@@ -186,8 +186,8 @@ makeReel(name: "reel1-run-is-a-game", clips: [
 ], captions: [
     Caption(top: "POV: your run", bottom: "just became a game", from: 0.1, to: 3.5),
     Caption(top: "The map is", bottom: "covered in coins", from: 3.5, to: 7.5),
-    Caption(top: "Run past them.", bottom: "They're yours.", from: 7.5, to: 11.5),
-    Caption(top: "Every run", bottom: "counts", from: 11.5, to: 99),
+    Caption(top: "Run past them.", bottom: "Ka-ching.", from: 7.5, to: 11.5),
+    Caption(top: "Every run", bottom: "pays out", from: 11.5, to: 99),
 ])
 
 // REEL 2 — "Steal coins, climb the world"
@@ -197,6 +197,6 @@ makeReel(name: "reel2-steal-and-compete", clips: [
     Clip(start: at("leaderboard", 0.4), length: 4.4, speed: 1),
 ], captions: [
     Caption(top: "Your neighbourhood", bottom: "is up for grabs", from: 0.1, to: 3),
-    Caption(top: "Steal your", bottom: "rivals' coins", from: 3, to: 8.5),
-    Caption(top: "Climb the", bottom: "global leaderboard", from: 8.5, to: 99),
+    Caption(top: "Grab them before", bottom: "your rivals do", from: 3, to: 8.5),
+    Caption(top: "Then flex on", bottom: "the leaderboard", from: 8.5, to: 99),
 ])

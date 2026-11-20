@@ -119,20 +119,20 @@ try? FileManager.default.createDirectory(atPath: out, withIntermediateDirectorie
 // POST 1 — carousel (swipe through four slides).
 canvas("post1-carousel-1") {
     background(0)
-    headline("Your town is now", "a game board", y: 70)
+    headline("Your run just", "became a game", y: 70)
     text("Swipe →", 34, .bold, rgb(0xFFFFFF, 0.85), in: NSRect(x: 0, y: 300, width: W, height: 50))
     phone(shot("01-map"), center: NSPoint(x: W / 2, y: 900), height: 1000)
 }
 canvas("post1-carousel-2") {
     background(1)
-    headline("Every street is", "covered in coins", y: 70)
-    text("Run past them and they're yours.", 38, .semibold, rgb(0xFFFFFF, 0.9), in: NSRect(x: 0, y: 300, width: W, height: 60))
+    headline("The map is", "covered in coins", y: 70)
+    text("Run past them. Ka-ching. They're yours.", 38, .semibold, rgb(0xFFFFFF, 0.9), in: NSRect(x: 0, y: 300, width: W, height: 60))
     phone(shot("02-run"), center: NSPoint(x: W / 2, y: 900), height: 1000)
 }
 canvas("post1-carousel-3") {
     background(2)
-    headline("Steal your", "rivals' streets", y: 70)
-    text("Then climb the global leaderboard.", 38, .semibold, rgb(0xFFFFFF, 0.9), in: NSRect(x: 0, y: 300, width: W, height: 60))
+    headline("Pinch your", "rivals' coins", y: 70)
+    text("Then flex on the global leaderboard.", 38, .semibold, rgb(0xFFFFFF, 0.9), in: NSRect(x: 0, y: 300, width: W, height: 60))
     phone(shot("05-leaderboard"), center: NSPoint(x: W / 2, y: 900), height: 1000)
 }
 canvas("post1-carousel-4") {
@@ -140,7 +140,7 @@ canvas("post1-carousel-4") {
     appIcon(at: NSRect(x: W / 2 - 150, y: 230, width: 300, height: 300))
     text("Chomp", 120, .heavy, .white, in: NSRect(x: 0, y: 580, width: W, height: 150))
     text("The running game.", 52, .bold, lime, in: NSRect(x: 0, y: 730, width: W, height: 70))
-    text("Works anywhere, on any street.\nNo gym, no kit, just go.", 38, .semibold, rgb(0xFFFFFF, 0.88), in: NSRect(x: 100, y: 830, width: W - 200, height: 120))
+    text("Any road, any town, any pace.\nLace up and go get 'em.", 38, .semibold, rgb(0xFFFFFF, 0.88), in: NSRect(x: 100, y: 830, width: W - 200, height: 120))
     cta(y: 1040)
 }
 
