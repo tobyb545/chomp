@@ -302,11 +302,13 @@ final class AppModel {
         let planMetres: Double? = args.firstIndex(of: "-planRoute").map { i in
             i + 1 < args.count ? Double(args[i + 1]) ?? 4000 : 4000
         }
+        // `-planSeed N` picks a different loop (default 3).
+        let planSeed: UInt64 = args.firstIndex(of: "-planSeed").flatMap { $0 + 1 < args.count ? UInt64(args[$0 + 1]) : nil } ?? 3
         let willSeed = args.contains("-demo") && runs.isEmpty
         if let metres = planMetres, !willSeed {
             Task {
                 for _ in 0..<60 where area.segments.isEmpty { try? await Task.sleep(for: .seconds(1)) }
-                plannedRoute = await planRoute(goal: .capture, distance: metres, seed: 3)
+                plannedRoute = await planRoute(goal: .capture, distance: metres, seed: planSeed)
             }
         }
         guard args.contains("-demo"), runs.isEmpty else {
@@ -345,7 +347,7 @@ final class AppModel {
         pendingBadges = []
         if args.contains("-badge") { pendingBadges = Array(badges.filter(\.earned).suffix(1)) }
         if args.contains("-summary") { presentedSummary = runs.first }
-        if let metres = planMetres { plannedRoute = await planRoute(goal: .capture, distance: metres, seed: 3) }
+        if let metres = planMetres { plannedRoute = await planRoute(goal: .capture, distance: metres, seed: planSeed) }
         if args.contains("-autorun") { run.start(simulated: true) }
     }
     #endif

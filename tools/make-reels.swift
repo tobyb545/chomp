@@ -1,12 +1,14 @@
 // Instagram reels (1080x1920, 30 fps, no audio: add a trending sound in Instagram).
 // Footage comes from ChompUITests/ScreenshotTests/testReelFootage recorded with
 // `xcrun simctl io <sim> recordVideo` (see marketing/README.md).
-//   swiftc -O tools/make-reels.swift -o /tmp/make-reels && /tmp/make-reels <footage dir> marketing
+//   swiftc -O tools/make-reels.swift -o /tmp/make-reels && /tmp/make-reels <footage dir> marketing [reel1|reel2]
+// The optional last argument makes just that reel, so each can use its own footage.
 import AVFoundation
 import AppKit
 import QuartzCore
 
 let dir = CommandLine.arguments[1], out = CommandLine.arguments[2]
+let only = CommandLine.arguments.count > 3 ? CommandLine.arguments[3] : nil
 let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().path
 let iconImage = NSImage(contentsOfFile: root + "/ios/Chomp/Assets.xcassets/AppIcon.appiconset/icon-1024.png")!
     .cgImage(forProposedRect: nil, context: nil, hints: nil)!
@@ -115,6 +117,7 @@ struct Clip { var start: Double; var length: Double; var speed: Double }
 struct Caption { var top: String; var bottom: String?; var from: Double; var to: Double }
 
 func makeReel(name: String, clips: [Clip], captions: [Caption], endCardLength: Double = 3.2) {
+    if let only, !name.hasPrefix(only) { return }
     let comp = AVMutableComposition()
     let v = comp.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid)!
     var cursor = CMTime.zero

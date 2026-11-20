@@ -26,3 +26,6 @@ The leaderboard in these uses made-up runner names (the app's `-marketing` mode)
    kill -INT %1
    ```
 4. Reels: `swiftc -O tools/make-reels.swift -o /tmp/make-reels && /tmp/make-reels <dir> marketing`
+   Reel 2 uses its own footage on a different loop: record step 3 again into a second folder with
+   `TEST_RUNNER_CHOMP_REEL_SEED=1` (without reinstalling, so the same loop is planned), then
+   `/tmp/make-reels <dir> marketing reel1` and `/tmp/make-reels <second dir> marketing reel2`.

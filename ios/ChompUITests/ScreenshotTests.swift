@@ -88,7 +88,9 @@ final class ScreenshotTests: XCTestCase {
         // A planned loop, so the run follows a tidy route rather than a random wander.
         // Set TEST_RUNNER_CHOMP_REEL_AT=lat,lon to film somewhere else.
         let at = ProcessInfo.processInfo.environment["CHOMP_REEL_AT"] ?? "51.4690,-0.1625"  // Battersea, London: a grid of terraced streets
-        app.launchArguments += ["-demoAt", at, "-planRoute", "1400"]
+        // TEST_RUNNER_CHOMP_REEL_SEED picks a different planned loop.
+        let seed = ProcessInfo.processInfo.environment["CHOMP_REEL_SEED"] ?? "3"
+        app.launchArguments += ["-demoAt", at, "-planRoute", "1400", "-planSeed", seed]
         app.launch()
         XCTAssertTrue(app.buttons["START RUN"].waitForExistence(timeout: 60))
         let loading = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Loading the coins around you'")).firstMatch
