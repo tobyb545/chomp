@@ -22,7 +22,7 @@ struct ProfileView: View {
                         }
                     }
                 }
-                Section("Stats") { StatsSection() }
+                Section("Stats") { StatsSection(paywall: $paywall) }
                 Section {
                     BadgeGrid()
                 } header: {
@@ -77,7 +77,8 @@ struct RunRow: View {
 }
 
 struct StatsSection: View {
-    @State private var paywall = false
+    /// Owned by the Profile screen: a sheet attached to rows inside a List closes itself.
+    @Binding var paywall: Bool
     @Environment(AppModel.self) private var model
 
     var body: some View {
@@ -100,7 +101,6 @@ struct StatsSection: View {
                 }
             }
         }
-        .sheet(isPresented: $paywall) { PaywallView() }
     }
 
     private var mostRun: String? {

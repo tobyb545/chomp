@@ -78,13 +78,34 @@ extract (`tools/tiles/`) and uploads about 0.7 GB, gzipped, to R2's free tier.
 
 ## Chomp Pro: subscriptions
 
-- [ ] **App Store Connect → Agreements**: sign the Paid Apps agreement, and add banking and tax details.
-- [ ] **Create subscription products** (monthly and annual) in one subscription group.
-- [ ] **RevenueCat**: create the app, an entitlement called `pro`, and attach both products.
-- [ ] **Put the RevenueCat public Apple key** in `REVENUECAT_API_KEY` in
-  `ios/Config/Secrets.xcconfig`. It's empty now, so the paywall says "not configured".
-- [ ] **Add the RevenueCat webhook**: `.../functions/v1/revenuecat-webhook` with
-  `Authorization: Bearer <REVENUECAT_WEBHOOK_SECRET>`.
+Prices: **£2.99 a month** or **£29.99 a year** (about 16% off monthly). The app reads the
+products from RevenueCat, so the IDs below aren't in the code; keep them exactly as written.
+
+- [ ] **App Store Connect → Business**: sign the Paid Apps agreement, and add banking and tax
+  details. Purchases (even test ones) don't work until it says Active.
+- [ ] **Subscriptions**: Chomp → Monetization → Subscriptions → create the group `Chomp Pro`, then:
+  - `chomp_pro_monthly`, reference name "Chomp Pro Monthly", 1 month, UK price £2.99
+  - `chomp_pro_annual`, reference name "Chomp Pro Annual", 1 year, UK price £29.99
+  Give each a display name and description, and a review screenshot (the paywall).
+- [ ] **App Store Connect → Users and Access → Integrations → In-App Purchase**: create a key,
+  download the .p8 (once only) and note the Key ID and Issuer ID.
+- [ ] **RevenueCat**: new project "Chomp" → add an App Store app, bundle ID `com.tobyb545.chomp`,
+  upload the In-App Purchase key. Then:
+  - Products: import `chomp_pro_monthly` and `chomp_pro_annual`
+  - Entitlements: create `pro` and attach both products
+  - Offerings: the `default` offering (set as current) with a Monthly package (chomp_pro_monthly)
+    and an Annual package (chomp_pro_annual)
+- [ ] **RevenueCat public Apple key** (`appl_…`, Project settings → API keys): put it in
+  `REVENUECAT_API_KEY` in `ios/Config/Secrets.xcconfig` and in Codemagic's `chomp_secrets` group.
+  While it's empty the paywall says "Purchases aren't configured in this build yet".
+- [ ] **Webhook** (RevenueCat → Integrations → Webhooks): URL
+  `https://kboxrdjdwbhqxkqahmbx.supabase.co/functions/v1/revenuecat-webhook`, Authorization header
+  `Bearer <secret>`. Make a new secret in your own Terminal and set it on Supabase:
+  `S=$(openssl rand -hex 24); supabase secrets set REVENUECAT_WEBHOOK_SECRET=$S --remote=kboxrdjdwbhqxkqahmbx --yes; echo $S`
+- [ ] **Test** with a Sandbox account (Settings → Developer → Sandbox Account on the iPhone) in a
+  TestFlight build: buy monthly, check Pro unlocks, Restore purchases works, and RevenueCat shows the
+  webhook as delivered.
+- [ ] **First review**: attach both subscriptions to the app version before submitting it.
 
 ## App Store listing
 

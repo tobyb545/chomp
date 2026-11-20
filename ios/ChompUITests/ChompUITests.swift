@@ -28,6 +28,17 @@ final class ChompUITests: XCTestCase {
         return e
     }
 
+    /// Opens the paywall from a button, checks it stays open, then closes it.
+    private func paywallStaysOpen(_ button: XCUIElement, _ why: String, file: StaticString = #filePath, line: UInt = #line) {
+        reveal(button, file: file, line: line).tap()
+        let title = app.staticTexts["CHOMP PRO"]
+        XCTAssertTrue(title.waitForExistence(timeout: 5), "paywall opens: \(why)", file: file, line: line)
+        sleep(2)
+        XCTAssertTrue(title.exists, "paywall stays open: \(why)", file: file, line: line)
+        app.buttons["Not now"].tap()
+        XCTAssertTrue(title.waitForNonExistence(timeout: 5), file: file, line: line)
+    }
+
     private func shot(_ name: String) {
         let a = XCTAttachment(screenshot: app.screenshot())
         a.name = name
@@ -117,6 +128,10 @@ final class ChompUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Coins collected"].exists)
         shot("profile")
 
+        paywallStaysOpen(app.buttons["Detailed stats and heatmaps with Pro"], "stats")
+        paywallStaysOpen(app.buttons["Get Chomp Pro"], "profile")
+        app.swipeDown(); app.swipeDown(); app.swipeDown()
+
         // Import a run: opens from the profile, stays open, and shows the file picker.
         reveal(app.buttons["profileImportRun"]).tap()
         XCTAssertTrue(app.navigationBars["Import a run"].waitForExistence(timeout: 5))
@@ -150,6 +165,7 @@ final class ChompUITests: XCTestCase {
         voice.switches.firstMatch.tap()
         XCTAssertNotEqual((voice.value as? String) == "1", wasOn)
         shot("settings")
+        paywallStaysOpen(app.buttons["Custom colours & trails (Pro)"], "settings colours")
         if (voice.value as? String) == "1" { voice.switches.firstMatch.tap() }
 
         reveal(app.buttons["importRunFile"]).tap()
