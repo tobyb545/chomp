@@ -102,9 +102,11 @@ products from RevenueCat, so the IDs below aren't in the code; keep them exactly
   `https://kboxrdjdwbhqxkqahmbx.supabase.co/functions/v1/revenuecat-webhook`, Authorization header
   `Bearer <secret>`. Make a new secret in your own Terminal and set it on Supabase:
   `S=$(openssl rand -hex 24); supabase secrets set REVENUECAT_WEBHOOK_SECRET=$S --remote=kboxrdjdwbhqxkqahmbx --yes; echo $S`
-- [ ] **Test** with a Sandbox account (Settings → Developer → Sandbox Account on the iPhone) in a
-  TestFlight build: buy monthly, check Pro unlocks, Restore purchases works, and RevenueCat shows the
-  webhook as delivered.
+- [ ] **Test** in a TestFlight build: TestFlight purchases are free test purchases on your own Apple
+  account, so no Sandbox account is needed (and subscriptions renew every few minutes). Buy monthly,
+  check Pro unlocks, Restore purchases works, and RevenueCat shows the webhook as delivered.
+  (Settings → Developer only appears on iPhones with Developer Mode on; it's only needed for builds
+  run straight from Xcode.)
 - [ ] **First review**: attach both subscriptions to the app version before submitting it.
 
 ## App Store listing
