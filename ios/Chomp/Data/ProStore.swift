@@ -8,6 +8,8 @@ import RevenueCat
 @Observable
 final class ProStore {
     static let entitlement = "pro"
+    /// Apple's standard Terms of Use, which Chomp Pro uses instead of a custom EULA.
+    static let appleEULA = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
 
     enum Feature: String, CaseIterable, Identifiable {
         case clubs, stats, customColours, trails, replayExport

@@ -30,6 +30,13 @@ Your coins stay yours until someone else runs past them, and rivals will try. St
 
 Chomp Pro (optional) adds trail styles and colours, run replays and GIF export, detailed stats and starting a club. Pro never helps you collect or steal coins: everyone plays by the same rules.
 
+CHOMP PRO SUBSCRIPTION
+Chomp Pro is an auto-renewing subscription: £2.99 a month or £29.99 a year (or the local equivalent). Payment is charged to your Apple Account when you confirm the purchase. It renews automatically unless you turn off auto-renew at least 24 hours before the end of the current period, and your account is charged for renewal within 24 hours before the period ends. Manage or cancel it any time in Settings → your name → Subscriptions.
+
+Terms of Use (EULA): https://www.apple.com/legal/internet-services/itunes/dev/stdeula/
+Chomp terms: https://tobyb545.github.io/chomp/terms/
+Privacy policy: https://tobyb545.github.io/chomp/privacy/
+
 Map data © OpenStreetMap contributors.
 
 ## Keywords (100)

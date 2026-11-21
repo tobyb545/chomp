@@ -108,6 +108,8 @@ products from RevenueCat, so the IDs below aren't in the code; keep them exactly
   (Settings → Developer only appears on iPhones with Developer Mode on; it's only needed for builds
   run straight from Xcode.)
 - [ ] **First review**: attach both subscriptions to the app version before submitting it.
+  The App Store description must link Apple's standard Terms of Use (EULA); the subscription block at
+  the end of the description in `docs/APP_STORE.md` does this. Paste the whole description, for every localization.
 
 ## App Store listing
 

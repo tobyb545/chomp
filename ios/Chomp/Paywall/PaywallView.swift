@@ -60,16 +60,15 @@ struct PaywallView: View {
                         .font(.subheadline.weight(.semibold))
                     Button("Restore purchases") { Task { await model.pro.restore() } }.font(.footnote)
                     if let e = model.pro.lastError { Text(e).font(.footnote).foregroundStyle(Theme.danger) }
-                    Text("Subscriptions renew automatically until cancelled in Settings › Apple ID › Subscriptions.")
+                    Text("Chomp Pro renews automatically unless cancelled at least 24 hours before the end of the current period. Manage or cancel it in Settings › your name › Subscriptions.")
                         .font(.caption).foregroundStyle(Theme.textSecondary).multilineTextAlignment(.center)
-                    // Required for subscriptions: links to the terms and privacy policy on the website.
-                    if let web = AppModel.webURL, let terms = URL(string: web + "/terms/"), let privacy = URL(string: web + "/privacy/") {
-                        HStack(spacing: 18) {
-                            Link("Terms of use", destination: terms)
-                            Link("Privacy policy", destination: privacy)
-                        }
-                        .font(.caption.weight(.semibold))
+                    // Required for subscriptions (App Review 3.1.2): Apple's standard EULA, plus our own
+                    // terms and privacy policy on the website.
+                    ViewThatFits {
+                        HStack(spacing: 16) { legalLinks }
+                        VStack(spacing: 8) { legalLinks }
                     }
+                    .font(.caption.weight(.semibold))
                 }
                 .padding(20)
             }
@@ -77,5 +76,11 @@ struct PaywallView: View {
             .toolbar(.hidden, for: .navigationBar)
             .task { await model.pro.refresh() }
         }
+    }
+
+    @ViewBuilder private var legalLinks: some View {
+        Link("Terms of Use (EULA)", destination: ProStore.appleEULA)
+        if let web = AppModel.webURL, let terms = URL(string: web + "/terms/") { Link("Chomp terms", destination: terms) }
+        if let web = AppModel.webURL, let privacy = URL(string: web + "/privacy/") { Link("Privacy policy", destination: privacy) }
     }
 }
